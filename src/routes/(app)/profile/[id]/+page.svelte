@@ -7,8 +7,10 @@
 	import ProfileSettings from '$lib/components/profile/ProfileSettings.svelte';
 	import ImageCropper from '$lib/components/ui/ImageCropper.svelte';
 
-	let profile = $state<any>(null);
-	let loading = $state(true);
+	let { data } = $props();
+
+	let profile = $state<any>(data.profile);
+	let loading = $state(false);
 	let isSelf = $derived(getUser()?.id != null && getUser()?.id === profile?.id);
 	let avatarUploading = $state(false);
 	let activeTab = $state<'about' | 'activity' | 'settings'>('about');
@@ -19,16 +21,26 @@
 	let avatarCropSrc = $state('');
 	let showAvatarCrop = $state(false);
 
+	// Synchronize when navigating between profiles
+	$effect(() => {
+		profile = data.profile;
+	});
+
 	onMount(async () => {
 		const id = page.params.id;
-		try {
-			const profRes = await api<any>(`/profile/${id}`);
-			profile = profRes.data;
+		if (!profile) {
+			try {
+				const profRes = await api<any>(`/profile/${id}`);
+				profile = profRes.data;
+			} catch { profile = null; }
+		}
 
+		try {
 			if (isAuthenticated() && !isSelf) {
 				await fetchStatus(Number(id));
 			}
-		} catch { profile = null; }
+		} catch { /* ignore */ }
+		
 		loading = false;
 	});
 

@@ -10,7 +10,8 @@
 	}
 	interface Msg { id: number; sender_id: number; message: string; is_read: boolean; created_at: string; }
 
-	let convs = $state<Conversation[]>([]);
+	let { data } = $props();
+	let convs = $state<Conversation[]>(data.conversations || []);
 	let activeConv = $state<Conversation | null>(null);
 	let messages = $state<Msg[]>([]);
 	let newMsg = $state('');
@@ -19,10 +20,12 @@
 
 	onMount(async () => {
 		if (!isAuthenticated()) { loading = false; return; }
-		try {
-			const res = await api<any>('/chat/conversations');
-			convs = res.data || [];
-		} catch {}
+		if (convs.length === 0) {
+			try {
+				const res = await api<any>('/chat/conversations');
+				convs = res.data || [];
+			} catch {}
+		}
 		loading = false;
 	});
 

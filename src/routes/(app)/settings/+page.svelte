@@ -23,7 +23,8 @@
 	let emailCode = $state('');
 
 	// Devices
-	let devices = $state<any[]>([]);
+	let { data } = $props();
+	let devices = $state<any[]>(data.devices || []);
 
 	// Data export
 	let exporting = $state(false);
@@ -93,7 +94,10 @@
 
 	function formatDate(d: string | null) { if (!d) return '—'; return new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 
-	onMount(() => { if (isAuthenticated()) fetchDevices(); });
+	onMount(() => { 
+		// devices already fetched via SSR
+		if (isAuthenticated() && devices.length === 0) fetchDevices(); 
+	});
 </script>
 
 <svelte:head><title>Cài Đặt Hệ Thống — Selorson</title></svelte:head>
