@@ -2,6 +2,7 @@
 	import { api } from '$lib/api';
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/state';
+	import { PUBLIC_API_BASE } from '$env/static/public';
 	import { getToken, getUser, isAuthenticated } from '$lib/stores/auth.svelte';
 	import { getConversations, fetchConversations, sortConversations } from '$lib/stores/chat.svelte';
 
@@ -54,7 +55,9 @@
 		// Connect WS
 		const token = getToken();
 		if (!token) return;
-		const wsUrl = `ws://localhost:8001/api/v1/ws/chat?token=${token}&conversation_id=${conv.id}`;
+		const wsProtocol = PUBLIC_API_BASE.startsWith('https') ? 'wss://' : 'ws://';
+		const wsBase = PUBLIC_API_BASE.replace(/^https?:\/\//, wsProtocol);
+		const wsUrl = `${wsBase}/ws/chat?token=${token}&conversation_id=${conv.id}`;
 		ws = new WebSocket(wsUrl);
 
 		ws.onmessage = (e) => {
