@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { isAuthenticated, getUser } from '$lib/stores/auth.svelte';
 	import {
 		fetchConversations, getConversations, isDrawerOpen, isLoadingConvs,
@@ -8,9 +9,15 @@
 		sendMsg, minimizeWindow, closeWindow, promoteBubble, getTotalUnread, updateDraft
 	} from '$lib/stores/chat.svelte';
 
-	let msgRefs: Record<number, HTMLElement> = {};
+	let msgRefs = $state<Record<number, HTMLElement>>({});
 
-	onMount(() => { if (isAuthenticated()) fetchConversations(); });
+	let fetched = false;
+	$effect(() => {
+		if (isAuthenticated() && !fetched) {
+			fetched = true;
+			fetchConversations();
+		}
+	});
 
 	function fmtTime(d: string) { return new Date(d).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); }
 	function scrollWin(convId: number) { setTimeout(() => { const el = msgRefs[convId]; if (el) el.scrollTop = el.scrollHeight; }, 50); }
@@ -21,7 +28,7 @@
 </script>
 
 {#if isAuthenticated()}
-<div class="pchat">
+<div class="pchat" style:display={page.url.pathname.startsWith('/messages') ? 'none' : 'block'}>
 	<!-- Click-outside overlay -->
 	{#if isDrawerOpen()}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -66,8 +73,9 @@
 				<strong>{w.otherUser?.name}</strong>
 			</a>
 			<div class="pchat-win-btns">
-				<button onclick={() => minimizeWindow(w)} title="Thu nhỏ">−</button>
-				<button onclick={() => closeWindow(w)} title="Đóng">✕</button>
+				<a href="/messages?conv={w.convId}" class="btn" title="Mở trang Tin nhắn" onclick={() => closeWindow(w)}>⤢</a>
+				<button class="btn" onclick={() => minimizeWindow(w)} title="Thu nhỏ">−</button>
+				<button class="btn" onclick={() => closeWindow(w)} title="Đóng">✕</button>
 			</div>
 		</div>
 		<div class="pchat-win-msgs" bind:this={msgRefs[w.convId]}>
@@ -148,8 +156,8 @@
 	.pchat-win-av{width:28px;height:28px;border-radius:50%;overflow:hidden;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.75rem}
 	.pchat-win-av img{width:100%;height:100%;object-fit:cover}
 	.pchat-win-btns{display:flex;gap:.25rem}
-	.pchat-win-btns button{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:.875rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
-	.pchat-win-btns button:hover{background:rgba(255,255,255,.25)}
+	.pchat-win-btns .btn{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:.875rem;cursor:pointer;display:flex;align-items:center;justify-content:center;text-decoration:none}
+	.pchat-win-btns .btn:hover{background:rgba(255,255,255,.25)}
 	.pchat-win-msgs{flex:1;overflow-y:auto;padding:.75rem;display:flex;flex-direction:column;gap:.375rem;scroll-behavior:smooth}
 	.pchat-msg{max-width:80%;padding:.5rem .75rem;border-radius:.875rem .875rem .875rem .25rem;background:rgba(255,255,255,.04);align-self:flex-start;animation:msgIn .2s ease}
 	.pchat-msg.mine{align-self:flex-end;background:linear-gradient(135deg,#0c713d,#085a30);color:#fff;border-radius:.875rem .875rem .25rem .875rem}

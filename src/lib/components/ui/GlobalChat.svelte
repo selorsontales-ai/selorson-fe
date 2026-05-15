@@ -32,8 +32,16 @@
 				try {
 					const data = JSON.parse(event.data);
 					if (data.type === 'chat_message') {
-						messages = [...messages.slice(-99), data]; // Keep last 100
-						scrollToBottom();
+						if (data.conversation_id === 0 || !data.conversation_id) {
+							messages = [...messages.slice(-99), data]; // Keep last 100
+							scrollToBottom();
+						} else {
+							// It's a Private Chat message!
+							import('$lib/stores/chat.svelte').then(m => m.handleIncomingMessage({
+								conversation_id: data.conversation_id,
+								message: data.message
+							}));
+						}
 					} else if (data.type === 'user_count') {
 						onlineCount = data.count || 0;
 					} else if (data.type === 'system') {

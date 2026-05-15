@@ -10,6 +10,7 @@
 	onMount(async () => {
 		const provider = $page.params.provider as string;
 		const code = $page.url.searchParams.get('code');
+		const state = $page.url.searchParams.get('state');
 
 		if (!code) {
 			error = 'Không tìm thấy mã xác thực từ Google/Facebook.';
@@ -18,7 +19,7 @@
 		}
 
 		try {
-			const res = await handleOAuthCallback(provider, code);
+			const res = await handleOAuthCallback(provider, code, state);
 			if (res.success) {
 				setAuth(res.data.token, res.data.user);
 				error = 'Đăng nhập thành công, đang chuyển hướng...';

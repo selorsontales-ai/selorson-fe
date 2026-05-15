@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import { getUser, isAuthenticated } from '$lib/stores/auth.svelte';
 	import { fetchStatus, getStatus, toggleBlock, toggleFollow, reportUser } from '$lib/stores/social.svelte';
+	import { openChatWithUser } from '$lib/stores/chat.svelte';
 	import ProfileSettings from '$lib/components/profile/ProfileSettings.svelte';
 	import ImageCropper from '$lib/components/ui/ImageCropper.svelte';
 
@@ -154,7 +155,7 @@
 						{#if !isSelf && isAuthenticated()}
 							{@const status = getStatus(profile.id)}
 							<div class="actions">
-								<a href="/messages" class="action-btn message">💬 Nhắn tin</a>
+								<button class="action-btn message" onclick={() => openChatWithUser(profile.id)}>💬 Nhắn tin</button>
 								<button class="action-btn follow" class:following={status?.is_following} onclick={handleFollow}>
 									{status?.is_following ? 'Đang theo dõi' : 'Theo dõi'}
 								</button>

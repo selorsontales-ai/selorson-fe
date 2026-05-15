@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { isAuthenticated, getUser } from '$lib/stores/auth.svelte';
+	import { isAuthenticated, getUser, getToken } from '$lib/stores/auth.svelte';
+	import { PUBLIC_API_BASE } from '$env/static/public';
 	import {
 		fetchActiveConversation, sendSupportMessage, fetchUnreadCount,
 		rateTicket, markSupportRead, getSupportMessages, getActiveConversation,
-		getSupportUnread, isSupportSending
+		getSupportUnread, isSupportSending, createTicket, closeTicket
 	} from '$lib/stores/support.svelte';
 
 	let isOpen = $state(false);
@@ -31,7 +32,13 @@
 		if (!inputText.trim()) return;
 		const text = inputText; inputText = '';
 		const conv = getActiveConversation();
-		if (conv) { await sendSupportMessage(conv.id, text); scrollBottom(); }
+		if (conv && conv.status !== 'resolved' && conv.status !== 'closed') { 
+			await sendSupportMessage(conv.id, text); 
+		} else {
+			await createTicket(text);
+			await fetchActiveConversation();
+		}
+		scrollBottom();
 	}
 
 	async function submitRating() {
@@ -41,9 +48,44 @@
 		hasRated = true;
 	}
 
+	async function skipRating() {
+		const conv = getActiveConversation();
+		if (!conv) return;
+		await closeTicket(conv.id);
+		hasRated = true;
+	}
+
 	function formatTime(d: string) { return new Date(d).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); }
 
-	onMount(() => { if (isAuthenticated()) fetchUnreadCount(); });
+	let sse: EventSource | null = null;
+
+	$effect(() => { 
+		if (isAuthenticated()) {
+			fetchUnreadCount(); 
+			
+			const token = getToken();
+			if (token && !sse) {
+				const sseUrl = `${PUBLIC_API_BASE}/support/stream?token=${token}`;
+				sse = new EventSource(sseUrl);
+				sse.onmessage = (event) => {
+					try {
+						const data = JSON.parse(event.data);
+						if (data.type === 'support_update') {
+							if (isOpen && getActiveConversation()?.id === data.conversation_id) {
+								fetchActiveConversation();
+							} else {
+								fetchUnreadCount();
+							}
+						}
+					} catch {}
+				};
+			}
+		}
+	});
+
+	onDestroy(() => {
+		if (sse) sse.close();
+	});
 </script>
 
 {#if isAuthenticated()}
@@ -80,7 +122,7 @@
 				</div>
 				<textarea bind:value={ratingComment} placeholder="Nhận xét..." rows="2" class="rating-comment"></textarea>
 				<div class="rating-actions">
-					<button class="rating-skip" onclick={() => hasRated = true}>Bỏ qua</button>
+					<button class="rating-skip" onclick={skipRating}>Bỏ qua</button>
 					<button class="rating-submit" onclick={submitRating}>Gửi</button>
 				</div>
 			</div>

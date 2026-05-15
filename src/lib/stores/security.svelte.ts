@@ -80,12 +80,12 @@ export async function loginWithFacebook() {
 	} finally { oauthLoading = false; }
 }
 
-export async function handleOAuthCallback(provider: string, code: string) {
+export async function handleOAuthCallback(provider: string, code: string, state: string | null) {
 	oauthLoading = true;
 	try {
 		const res = await api<any>(`/auth/oauth/${provider}/callback`, {
 			method: 'POST',
-			body: { code },
+			body: { code, state },
 		});
 		return res;
 	} finally { oauthLoading = false; }

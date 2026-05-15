@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { api } from '$lib/api';
-	import { isAuthenticated, getUser } from '$lib/stores/auth.svelte';
+	import { isAuthenticated, getUser, getToken } from '$lib/stores/auth.svelte';
+	import { PUBLIC_API_BASE } from '$env/static/public';
 	import { goto } from '$app/navigation';
 
 	// ── Support state ──
@@ -138,10 +139,34 @@
 	async function resolveReport(id: number) { try { await api(`/admin/reports/${id}/resolve`, { method: 'POST' }); fetchReports(reportFilter); } catch {} }
 	async function dismissReport(id: number) { try { await api(`/admin/reports/${id}/dismiss`, { method: 'POST' }); fetchReports(reportFilter); } catch {} }
 
+	let sse: EventSource | null = null;
+
 	onMount(async () => {
 		const user = getUser();
 		if (!isAuthenticated() || (user?.role !== 'admin' && user?.role !== 'manager')) { goto('/'); return; }
 		await Promise.all([fetchConversations('pending'), fetchStats(), fetchManagers()]);
+
+		const token = getToken();
+		if (token) {
+			const sseUrl = `${PUBLIC_API_BASE}/support/stream?token=${token}`;
+			sse = new EventSource(sseUrl);
+			sse.onmessage = async (event) => {
+				try {
+					const data = JSON.parse(event.data);
+					if (data.type === 'support_update' && workspaceMode === 'support') {
+						await fetchConversations(activeTab);
+						if (selectedConv && selectedConv.id === data.conversation_id) {
+							const r = await api<any>(`/manager/support/${selectedConv.id}/messages`);
+							if (r.data) selectedMessages = r.data.messages || [];
+						}
+					}
+				} catch {}
+			};
+		}
+	});
+
+	onDestroy(() => {
+		if (sse) sse.close();
 	});
 </script>
 

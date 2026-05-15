@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { api } from '$lib/api';
 	import { onMount, onDestroy } from 'svelte';
+	import { page } from '$app/state';
 	import { getToken, getUser, isAuthenticated } from '$lib/stores/auth.svelte';
+	import { getConversations, fetchConversations, sortConversations } from '$lib/stores/chat.svelte';
 
 	interface Conversation {
 		id: number;
@@ -11,22 +13,30 @@
 	interface Msg { id: number; sender_id: number; message: string; is_read: boolean; created_at: string; }
 
 	let { data } = $props();
-	let convs = $state<Conversation[]>(data.conversations || []);
 	let activeConv = $state<Conversation | null>(null);
 	let messages = $state<Msg[]>([]);
 	let newMsg = $state('');
 	let loading = $state(true);
 	let ws: WebSocket | null = null;
+	let msgsEl = $state<HTMLElement | null>(null);
 
 	onMount(async () => {
 		if (!isAuthenticated()) { loading = false; return; }
-		if (convs.length === 0) {
-			try {
-				const res = await api<any>('/chat/conversations');
-				convs = res.data || [];
-			} catch {}
+		if (getConversations().length === 0) {
+			await fetchConversations();
 		}
 		loading = false;
+	});
+
+	$effect(() => {
+		const convId = page.url.searchParams.get('conv');
+		if (convId && getConversations().length > 0) {
+			const id = parseInt(convId);
+			if (activeConv?.id !== id) {
+				const c = getConversations().find(x => x.id === id);
+				if (c) selectConv(c as any);
+			}
+		}
 	});
 
 	onDestroy(() => { ws?.close(); });
@@ -37,7 +47,7 @@
 
 		// Load history
 		try {
-			const res = await api<any>(`/chat/messages/${conv.id}`);
+			const res = await api<any>(`/chat/conversations/${conv.id}/messages`);
 			messages = res.data || [];
 		} catch { messages = []; }
 
@@ -50,21 +60,49 @@
 		ws.onmessage = (e) => {
 			try {
 				const msg = JSON.parse(e.data);
+				if (!msg.body || !msg.timestamp || !msg.sender_id) return; // Only process valid ChatMessage payloads
+				
+				// If we sent this message, POST /chat/messages will handle adding it to the UI
+				if (msg.sender_id === getUser()?.id) return;
+				
+				// Prevent duplicate messages if added by POST
+				if (messages.find(m => m.id === msg.message?.id || m.id === msg.id)) return;
 				messages = [...messages, {
-					id: Date.now(),
+					id: msg.message?.id || msg.id || Date.now(),
 					sender_id: msg.sender_id,
 					message: msg.body,
 					is_read: false,
 					created_at: msg.timestamp,
 				}];
+				setTimeout(() => { if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight; }, 50);
 			} catch {}
 		};
 	}
 
-	function sendMessage() {
-		if (!newMsg.trim() || !ws || ws.readyState !== WebSocket.OPEN) return;
-		ws.send(newMsg);
+	async function sendMessage() {
+		if (!newMsg.trim()) return;
+		const text = newMsg;
 		newMsg = '';
+		try {
+			const r = await api<any>('/chat/messages', {
+				method: 'POST',
+				body: { receiver_id: activeConv?.other_user?.id, message: text }
+			});
+			if (r.success) {
+				// The WS might receive it too, so we just add it if not exists
+				if (!messages.find(m => m.id === r.data.id)) {
+					messages = [...messages, r.data];
+				}
+				const c = getConversations().find(x => x.id === activeConv?.id);
+				if (c) {
+					c.last_message = r.data.message;
+					c.last_message_at = r.data.created_at;
+					sortConversations();
+				}
+				// Scroll
+				setTimeout(() => { if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight; }, 50);
+			}
+		} catch {}
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -85,10 +123,10 @@
 				<h2>Tin nhắn</h2>
 				{#if loading}
 					<p class="loading-text">Đang tải...</p>
-				{:else if convs.length === 0}
+				{:else if getConversations().length === 0}
 					<p class="empty-text">Chưa có cuộc trò chuyện nào</p>
 				{:else}
-					{#each convs as conv}
+					{#each getConversations() as conv}
 						<button
 							class="conv-item"
 							class:active={activeConv?.id === conv.id}
@@ -108,6 +146,9 @@
 								<strong>{conv.other_user?.name || 'Unknown'}</strong>
 								<span class="conv-time">{new Date(conv.updated_at).toLocaleDateString('vi-VN')}</span>
 							</div>
+							{#if conv.unread > 0}
+								<span class="conv-unread">{conv.unread > 9 ? '9+' : conv.unread}</span>
+							{/if}
 						</button>
 					{/each}
 				{/if}
@@ -122,9 +163,9 @@
 						<span class="status">{activeConv.other_user?.is_online ? '🟢 Online' : '⚫ Offline'}</span>
 					</div>
 
-					<div class="chat-messages">
+					<div class="chat-messages" bind:this={msgsEl}>
 						{#each messages as msg}
-							<div class="msg" class:mine={msg.sender_id === me?.id}>
+							<div class="msg" class:mine={msg.sender_id === getUser()?.id}>
 								<div class="msg-bubble">{msg.message}</div>
 								<span class="msg-time">{new Date(msg.created_at).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</span>
 							</div>
@@ -162,6 +203,7 @@
 	.conv-info{flex:1;min-width:0}
 	.conv-info strong{display:block;font-size:.85rem}
 	.conv-time{font-size:.72rem;color:var(--color-text-muted)}
+	.conv-unread{background:var(--color-danger);color:white;border-radius:10px;padding:0.1rem 0.4rem;font-size:.7rem;font-weight:700;margin-left:auto}
 	.chat-panel{display:flex;flex-direction:column;padding:0;overflow:hidden}
 	.no-chat{flex:1;display:flex;align-items:center;justify-content:center;color:var(--color-text-muted)}
 	.chat-header{padding:1rem 1.25rem;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:.75rem}

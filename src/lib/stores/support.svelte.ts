@@ -64,6 +64,11 @@ export async function rateTicket(ticketId: number, rating: number, comment?: str
 	if (activeConversation) activeConversation = { ...activeConversation, status: 'closed', rating };
 }
 
+export async function closeTicket(ticketId: number) {
+	await apiFetch(`/support/${ticketId}/close`, { method: 'POST' });
+	if (activeConversation) activeConversation = { ...activeConversation, status: 'closed' };
+}
+
 export async function fetchUnread() {
 	try { const r: any = await apiFetch('/support/unread'); supportUnread = r.data.count; } catch {}
 }
