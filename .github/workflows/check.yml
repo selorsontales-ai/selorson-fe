@@ -1,0 +1,42 @@
+name: Frontend CI Check
+
+on:
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress checks when a new push arrives to the same PR
+concurrency:
+  group: check-frontend-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: 🔍 SvelteKit Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create dev environment
+        run: |
+          cat > .env << 'EOF'
+          PUBLIC_API_BASE=http://localhost:8001/api/v1
+          PUBLIC_APP_NAME="Selorson V3"
+          PUBLIC_APP_VERSION=3.0.0
+          PUBLIC_WS_URL=ws://localhost:8001/ws
+          EOF
+
+      - name: Sync SvelteKit
+        run: npx svelte-kit sync
+
+      - name: Run svelte-check
+        run: npx svelte-check --tsconfig ./tsconfig.json
