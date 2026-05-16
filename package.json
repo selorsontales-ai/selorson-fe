@@ -29,6 +29,7 @@
 		"@tailwindcss/typography": "^0.5.19",
 		"@tailwindcss/vite": "^4.2.4",
 		"cropperjs": "^1.6.2",
-		"tailwindcss": "^4.2.4"
+		"tailwindcss": "^4.2.4",
+		"vidstack": "^1.12.13"
 	}
 }
