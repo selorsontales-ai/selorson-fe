@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { PUBLIC_API_BASE } from '$env/static/public';
+	import * as m from '$lib/paraglide/messages';
 
 	let status = $state<'loading' | 'success' | 'error'>('loading');
 	let message = $state('');
@@ -21,7 +22,7 @@
 	});
 </script>
 
-<svelte:head><title>Hủy đăng ký — Selorson</title></svelte:head>
+<svelte:head><title>{m.unsub_title()} — Selorson</title></svelte:head>
 
 <div class="unsub-page">
 	<div class="unsub-card">
@@ -30,14 +31,14 @@
 			<p>Đang xử lý...</p>
 		{:else if status === 'success'}
 			<div class="icon">✅</div>
-			<h2>Đã hủy đăng ký!</h2>
+			<h2>{m.unsub_title()}</h2>
 			<p>{message}</p>
-			<a href="/" class="btn">← Quay về trang chủ</a>
+			<a href="/" class="btn">{m.err404_home()}</a>
 		{:else}
 			<div class="icon">❌</div>
 			<h2>Lỗi</h2>
 			<p>{message}</p>
-			<a href="/" class="btn">← Quay về trang chủ</a>
+			<a href="/" class="btn">{m.err404_home()}</a>
 		{/if}
 	</div>
 </div>

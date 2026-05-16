@@ -7,6 +7,7 @@
 	import { openChatWithUser } from '$lib/stores/chat.svelte';
 	import ProfileSettings from '$lib/components/profile/ProfileSettings.svelte';
 	import ImageCropper from '$lib/components/ui/ImageCropper.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	let { data } = $props();
 
@@ -82,7 +83,7 @@
 		const input = e.target as HTMLInputElement;
 		const file = input.files?.[0];
 		if (!file) return;
-		if (file.size > 5 * 1024 * 1024) { alert('Ảnh tối đa 5MB'); return; }
+		if (file.size > 5 * 1024 * 1024) { alert(m.profile_err_avatar_size()); return; }
 		avatarCropSrc = URL.createObjectURL(file);
 		showAvatarCrop = true;
 		input.value = '';
@@ -104,11 +105,11 @@
 
 	function timeAgo(d: string) {
 		const diff = Date.now() - new Date(d).getTime();
-		const m = Math.floor(diff / 60000);
-		if (m < 60) return `${m}m ago`;
-		const h = Math.floor(m / 60);
-		if (h < 24) return `${h}h ago`;
-		return `${Math.floor(h / 24)}d ago`;
+		const mins = Math.floor(diff / 60000);
+		if (mins < 60) return m.profile_time_ago_m({ m: mins });
+		const h = Math.floor(mins / 60);
+		if (h < 24) return m.profile_time_ago_h({ h });
+		return m.profile_time_ago_d({ d: Math.floor(h / 24) });
 	}
 </script>
 
@@ -116,9 +117,9 @@
 
 <section class="profile-page">
 	{#if loading}
-		<div class="loading">Đang tải...</div>
+		<div class="loading">{m.profile_loading()}</div>
 	{:else if !profile}
-		<div class="empty"><h3>Không tìm thấy người dùng</h3></div>
+		<div class="empty"><h3>{m.profile_not_found()}</h3></div>
 	{:else}
 		<div class="cover-area">
 			{#if profile.cover_image}
@@ -142,7 +143,7 @@
 							</div>
 						</div>
 						{#if isSelf}
-							<label class="avatar-upload-btn" title="Đổi avatar">
+							<label class="avatar-upload-btn" title={m.profile_change_avatar()}>
 								<input type="file" accept="image/*" onchange={onAvatarFileSelected} hidden />
 								{avatarUploading ? '⏳' : '📷'}
 							</label>
@@ -155,16 +156,16 @@
 						{#if !isSelf && isAuthenticated()}
 							{@const status = getStatus(profile.id)}
 							<div class="actions">
-								<button class="action-btn message" onclick={() => openChatWithUser(profile.id)}>💬 Nhắn tin</button>
+								<button class="action-btn message" onclick={() => openChatWithUser(profile.id)}>{m.profile_btn_message()}</button>
 								<button class="action-btn follow" class:following={status?.is_following} onclick={handleFollow}>
-									{status?.is_following ? 'Đang theo dõi' : 'Theo dõi'}
+									{status?.is_following ? m.profile_btn_following() : m.profile_btn_follow()}
 								</button>
 								<div class="more-actions">
 									<button class="action-btn more-btn" onclick={() => showActions = !showActions}>⋮</button>
 									{#if showActions}
 										<div class="actions-dropdown">
-											<button onclick={handleBlock}>{status?.is_blocked ? '✅ Bỏ chặn' : '🚫 Chặn'}</button>
-											<button onclick={() => { showReport = true; showActions = false; }}>⚠️ Báo cáo</button>
+											<button onclick={handleBlock}>{status?.is_blocked ? m.profile_btn_unblock() : m.profile_btn_block()}</button>
+											<button onclick={() => { showReport = true; showActions = false; }}>{m.profile_btn_report()}</button>
 										</div>
 									{/if}
 								</div>
@@ -188,13 +189,13 @@
 
 					<div class="meta-row">
 						<button class="stat-btn">
-							<strong>{profile.followers_count || 0}</strong> <span class="stat-label">người theo dõi</span>
+							<strong>{profile.followers_count || 0}</strong> <span class="stat-label">{m.profile_followers()}</span>
 						</button>
 						<button class="stat-btn">
-							<strong>{profile.following_count || 0}</strong> <span class="stat-label">đang theo dõi</span>
+							<strong>{profile.following_count || 0}</strong> <span class="stat-label">{m.profile_following()}</span>
 						</button>
 						<span class="stat-item join-date">
-							📅 Đã tham gia {new Date(profile.created_at).toLocaleDateString('vi-VN')}
+							{m.profile_joined({ date: new Date(profile.created_at).toLocaleDateString('vi-VN') })}
 						</span>
 					</div>
 				</div>
@@ -202,16 +203,16 @@
 				<!-- Tabs -->
 				<div class="tabs-nav">
 					<button class="tab-btn" class:active={activeTab === 'about'} onclick={() => switchTab('about')}>
-						<span class="tab-icon">📋</span> <span class="tab-text">Tổng quan</span>
+						<span class="tab-icon">📋</span> <span class="tab-text">{m.profile_tab_about()}</span>
 						{#if activeTab === 'about'}<span class="tab-indicator"></span>{/if}
 					</button>
 					<button class="tab-btn" class:active={activeTab === 'activity'} onclick={() => switchTab('activity')}>
-						<span class="tab-icon">⚡</span> <span class="tab-text">Hoạt động</span>
+						<span class="tab-icon">⚡</span> <span class="tab-text">{m.profile_tab_activity()}</span>
 						{#if activeTab === 'activity'}<span class="tab-indicator"></span>{/if}
 					</button>
 					{#if isSelf}
 						<button class="tab-btn" class:active={activeTab === 'settings'} onclick={() => switchTab('settings')}>
-							<span class="tab-icon">⚙️</span> <span class="tab-text">Cài đặt</span>
+							<span class="tab-icon">⚙️</span> <span class="tab-text">{m.profile_tab_settings()}</span>
 							{#if activeTab === 'settings'}<span class="tab-indicator"></span>{/if}
 						</button>
 					{/if}
@@ -223,25 +224,25 @@
 					<div class="glass-card inner-content">
 						<div class="detail-grid">
 							{#if profile.hobbies}
-								<div class="detail"><span class="detail-label">🎮 Sở thích</span><p>{profile.hobbies}</p></div>
+								<div class="detail"><span class="detail-label">{m.profile_hobbies()}</span><p>{profile.hobbies}</p></div>
 							{/if}
 							{#if profile.gender}
-								<div class="detail"><span class="detail-label">👤 Giới tính</span><p>{profile.gender === 'male' ? 'Nam' : profile.gender === 'female' ? 'Nữ' : 'Khác'}</p></div>
+								<div class="detail"><span class="detail-label">{m.profile_gender()}</span><p>{profile.gender === 'male' ? m.profile_gender_male() : profile.gender === 'female' ? m.profile_gender_female() : m.profile_gender_other()}</p></div>
 							{/if}
 						</div>
 						{#if !profile.hobbies && !profile.gender}
-							<p class="no-info">Chưa có thông tin bổ sung</p>
+							<p class="no-info">{m.profile_no_info()}</p>
 						{/if}
 					</div>
 				{:else if activeTab === 'activity'}
 					<div class="glass-card inner-content">
 						{#if !activity}
-							<p class="no-info">Đang tải...</p>
+							<p class="no-info">{m.profile_loading()}</p>
 						{:else if activity.comments?.length === 0 && activity.reading_progress?.length === 0}
-							<p class="no-info">Chưa có hoạt động gần đây</p>
+							<p class="no-info">{m.profile_no_activity()}</p>
 						{:else}
 							{#if activity.comments?.length > 0}
-								<h4>💬 Bình luận gần đây</h4>
+								<h4>{m.profile_recent_comments()}</h4>
 								{#each activity.comments as c}
 									<div class="activity-item">
 										<p>"{c.content}"</p>
@@ -250,10 +251,10 @@
 								{/each}
 							{/if}
 							{#if activity.reading_progress?.length > 0}
-								<h4 style="margin-top:1rem">📖 Đang đọc</h4>
+								<h4 style="margin-top:1rem">{m.profile_reading()}</h4>
 								{#each activity.reading_progress as p}
 									<div class="activity-item">
-										<p>Chapter #{p.chapter_id} — Vị trí: {p.position}</p>
+										<p>Chapter #{p.chapter_id} — {m.profile_position({ pos: p.position })}</p>
 										<span class="activity-meta">{timeAgo(p.updated_at)}</span>
 									</div>
 								{/each}
@@ -272,17 +273,17 @@
 			<div class="modal-overlay" onmousedown={() => showReport = false}>
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div class="modal-card" onmousedown={(e) => e.stopPropagation()}>
-					<h3>🚩 Báo cáo người dùng</h3>
+					<h3>{m.profile_report_title()}</h3>
 					<select bind:value={reportReason}>
-						<option value="">-- Chọn lý do --</option>
-						<option value="spam">Spam</option>
-						<option value="harassment">Quấy rối</option>
-						<option value="inappropriate">Nội dung không phù hợp</option>
-						<option value="other">Khác</option>
+						<option value="">{m.profile_report_reason_select()}</option>
+						<option value="spam">{m.profile_report_reason_spam()}</option>
+						<option value="harassment">{m.profile_report_reason_harass()}</option>
+						<option value="inappropriate">{m.profile_report_reason_inapp()}</option>
+						<option value="other">{m.profile_report_reason_other()}</option>
 					</select>
 					<div class="modal-actions">
-						<button class="btn-ghost-sm" onclick={() => showReport = false}>Hủy</button>
-						<button class="btn-danger-sm" onclick={handleReport} disabled={!reportReason}>Gửi báo cáo</button>
+						<button class="btn-ghost-sm" onclick={() => showReport = false}>{m.profile_report_cancel()}</button>
+						<button class="btn-danger-sm" onclick={handleReport} disabled={!reportReason}>{m.profile_report_submit()}</button>
 					</div>
 				</div>
 			</div>

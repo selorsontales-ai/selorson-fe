@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { api } from '$lib/api';
 	import { page } from '$app/state';
+	import * as m from '$lib/paraglide/messages';
 
 	let query = $state('');
 	let results = $state<any>({});
@@ -45,7 +46,7 @@
 		<input
 			type="search"
 			bind:value={query}
-			placeholder="Tìm truyện, thư viện, người dùng..."
+			placeholder={m.search_placeholder()}
 			class="search-input"
 		/>
 		<button type="submit" class="btn-brand" disabled={loading || query.length < 2}>

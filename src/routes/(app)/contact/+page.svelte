@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api } from '$lib/api';
+	import * as m from '$lib/paraglide/messages';
 
 	let form = $state({ name: '', email: '', subject: '', message: '' });
 	let loading = $state(false);
@@ -25,23 +26,23 @@
 </script>
 
 <svelte:head>
-	<title>Liên hệ — Selorson</title>
-	<meta name="description" content="Liên hệ đội ngũ Selorson" />
+	<title>{m.contact_title()} — Selorson</title>
+	<meta name="description" content={m.contact_subtitle()} />
 </svelte:head>
 
 <div class="contact-page">
 	<div class="contact-header">
-		<h1>📬 Liên hệ</h1>
-		<p class="subtitle">Bạn có thắc mắc hay muốn hợp tác? Gửi tin nhắn cho chúng tôi!</p>
+		<h1>{m.contact_title()}</h1>
+		<p class="subtitle">{m.contact_subtitle()}</p>
 	</div>
 
 	{#if sent}
 		<div class="success-card glass-card">
 			<span class="success-icon">✅</span>
-			<h2>Đã gửi thành công!</h2>
-			<p>Cảm ơn bạn đã liên hệ. Chúng tôi sẽ phản hồi sớm nhất có thể.</p>
+			<h2>{m.contact_success()}</h2>
+			<p></p>
 			<button class="btn-brand" onclick={() => { sent = false; form = { name: '', email: '', subject: '', message: '' }; }}>
-				Gửi tin khác
+				{m.contact_send_another()}
 			</button>
 		</div>
 	{:else}
@@ -50,27 +51,27 @@
 
 			<div class="form-row">
 				<label>
-					<span>Họ tên *</span>
-					<input type="text" bind:value={form.name} placeholder="Nguyễn Văn A" />
+					<span>{m.contact_label_name()}</span>
+					<input type="text" bind:value={form.name} placeholder={m.contact_ph_name()} />
 				</label>
 				<label>
-					<span>Email *</span>
+					<span>{m.contact_label_email()}</span>
 					<input type="email" bind:value={form.email} placeholder="email@example.com" />
 				</label>
 			</div>
 
 			<label>
-				<span>Chủ đề</span>
-				<input type="text" bind:value={form.subject} placeholder="Hợp tác, Góp ý, Khác..." />
+				<span>{m.contact_label_subject()}</span>
+				<input type="text" bind:value={form.subject} placeholder={m.contact_ph_subject()} />
 			</label>
 
 			<label>
-				<span>Nội dung *</span>
-				<textarea bind:value={form.message} rows="5" placeholder="Viết tin nhắn..."></textarea>
+				<span>{m.contact_label_message()}</span>
+				<textarea bind:value={form.message} rows="5" placeholder={m.contact_ph_message()}></textarea>
 			</label>
 
 			<button type="submit" class="btn-brand" disabled={loading}>
-				{loading ? 'Đang gửi...' : '📨 Gửi liên hệ'}
+				{loading ? m.contact_btn_sending() : m.contact_btn_send()}
 			</button>
 		</form>
 

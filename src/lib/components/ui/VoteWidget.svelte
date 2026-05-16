@@ -2,6 +2,7 @@
 	import { api } from '$lib/api';
 	import { isAuthenticated } from '$lib/stores/auth.svelte';
 	import { fetchVoteStats, getVoteStats, getUserVote, castVote } from '$lib/stores/engagement.svelte';
+	import * as m from '$lib/paraglide/messages';
 	import { onMount } from 'svelte';
 
 	let loading = $state(true);
@@ -14,12 +15,12 @@
 	});
 
 	async function handleVote(choice: number) {
-		if (!isAuthenticated()) { message = 'Đăng nhập để bỏ phiếu'; return; }
+		if (!isAuthenticated()) { message = m.vote_login(); return; }
 		voting = true; message = '';
 		try {
 			const r = await castVote(choice);
-			message = (r as any).message || 'Đã bỏ phiếu!';
-		} catch (e: any) { message = e.message || 'Lỗi'; }
+			message = (r as any).message || m.vote_voted();
+		} catch (e: any) { message = e.message || m.vote_error(); }
 		voting = false;
 	}
 </script>
@@ -27,8 +28,8 @@
 {#if !loading && getVoteStats()}
 	{@const stats = getVoteStats()}
 	<div class="vote-widget">
-		<h3 class="vote-title">🗳️ Bỏ phiếu</h3>
-		<p class="vote-total">{stats.total_votes} phiếu</p>
+		<h3 class="vote-title">{m.vote_title()}</h3>
+		<p class="vote-total">{m.vote_total({ count: stats.total_votes })}</p>
 
 		<div class="options">
 			{#each stats.options as opt}
@@ -43,7 +44,7 @@
 					<div class="bar-track">
 						<div class="bar-fill" style="width:{opt.percentage}%"></div>
 					</div>
-					<span class="option-count">{opt.count} phiếu</span>
+					<span class="option-count">{m.vote_total({ count: opt.count })}</span>
 				</button>
 			{/each}
 		</div>

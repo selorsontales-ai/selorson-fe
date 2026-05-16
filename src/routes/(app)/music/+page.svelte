@@ -2,6 +2,7 @@
 	import { api } from '$lib/api';
 	import { onMount } from 'svelte';
 	import { isAuthenticated } from '$lib/stores/auth.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	let albums = $state<any[]>([]);
 	let loading = $state(true);
@@ -65,18 +66,18 @@
 	}
 </script>
 
-<svelte:head><title>Nhạc — Selorson</title></svelte:head>
+<svelte:head><title>{m.music_seo_title()}</title></svelte:head>
 
 <section class="music-page">
 	<div class="page-header">
-		<h1 class="section-title">🎵 Nhạc</h1>
-		<p class="page-sub">Soundtrack gốc thế giới Selorson</p>
+		<h1 class="section-title">{m.music_list_title()}</h1>
+		<p class="page-sub">{m.music_list_subtitle()}</p>
 	</div>
 
 	{#if loading}
-		<div class="loading">Đang tải...</div>
+		<div class="loading">{m.loading_text()}</div>
 	{:else if albums.length === 0}
-		<div class="empty"><span>🎵</span><h3>Chưa có album nào</h3></div>
+		<div class="empty"><span>🎵</span><h3>{m.music_empty_title()}</h3></div>
 	{:else}
 		{#each albums as album}
 			<div class="album-section">
@@ -91,7 +92,7 @@
 						{#if album.description}
 							<p class="album-desc">{album.description}</p>
 						{/if}
-						<span class="album-count">{album.tracks?.length || 0} bài hát</span>
+						<span class="album-count">{m.music_track_count({ count: album.tracks?.length || 0 })}</span>
 					</div>
 				</div>
 

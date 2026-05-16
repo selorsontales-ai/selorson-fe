@@ -1,6 +1,7 @@
 <!-- Email Verification Banner — shown for logged-in users with unverified email -->
 <script lang="ts">
 	import { getUser, isAuthenticated, isEmailVerified, verifyEmail, resendVerification } from '$lib/stores/auth.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	let showVerifyForm = $state(false);
 	let verifyCode = $state('');
@@ -73,7 +74,7 @@
 					<input
 						type="text"
 						bind:value={verifyCode}
-						placeholder="Nhập mã 6 số"
+						placeholder={m.verify_ph_code()}
 						maxlength="6"
 						pattern="[0-9]{6}"
 						inputmode="numeric"
@@ -89,7 +90,7 @@
 						onclick={handleResend}
 						disabled={resendCooldown > 0 || loading}
 					>
-						{resendCooldown > 0 ? `Gửi lại (${resendCooldown}s)` : 'Gửi lại mã'}
+						{resendCooldown > 0 ? m.verify_resend_wait({ n: resendCooldown }) : m.verify_resend()}
 					</button>
 					<button class="banner-dismiss" onclick={() => showVerifyForm = false} aria-label="Thu gọn">←</button>
 				</form>

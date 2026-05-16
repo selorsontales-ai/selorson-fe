@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import HeroSlider from '$lib/components/ui/HeroSlider.svelte';
 	import VoteWidget from '$lib/components/ui/VoteWidget.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	let backendStatus = $state<'checking' | 'connected' | 'error'>('checking');
 	let latestChapters = $state<any[]>([]);
@@ -48,12 +49,12 @@
 	<div class="hero-fallback">
 		<div class="hero-bg"></div>
 		<div class="hero-content fade-in">
-			<div class="hero-badge">✨ Phiên bản mới</div>
-			<h1 class="hero-title">Chào mừng đến với <span class="gradient-text">Selorson</span></h1>
-			<p class="hero-subtitle">Nền tảng nội dung đa phương tiện — Truyện, Video, Nhạc<br/>và cộng đồng sáng tạo.</p>
+			<div class="hero-badge">{m.home_new_version()}</div>
+			<h1 class="hero-title">{m.home_welcome_to()} <span class="gradient-text">Selorson</span></h1>
+			<p class="hero-subtitle">{@html m.home_subtitle()}</p>
 			<div class="hero-cta">
-				<a href="/stories" class="btn-brand">📖 Đọc truyện</a>
-				<a href="/about" class="btn-ghost">Tìm hiểu thêm</a>
+				<a href="/stories" class="btn-brand">{m.home_read_stories()}</a>
+				<a href="/about" class="btn-ghost">{m.home_learn_more()}</a>
 			</div>
 		</div>
 	</div>
@@ -64,23 +65,23 @@
 	<div class="quick-grid">
 		<a href="/stories" class="quick-card">
 			<span class="quick-icon">📖</span>
-			<h3>Truyện</h3>
-			<p>Đọc các chapter mới nhất</p>
+			<h3>{m.nav_stories()}</h3>
+			<p>{m.home_quick_stories_desc()}</p>
 		</a>
 		<a href="/videos" class="quick-card">
 			<span class="quick-icon">🎬</span>
-			<h3>Video</h3>
-			<p>Xem animation và clip</p>
+			<h3>{m.nav_videos()}</h3>
+			<p>{m.home_quick_videos_desc()}</p>
 		</a>
 		<a href="/music" class="quick-card">
 			<span class="quick-icon">🎵</span>
-			<h3>Nhạc</h3>
-			<p>Nghe soundtrack gốc</p>
+			<h3>{m.nav_music()}</h3>
+			<p>{m.home_quick_music_desc()}</p>
 		</a>
 		<a href="/library" class="quick-card">
 			<span class="quick-icon">📚</span>
-			<h3>Thư viện</h3>
-			<p>Khám phá thế giới</p>
+			<h3>{m.nav_library()}</h3>
+			<p>{m.home_quick_library_desc()}</p>
 		</a>
 	</div>
 </section>
@@ -89,8 +90,8 @@
 {#if latestChapters.length > 0}
 	<section class="content-section">
 		<div class="section-header">
-			<h2 class="section-title">📖 Chapter mới nhất</h2>
-			<a href="/stories" class="see-all">Xem tất cả →</a>
+			<h2 class="section-title">{m.home_latest_chapters()}</h2>
+			<a href="/stories" class="see-all">{m.home_see_all()}</a>
 		</div>
 		<div class="chapter-row">
 			{#each latestChapters as ch}
@@ -108,8 +109,8 @@
 {#if featuredVideos.length > 0}
 	<section class="content-section">
 		<div class="section-header">
-			<h2 class="section-title">🎬 Video nổi bật</h2>
-			<a href="/videos" class="see-all">Xem tất cả →</a>
+			<h2 class="section-title">{m.home_featured_videos()}</h2>
+			<a href="/videos" class="see-all">{m.home_see_all()}</a>
 		</div>
 		<div class="video-row">
 			{#each featuredVideos.slice(0, 3) as vid}
@@ -141,7 +142,7 @@
 	<div class="split-right">
 		{#if futureProjects.length > 0}
 			<div class="projects-card">
-				<h3>🚀 Dự án tương lai</h3>
+				<h3>{m.home_future_projects()}</h3>
 				<div class="project-list">
 					{#each futureProjects as proj}
 						<div class="project-item">
@@ -162,12 +163,12 @@
 
 <!-- Tech Stack -->
 <section class="tech-section">
-	<h2 class="section-title" style="text-align:center;margin-bottom:2rem">Stack V3</h2>
+	<h2 class="section-title" style="text-align:center;margin-bottom:2rem">{m.home_tech_stack_title()}</h2>
 	<div class="tech-grid">
 		{#each [
-			{ name: 'Rust + Axum', desc: 'Backend hiệu năng cao', icon: '🦀' },
-			{ name: 'SvelteKit', desc: 'Frontend nhanh nhất', icon: '⚡' },
-			{ name: 'PostgreSQL', desc: 'Database mạnh mẽ', icon: '🐘' },
+			{ name: 'Rust + Axum', desc: m.home_tech_rust_desc(), icon: '🦀' },
+			{ name: 'SvelteKit', desc: m.home_tech_svelte_desc(), icon: '⚡' },
+			{ name: 'PostgreSQL', desc: m.home_tech_pg_desc(), icon: '🐘' },
 			{ name: 'Redis', desc: 'Cache + Realtime', icon: '💾' },
 			{ name: 'Cloudflare', desc: 'CDN + Stream', icon: '☁️' },
 			{ name: 'Capacitor', desc: 'iOS + Android', icon: '📱' },

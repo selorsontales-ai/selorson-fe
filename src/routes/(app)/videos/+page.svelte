@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { api } from '$lib/api';
 	import { onMount } from 'svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	let videos = $state<any[]>([]);
 	let loading = $state(true);
@@ -15,14 +16,14 @@
 </script>
 
 <svelte:head>
-	<title>Video — Selorson</title>
-	<meta name="description" content="Xem các video animation từ Selorson" />
+	<title>{m.videos_seo_title()}</title>
+	<meta name="description" content={m.videos_seo_desc()} />
 </svelte:head>
 
 <section class="videos-page">
 	<div class="page-header">
-		<h1 class="section-title">Video</h1>
-		<p class="page-subtitle">Animation và nội dung đa phương tiện</p>
+		<h1 class="section-title">{m.videos_list_title()}</h1>
+		<p class="page-subtitle">{m.videos_list_subtitle()}</p>
 	</div>
 
 	{#if loading}
@@ -34,8 +35,8 @@
 	{:else if videos.length === 0}
 		<div class="empty-state">
 			<span class="empty-icon">🎬</span>
-			<h3>Chưa có video nào</h3>
-			<p>Nội dung sẽ sớm được cập nhật</p>
+			<h3>{m.videos_empty_title()}</h3>
+			<p>{m.videos_empty_desc()}</p>
 		</div>
 	{:else}
 		<div class="video-grid">
@@ -48,7 +49,7 @@
 							<div class="thumb-placeholder">▶</div>
 						{/if}
 						{#if video.is_featured}
-							<span class="featured-badge">⭐ Nổi bật</span>
+							<span class="featured-badge">{m.videos_featured()}</span>
 						{/if}
 					</div>
 					<div class="video-info">

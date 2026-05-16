@@ -3,6 +3,8 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { isAuthenticated } from '$lib/stores/auth.svelte';
+	import * as m from '$lib/paraglide/messages';
+	import CommentsSection from '$lib/components/ui/CommentsSection.svelte';
 
 	let chapter = $state<any>(null);
 	let prevCh = $state<number | null>(null);
@@ -33,14 +35,14 @@
 		{ value: '"Roboto Mono", monospace', label: 'Roboto Mono' },
 	];
 
-	const themes = [
-		{ id: 'default', name: 'Mặc định', bg: 'transparent', color: 'inherit', preview: '#1e293b', previewText: '#c8d6e5' },
-		{ id: 'sepia', name: 'Giấy cũ', bg: '#f5e6c8', color: '#5b4636', preview: '#f5e6c8', previewText: '#5b4636' },
-		{ id: 'mint', name: 'Bạc hà', bg: '#e8f5e9', color: '#2e5a3a', preview: '#e8f5e9', previewText: '#2e5a3a' },
-		{ id: 'sky', name: 'Bầu trời', bg: '#e3f2fd', color: '#1a3a5c', preview: '#e3f2fd', previewText: '#1a3a5c' },
-		{ id: 'lavender', name: 'Oải hương', bg: '#f3e5f5', color: '#4a2560', preview: '#f3e5f5', previewText: '#4a2560' },
-		{ id: 'night', name: 'Đêm', bg: '#0f0f1a', color: '#b8c0d0', preview: '#0f0f1a', previewText: '#b8c0d0' },
-	];
+	let themes = $derived([
+		{ id: 'default', name: m.reader_theme_default(), bg: 'transparent', color: 'inherit', preview: '#1e293b', previewText: '#c8d6e5' },
+		{ id: 'sepia', name: m.reader_theme_sepia(), bg: '#f5e6c8', color: '#5b4636', preview: '#f5e6c8', previewText: '#5b4636' },
+		{ id: 'mint', name: m.reader_theme_mint(), bg: '#e8f5e9', color: '#2e5a3a', preview: '#e8f5e9', previewText: '#2e5a3a' },
+		{ id: 'sky', name: m.reader_theme_sky(), bg: '#e3f2fd', color: '#1a3a5c', preview: '#e3f2fd', previewText: '#1a3a5c' },
+		{ id: 'lavender', name: m.reader_theme_lavender(), bg: '#f3e5f5', color: '#4a2560', preview: '#f3e5f5', previewText: '#4a2560' },
+		{ id: 'night', name: m.reader_theme_night(), bg: '#0f0f1a', color: '#b8c0d0', preview: '#0f0f1a', previewText: '#b8c0d0' },
+	]);
 
 	const speedOptions = [
 		{ value: 1, label: '1x' },
@@ -84,7 +86,7 @@
 			if (isAuthenticated() && chapter) {
 				saveProgress(chapter.id, 0);
 			}
-		} catch { error = 'Không tìm thấy chapter'; }
+		} catch { error = m.reader_not_found(); }
 		loading = false;
 	}
 
@@ -145,9 +147,9 @@
 </script>
 
 <svelte:head>
-	<title>{chapter ? `Ch. ${chapter.chapter_number}: ${chapter.title}` : 'Đang tải...'} — Selorson</title>
+	<title>{chapter ? `Ch. ${chapter.chapter_number}: ${chapter.title}` : m.reader_loading()} — Selorson</title>
 	{#if chapter}
-		<meta name="description" content="Đọc {chapter.title} — Selorson Stories" />
+		<meta name="description" content="{chapter.title} — Selorson Stories" />
 	{/if}
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Merriweather:wght@400;700&display=swap" rel="stylesheet" />
@@ -160,18 +162,18 @@
 	{#if loading}
 		<div class="loading-state">
 			<div class="spinner-lg"></div>
-			<p>Đang tải chapter...</p>
+			<p>{m.reader_loading()}</p>
 		</div>
 	{:else if error}
 		<div class="error-state">
 			<span class="error-icon">😔</span>
 			<h3>{error}</h3>
-			<a href="/stories" class="btn-brand">← Về danh sách</a>
+			<a href="/stories" class="btn-brand">{m.reader_back_list()}</a>
 		</div>
 	{:else if chapter}
 		<article class="reader" style:max-width="{maxWidth}px">
 			<header class="reader-header">
-				<a href="/stories" class="back-link">← Danh sách chapter</a>
+				<a href="/stories" class="back-link">{m.reader_back_list()}</a>
 				<span class="ch-num">Chapter {chapter.chapter_number}</span>
 				<h1>{chapter.title}</h1>
 				<time>{new Date(chapter.created_at).toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' })}</time>
@@ -181,9 +183,9 @@
 			<div class="reading-toolbar">
 				<!-- Font Size -->
 				<div class="toolbar-group">
-					<button class="tool-btn" onclick={() => { fontSize = Math.max(12, fontSize - 2); }} title="Nhỏ hơn">A-</button>
+					<button class="tool-btn" onclick={() => { fontSize = Math.max(12, fontSize - 2); }} title={m.reader_font_smaller()}>A-</button>
 					<span class="font-size-label">{fontSize}px</span>
-					<button class="tool-btn" onclick={() => { fontSize = Math.min(32, fontSize + 2); }} title="Lớn hơn">A+</button>
+					<button class="tool-btn" onclick={() => { fontSize = Math.min(32, fontSize + 2); }} title={m.reader_font_larger()}>A+</button>
 				</div>
 
 				<!-- Font Family -->
@@ -207,7 +209,7 @@
 				<!-- Auto Scroll -->
 				<div class="toolbar-group auto-scroll-group">
 					<button class="tool-btn" class:active={autoScrolling} onclick={toggleAutoScroll}
-						title={autoScrolling ? 'Dừng cuộn' : 'Tự cuộn'}>{autoScrolling ? '⏸' : '▶'}</button>
+						title={autoScrolling ? m.reader_stop_scroll() : m.reader_auto_scroll()}>{autoScrolling ? '⏸' : '▶'}</button>
 					{#if showSpeedPicker}
 						<div class="speed-picker">
 							{#each speedOptions as s}
@@ -219,19 +221,19 @@
 				</div>
 
 				<!-- Settings (Width, Line height) -->
-				<button class="tool-btn" onclick={() => showSettings = !showSettings} title="Thêm tùy chỉnh" class:active={showSettings}>⚙️</button>
+				<button class="tool-btn" onclick={() => showSettings = !showSettings} title={m.reader_settings()} class:active={showSettings}>⚙️</button>
 			</div>
 
 			<!-- Extended Settings Panel -->
 			{#if showSettings}
 				<div class="reader-settings glass-card">
 					<label>
-						<span>Giãn dòng</span>
+						<span>{m.reader_line_height()}</span>
 						<input type="range" min="1.4" max="2.4" step="0.1" bind:value={lineHeight} />
 						<span class="val">{lineHeight}</span>
 					</label>
 					<label>
-						<span>Độ rộng</span>
+						<span>{m.reader_width()}</span>
 						<input type="range" min="500" max="1000" step="20" bind:value={maxWidth} />
 						<span class="val">{maxWidth}px</span>
 					</label>
@@ -241,14 +243,14 @@
 			<!-- Chapter Navigation (Top) -->
 			<nav class="chapter-nav-top">
 				{#if prevCh}
-					<a href="/stories/{prevCh}" class="nav-btn prev">← Chương trước</a>
+					<a href="/stories/{prevCh}" class="nav-btn prev">{m.reader_prev_ch()}</a>
 				{:else}
-					<span class="nav-btn prev disabled">← Chương trước</span>
+					<span class="nav-btn prev disabled">{m.reader_prev_ch()}</span>
 				{/if}
 				{#if nextCh}
-					<a href="/stories/{nextCh}" class="nav-btn next">Chương sau →</a>
+					<a href="/stories/{nextCh}" class="nav-btn next">{m.reader_next_ch()}</a>
 				{:else}
-					<span class="nav-btn next disabled">Chương sau →</span>
+					<span class="nav-btn next disabled">{m.reader_next_ch()}</span>
 				{/if}
 			</nav>
 
@@ -260,13 +262,13 @@
 						{#if para.trim()}<p>{para}</p>{/if}
 					{/each}
 				{:else}
-					<p class="no-content">Chưa có nội dung</p>
+					<p class="no-content">{m.reader_no_content()}</p>
 				{/if}
 			</div>
 
 			{#if chapter.author_note}
 				<div class="author-note glass-card">
-					<h4>📝 Ghi chú tác giả</h4>
+					<h4>{m.reader_author_note()}</h4>
 					<p>{chapter.author_note}</p>
 				</div>
 			{/if}
@@ -276,18 +278,23 @@
 				{#if prevCh}
 					<a href="/stories/{prevCh}" class="btn-ghost">← Ch. {prevCh}</a>
 				{:else}
-					<span class="btn-ghost disabled">← Đầu truyện</span>
+					<span class="btn-ghost disabled">{m.reader_end_of_story()}</span>
 				{/if}
-				<a href="/stories" class="btn-ghost">📖 Mục lục</a>
+				<a href="/stories" class="btn-ghost">{m.reader_toc()}</a>
 				{#if nextCh}
 					<a href="/stories/{nextCh}" class="btn-brand">Ch. {nextCh} →</a>
 				{:else}
-					<span class="end-note">Bạn đã đọc chapter mới nhất!</span>
+					<span class="end-note">{m.reader_latest_ch()}</span>
 				{/if}
 			</nav>
 
 			<!-- Scroll % indicator -->
 			<div class="scroll-indicator">{scrollProgress}%</div>
+
+			<!-- Comments Section -->
+			{#if chapter}
+				<CommentsSection commentableType="chapter" commentableId={chapter.id} />
+			{/if}
 		</article>
 	{/if}
 </section>

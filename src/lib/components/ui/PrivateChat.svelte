@@ -8,6 +8,7 @@
 		getVisibleBubbles, getOverflowBubbles, isOverflowOpen, toggleOverflow,
 		sendMsg, minimizeWindow, closeWindow, promoteBubble, getTotalUnread, updateDraft
 	} from '$lib/stores/chat.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	let msgRefs = $state<Record<number, HTMLElement>>({});
 
@@ -45,9 +46,9 @@
 	<!-- Drawer Panel -->
 	{#if isDrawerOpen()}
 	<div class="pchat-drawer">
-		<div class="pchat-drawer-head"><strong>Tin nhắn</strong><button class="pchat-x" onclick={closeDrawer}>✕</button></div>
-		{#if isLoadingConvs()}<div class="pchat-loading">Đang tải...</div>
-		{:else if getConversations().length === 0}<div class="pchat-empty">📭 Chưa có tin nhắn</div>
+		<div class="pchat-drawer-head"><strong>{m.pchat_title()}</strong><button class="pchat-x" onclick={closeDrawer}>✕</button></div>
+		{#if isLoadingConvs()}<div class="pchat-loading">{m.pchat_loading()}</div>
+		{:else if getConversations().length === 0}<div class="pchat-empty">{m.pchat_empty()}</div>
 		{:else}
 		<div class="pchat-conv-list">
 			{#each getConversations() as c}
@@ -73,14 +74,14 @@
 				<strong>{w.otherUser?.name}</strong>
 			</a>
 			<div class="pchat-win-btns">
-				<a href="/messages?conv={w.convId}" class="btn" title="Mở trang Tin nhắn" onclick={() => closeWindow(w)}>⤢</a>
-				<button class="btn" onclick={() => minimizeWindow(w)} title="Thu nhỏ">−</button>
-				<button class="btn" onclick={() => closeWindow(w)} title="Đóng">✕</button>
+				<a href="/messages?conv={w.convId}" class="btn" title={m.pchat_tooltip_open()} onclick={() => closeWindow(w)}>⤢</a>
+				<button class="btn" onclick={() => minimizeWindow(w)} title={m.pchat_tooltip_min()}>−</button>
+				<button class="btn" onclick={() => closeWindow(w)} title={m.pchat_tooltip_close()}>✕</button>
 			</div>
 		</div>
 		<div class="pchat-win-msgs" bind:this={msgRefs[w.convId]}>
-			{#if w.loading}<div class="pchat-loading">Đang tải...</div>
-			{:else if w.messages.length === 0}<div class="pchat-empty">Bắt đầu trò chuyện 👋</div>
+			{#if w.loading}<div class="pchat-loading">{m.pchat_loading()}</div>
+			{:else if w.messages.length === 0}<div class="pchat-empty">{m.pchat_start()}</div>
 			{:else}
 				{#each w.messages as m}
 					<div class="pchat-msg" class:mine={m.sender_id === getUser()?.id}>
@@ -91,7 +92,7 @@
 		</div>
 		<div class="pchat-win-input">
 			<input value={w.draft} oninput={(e) => updateDraft(w.convId, (e.target as HTMLInputElement).value)}
-				placeholder="Nhập tin nhắn..." onkeydown={(e) => { if (e.key === 'Enter') handleSend(w); }} disabled={w.sending} />
+				placeholder={m.pchat_input()} onkeydown={(e) => { if (e.key === 'Enter') handleSend(w); }} disabled={w.sending} />
 			<button onclick={() => handleSend(w)} disabled={!w.draft?.trim() || w.sending}>📤</button>
 		</div>
 	</div>

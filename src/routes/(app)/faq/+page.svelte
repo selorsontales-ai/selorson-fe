@@ -1,8 +1,23 @@
-<svelte:head><title>Câu hỏi thường gặp — Selorson</title></svelte:head>
+<script lang="ts">
+	import * as m from '$lib/paraglide/messages';
+
+	// Dùng effect hoặc state tĩnh
+	let faqs = $derived([
+		{ q: m.faq_q1(), a: m.faq_a1() },
+		{ q: m.faq_q2(), a: m.faq_a2() },
+		{ q: m.faq_q3(), a: m.faq_a3() },
+		{ q: m.faq_q4(), a: m.faq_a4() },
+		{ q: m.faq_q5(), a: m.faq_a5() },
+		{ q: m.faq_q6(), a: m.faq_a6() },
+		{ q: m.faq_q7(), a: m.faq_a7() },
+	]);
+</script>
+
+<svelte:head><title>{m.faq_title()} — Selorson</title></svelte:head>
 
 <div class="faq-page">
-	<h1>❓ Câu hỏi thường gặp</h1>
-	<p class="subtitle">Những câu hỏi phổ biến về Selorson</p>
+	<h1>{m.faq_title()}</h1>
+	<p class="subtitle">{m.faq_subtitle()}</p>
 
 	<div class="faq-list">
 		{#each faqs as faq, i}
@@ -14,17 +29,7 @@
 	</div>
 </div>
 
-<script lang="ts">
-	const faqs = [
-		{ q: 'Selorson là gì?', a: 'Selorson là nền tảng nội dung đa phương tiện bao gồm truyện, video, nhạc, thư viện tài liệu và cộng đồng.' },
-		{ q: 'Làm sao để đăng ký tài khoản?', a: 'Bạn có thể đăng ký bằng email hoặc đăng nhập qua Google. Nhấn nút "Đăng nhập" trên góc phải màn hình.' },
-		{ q: 'Truyện có miễn phí không?', a: 'Tất cả chapter đều miễn phí. Chúng tôi không thu phí đọc truyện.' },
-		{ q: 'Làm sao để đổi avatar?', a: 'Vào trang Profile của bạn, nhấn vào biểu tượng camera trên avatar để tải ảnh mới.' },
-		{ q: 'Tôi quên mật khẩu, phải làm sao?', a: 'Vào trang Quên mật khẩu (/forgot-password), nhập email và làm theo hướng dẫn.' },
-		{ q: 'Có ứng dụng mobile không?', a: 'Selorson hỗ trợ PWA và đang phát triển ứng dụng native cho iOS/Android.' },
-		{ q: 'Làm sao để liên hệ?', a: 'Sử dụng trang Liên hệ (/contact) hoặc gửi email đến contact@selorson.com.' },
-	];
-</script>
+
 
 <style>
 	.faq-page { max-width: 700px; margin: 0 auto; padding: 2rem 1rem 4rem; }

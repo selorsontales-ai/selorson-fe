@@ -47,9 +47,14 @@
 	async function selectConv(c: any) {
 		selectedConv = c;
 		try {
-			const r = await api<any>(`/manager/support/${c.id}/messages`);
-			if (r.data) { selectedConv = r.data.conversation; selectedMessages = r.data.messages || []; }
-			await markRead(c.id);
+            if (c.type === 'contact') {
+                const r = await api<any>(`/manager/support/contact/${c.original_id}/messages`);
+                if (r.data) { selectedConv = r.data.conversation; selectedMessages = r.data.messages || []; }
+            } else {
+                const r = await api<any>(`/manager/support/${c.id}/messages`);
+                if (r.data) { selectedConv = r.data.conversation; selectedMessages = r.data.messages || []; }
+                await markRead(c.id);
+            }
 		} catch {}
 		scrollBottom();
 	}
@@ -62,15 +67,27 @@
 
 	async function handleClaim() {
 		if (!selectedConv) return;
-		try { await api(`/manager/support/${selectedConv.id}/claim`, { method: 'POST' }); await fetchConversations(); await fetchStats(); await selectConv(selectedConv); } catch {}
+		try {
+            if (selectedConv.type === 'contact') {
+                await api(`/manager/support/contact/${selectedConv.original_id}/claim`, { method: 'POST' });
+            } else {
+                await api(`/manager/support/${selectedConv.id}/claim`, { method: 'POST' });
+            }
+            await fetchConversations(); await fetchStats(); await selectConv(selectedConv);
+        } catch {}
 	}
 
 	async function handleReply() {
 		if (!replyText.trim() || !selectedConv) return;
 		isSending = true;
 		try {
-			const r = await api<any>(`/manager/support/${selectedConv.id}/reply`, { method: 'POST', body: { message: replyText } });
-			if (r.data) selectedMessages = [...selectedMessages, r.data];
+            if (selectedConv.type === 'contact') {
+                const r = await api<any>(`/manager/support/contact/${selectedConv.original_id}/reply`, { method: 'POST', body: { reply_message: replyText } });
+                if (r.data) selectedMessages = [...selectedMessages, r.data];
+            } else {
+                const r = await api<any>(`/manager/support/${selectedConv.id}/reply`, { method: 'POST', body: { message: replyText } });
+                if (r.data) selectedMessages = [...selectedMessages, r.data];
+            }
 			replyText = '';
 			scrollBottom();
 		} catch {} finally { isSending = false; }
@@ -135,11 +152,53 @@
 
 	// ── Reports state ──
 	let reports = $state<any[]>([]); let reportFilter = $state('pending'); let rptLoading = $state(false);
+    
+    let showReportModal = $state(false);
+    let selectedReportId = $state<number | null>(null);
+    let reportResolveNote = $state('');
+    let reportResolveBan = $state(false);
+    let reportResolveBanReason = $state('');
+    let reportResolveBanDays = $state(7);
+
 	async function fetchReports(status = 'pending') { rptLoading = true; try { const r = await api<any>(`/admin/reports?status=${status}`); reports = (r.data as any)?.data ?? r.data ?? []; } catch {} finally { rptLoading = false; } }
-	async function resolveReport(id: number) { try { await api(`/admin/reports/${id}/resolve`, { method: 'POST' }); fetchReports(reportFilter); } catch {} }
+	
+    function openResolveModal(id: number) {
+        selectedReportId = id;
+        reportResolveNote = '';
+        reportResolveBan = false;
+        reportResolveBanReason = '';
+        reportResolveBanDays = 7;
+        showReportModal = true;
+    }
+
+    async function submitResolveReport() {
+        if (!selectedReportId) return;
+        try {
+            await api(`/admin/reports/${selectedReportId}/resolve`, {
+                method: 'POST',
+                body: {
+                    admin_note: reportResolveNote,
+                    ban: reportResolveBan,
+                    ban_reason: reportResolveBan ? reportResolveBanReason : undefined,
+                    ban_days: reportResolveBan ? reportResolveBanDays : undefined,
+                }
+            });
+            showReportModal = false;
+            fetchReports(reportFilter);
+        } catch {}
+    }
+
 	async function dismissReport(id: number) { try { await api(`/admin/reports/${id}/dismiss`, { method: 'POST' }); fetchReports(reportFilter); } catch {} }
 
 	let sse: EventSource | null = null;
+    
+    $effect(() => {
+		const hasSending = nlBroadcasts.some(b => b.status === 'sending');
+		if (hasSending && workspaceMode === 'newsletter') {
+			const timer = setTimeout(() => fetchNlBroadcasts(), 5000);
+			return () => clearTimeout(timer);
+		}
+	});
 
 	onMount(async () => {
 		const user = getUser();
@@ -224,6 +283,7 @@
 								<p class="conv-preview">{c.latest_message?.message || '...'}</p>
 							</div>
 							<div class="conv-badges">
+                                {#if c.type === 'contact'}<span title="Email Contact">📧</span>{/if}
 								<span class="priority-dot {c.priority || 'normal'}"></span>
 								{#if (c.unread_count ?? 0) > 0}<span class="unread-badge">{c.unread_count}</span>{/if}
 							</div>
@@ -270,9 +330,14 @@
 
 					<!-- Reply Bar -->
 					{#if selectedConv.status === 'active' && selectedConv.manager_id === getUser()?.id}
-						<div class="chat-reply">
-							<input bind:value={replyText} placeholder="Nhập phản hồi..." onkeydown={(e) => { if (e.key === 'Enter') handleReply(); }} />
-							<button disabled={!replyText.trim() || isSending} onclick={handleReply}>{isSending ? '⏳' : '📤'}</button>
+						<div class="chat-reply" class:is-contact={selectedConv.type === 'contact'}>
+                            {#if selectedConv.type === 'contact'}
+                                <textarea bind:value={replyText} rows="4" placeholder="Nhập email phản hồi..."></textarea>
+                                <button disabled={!replyText.trim() || isSending} onclick={handleReply}>{isSending ? '⏳' : 'Gửi Email'}</button>
+                            {:else}
+							    <input bind:value={replyText} placeholder="Nhập phản hồi..." onkeydown={(e) => { if (e.key === 'Enter') handleReply(); }} />
+							    <button disabled={!replyText.trim() || isSending} onclick={handleReply}>{isSending ? '⏳' : '📤'}</button>
+                            {/if}
 						</div>
 					{:else if selectedConv.status === 'pending'}
 						<div class="chat-info-bar pending">⏳ Ticket chưa được nhận. Bấm "Nhận" để bắt đầu.</div>
@@ -301,6 +366,32 @@
 					<p class="transfer-empty">Không có nhân viên khác khả dụng.</p>
 				{/each}
 				<button class="modal-close" onclick={() => showTransfer = false}>Đóng</button>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Report Resolve Modal -->
+	{#if showReportModal}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="modal-overlay" onmousedown={() => showReportModal = false}>
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div class="modal-box glass-card" onmousedown={(e) => e.stopPropagation()}>
+				<h3>✅ Xử lý Báo Cáo</h3>
+				<div class="nl-form" style="margin-top: 1rem;">
+					<label>Ghi chú xử lý<textarea bind:value={reportResolveNote} rows="3" placeholder="Ghi chú nội bộ..."></textarea></label>
+					<label style="flex-direction: row; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" bind:checked={reportResolveBan} style="width: auto;" />
+                        <span style="color: #ef4444; font-weight: 700;">🚫 Ban người dùng này</span>
+                    </label>
+                    {#if reportResolveBan}
+                        <label>Lý do ban<input bind:value={reportResolveBanReason} placeholder="Vi phạm tiêu chuẩn cộng đồng..." /></label>
+                        <label>Số ngày ban (0 = vĩnh viễn)<input type="number" bind:value={reportResolveBanDays} min="0" /></label>
+                    {/if}
+				</div>
+				<div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
+                    <button class="action-btn resolve" style="flex: 1;" onclick={submitResolveReport}>Xác nhận xử lý</button>
+                    <button class="action-btn transfer" style="flex: 1;" onclick={() => showReportModal = false}>Hủy</button>
+                </div>
 			</div>
 		</div>
 	{/if}
@@ -349,7 +440,13 @@
 				<h3 class="sub-title">📨 Lịch sử gửi gần đây</h3>
 				<div class="nl-history">
 					{#each nlBroadcasts.slice(0, 5) as bc (bc.id)}
-						<div class="nl-item"><strong>{bc.subject}</strong><span>{bc.recipient_count} người · {bc.sent_at ? formatDate(bc.sent_at) : '—'}</span></div>
+						<div class="nl-item">
+                            <strong>{bc.subject}</strong>
+                            <span style="display: flex; align-items: center; gap: 0.5rem;">
+                                <span class="chat-status {bc.status}">{bc.status}</span>
+                                {bc.recipient_count} người · {bc.sent_at ? formatDate(bc.sent_at) : '—'}
+                            </span>
+                        </div>
 					{/each}
 				</div>
 			{/if}
@@ -381,7 +478,7 @@
 							<div class="rpt-meta">Người gửi: {rpt.reporter?.name ?? 'User #' + rpt.reporter_id} · Đối tượng: {rpt.reported?.name ?? 'User #' + rpt.reported_id}</div>
 							{#if reportFilter === 'pending'}
 								<div class="mod-actions">
-									<button class="action-btn resolve" onclick={() => resolveReport(rpt.id)}>✅ Giải quyết</button>
+									<button class="action-btn resolve" onclick={() => openResolveModal(rpt.id)}>✅ Giải quyết</button>
 									<button class="action-btn transfer" onclick={() => dismissReport(rpt.id)}>❌ Bỏ qua</button>
 								</div>
 							{/if}
@@ -444,7 +541,9 @@
 	.chat-status{font-size:.625rem;font-weight:700;text-transform:uppercase;padding:.1875rem .5rem;border-radius:1rem;letter-spacing:.5px}
 	.chat-status.pending{background:rgba(245,158,11,.1);color:#f59e0b}
 	.chat-status.active{background:rgba(59,130,246,.1);color:#3b82f6}
-	.chat-status.resolved{background:rgba(34,197,94,.1);color:#22c55e}
+	.chat-status.resolved,.chat-status.sent{background:rgba(34,197,94,.1);color:#22c55e}
+    .chat-status.sending{background:rgba(6,182,212,.1);color:#06b6d4}
+    .chat-status.partial{background:rgba(245,158,11,.1);color:#f59e0b}
 	.chat-actions{display:flex;gap:.375rem}
 	.action-btn{padding:.4rem .75rem;border:none;border-radius:8px;font-size:.75rem;font-weight:600;cursor:pointer;transition:all .15s}
 	.action-btn.claim{background:rgba(59,130,246,.15);color:#60a5fa}
@@ -463,9 +562,11 @@
 	.msg-time{font-size:.56rem;color:var(--color-text-muted);display:block;margin-top:.2rem}
 
 	.chat-reply{display:flex;gap:.5rem;padding:.75rem;border-top:1px solid rgba(255,255,255,.06)}
-	.chat-reply input{flex:1;padding:.5rem .75rem;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:var(--color-surface-200);color:var(--color-text-primary);font-size:.85rem;font-family:inherit}
-	.chat-reply input:focus{outline:none;border-color:var(--color-brand-500)}
+    .chat-reply.is-contact{flex-direction:column;background:var(--color-surface-100)}
+	.chat-reply input,.chat-reply textarea{flex:1;padding:.5rem .75rem;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:var(--color-surface-200);color:var(--color-text-primary);font-size:.85rem;font-family:inherit;resize:vertical}
+	.chat-reply input:focus,.chat-reply textarea:focus{outline:none;border-color:var(--color-brand-500)}
 	.chat-reply button{padding:.5rem 1rem;background:linear-gradient(135deg,#0c713d,#085a30);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.9rem}
+    .chat-reply.is-contact button{align-self:flex-end}
 	.chat-reply button:disabled{opacity:.5;cursor:not-allowed}
 
 	.chat-info-bar{padding:.75rem 1rem;font-size:.8rem;text-align:center;border-top:1px solid rgba(255,255,255,.06)}

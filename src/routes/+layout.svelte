@@ -7,8 +7,10 @@
 	import PrivateChat from '$lib/components/ui/PrivateChat.svelte';
 	import SupportChatWidget from '$lib/components/ui/SupportChatWidget.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
+	import LanguageSwitcher from '$lib/components/ui/LanguageSwitcher.svelte';
 	import { initAuth, getUser, isAuthenticated, logout, isLoading } from '$lib/stores/auth.svelte';
 	import { initTheme, toggleTheme, isDark } from '$lib/stores/theme.svelte';
+	import * as m from '$lib/paraglide/messages';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
@@ -28,16 +30,16 @@
 </script>
 
 <svelte:head>
-	<title>Selorson — Nền tảng nội dung đa phương tiện</title>
-	<meta name="description" content="Đọc truyện, xem video, nghe nhạc — tất cả trong một nền tảng. Cộng đồng sáng tạo nội dung Selorson." />
-	<meta property="og:title" content="Selorson — Nền tảng nội dung đa phương tiện" />
-	<meta property="og:description" content="Đọc truyện, xem video, nghe nhạc — tất cả trong một nền tảng." />
+	<title>{m.seo_title()}</title>
+	<meta name="description" content={m.seo_description()} />
+	<meta property="og:title" content={m.seo_title()} />
+	<meta property="og:description" content={m.seo_description()} />
 	<meta property="og:type" content="website" />
 	<meta property="og:locale" content="vi_VN" />
 	<meta property="og:site_name" content="Selorson" />
 	<meta name="twitter:card" content="summary_large_image" />
-	<meta name="twitter:title" content="Selorson — Nền tảng nội dung đa phương tiện" />
-	<meta name="twitter:description" content="Đọc truyện, xem video, nghe nhạc — tất cả trong một nền tảng." />
+	<meta name="twitter:title" content={m.seo_title()} />
+	<meta name="twitter:description" content={m.seo_description()} />
 </svelte:head>
 
 <div class="app-shell">
@@ -50,12 +52,12 @@
 			</a>
 
 			<nav class="main-nav">
-				<a href="/" class="nav-link">Trang chủ</a>
-				<a href="/stories" class="nav-link">Truyện</a>
-				<a href="/videos" class="nav-link">Video</a>
-				<a href="/music" class="nav-link">Nhạc</a>
-				<a href="/library" class="nav-link">Thư viện</a>
-				<a href="/about" class="nav-link">Giới thiệu</a>
+				<a href="/" class="nav-link">{m.nav_home()}</a>
+				<a href="/stories" class="nav-link">{m.nav_stories()}</a>
+				<a href="/videos" class="nav-link">{m.nav_videos()}</a>
+				<a href="/music" class="nav-link">{m.nav_music()}</a>
+				<a href="/library" class="nav-link">{m.nav_library()}</a>
+				<a href="/about" class="nav-link">{m.nav_about()}</a>
 			</nav>
 
 			<div class="header-actions">
@@ -66,6 +68,9 @@
 				<button class="theme-toggle" onclick={toggleTheme} title={isDark() ? 'Chế độ sáng' : 'Chế độ tối'} aria-label="Toggle theme">
 					{isDark() ? '☀️' : '🌙'}
 				</button>
+				{#if !isAuthenticated()}
+					<LanguageSwitcher />
+				{/if}
 				{#if isLoading()}
 					<div class="auth-skeleton"></div>
 				{:else if isAuthenticated()}
@@ -94,21 +99,21 @@
 									<span class="dropdown-role">{getUser()?.role}</span>
 								</div>
 								<hr class="dropdown-divider" />
-								<a href="/profile/{getUser()?.id}" class="dropdown-item" onclick={() => showUserMenu = false}>👤 Hồ sơ</a>
-								<a href="/settings" class="dropdown-item" onclick={() => showUserMenu = false}>⚙️ Cài đặt</a>
+								<a href="/profile/{getUser()?.id}" class="dropdown-item" onclick={() => showUserMenu = false}>👤 {m.nav_profile()}</a>
+								<a href="/settings" class="dropdown-item" onclick={() => showUserMenu = false}>⚙️ {m.nav_settings()}</a>
 								{#if getUser()?.role === 'admin' || getUser()?.role === 'manager'}
 									<a href="/admin" class="dropdown-item admin-item" onclick={() => showUserMenu = false}>🛡️ Admin Panel</a>
 								{/if}
 								<hr class="dropdown-divider" />
 								<button class="dropdown-item logout-item" onclick={handleLogout}>
-									🚪 Đăng xuất
+									🚪 {m.nav_logout()}
 								</button>
 							</div>
 						{/if}
 					</div>
 				{:else}
 					<button class="btn-ghost" id="login-btn" onclick={() => showAuth = true}>
-						Đăng nhập
+						{m.nav_login()}
 					</button>
 				{/if}
 				<button class="mobile-toggle" onclick={() => showMobileMenu = !showMobileMenu} aria-label="Menu">
@@ -123,16 +128,16 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="mobile-overlay" onmousedown={() => showMobileMenu = false}></div>
 		<nav class="mobile-nav">
-			<a href="/" onclick={() => showMobileMenu = false}>Trang chủ</a>
-			<a href="/stories" onclick={() => showMobileMenu = false}>Truyện</a>
-			<a href="/videos" onclick={() => showMobileMenu = false}>Video</a>
-			<a href="/music" onclick={() => showMobileMenu = false}>Nhạc</a>
-			<a href="/library" onclick={() => showMobileMenu = false}>Thư viện</a>
-			<a href="/about" onclick={() => showMobileMenu = false}>Giới thiệu</a>
+			<a href="/" onclick={() => showMobileMenu = false}>{m.nav_home()}</a>
+			<a href="/stories" onclick={() => showMobileMenu = false}>{m.nav_stories()}</a>
+			<a href="/videos" onclick={() => showMobileMenu = false}>{m.nav_videos()}</a>
+			<a href="/music" onclick={() => showMobileMenu = false}>{m.nav_music()}</a>
+			<a href="/library" onclick={() => showMobileMenu = false}>{m.nav_library()}</a>
+			<a href="/about" onclick={() => showMobileMenu = false}>{m.nav_about()}</a>
 			{#if isAuthenticated()}
 				<hr class="mobile-divider" />
-				<a href="/profile/{getUser()?.id}" onclick={() => showMobileMenu = false}>👤 Hồ sơ</a>
-				<a href="/messages" onclick={() => showMobileMenu = false}>💬 Tin nhắn</a>
+				<a href="/profile/{getUser()?.id}" onclick={() => showMobileMenu = false}>👤 {m.nav_profile()}</a>
+				<a href="/messages" onclick={() => showMobileMenu = false}>💬 {m.nav_messages()}</a>
 				{#if getUser()?.role === 'admin' || getUser()?.role === 'manager'}
 					<a href="/admin" class="mobile-admin-link" onclick={() => showMobileMenu = false}>🛡️ Admin Panel</a>
 				{/if}
@@ -158,26 +163,26 @@
 		<div class="footer-inner">
 			<div class="footer-brand">
 				<span class="logo-text" style="font-size: 1.25rem;">Selorson</span>
-				<p class="footer-tagline">Nền tảng nội dung đa phương tiện</p>
+				<p class="footer-tagline">{m.footer_tagline()}</p>
 			</div>
 
 			<div class="footer-links">
 				<div class="footer-col">
-					<h4>Nội dung</h4>
-					<a href="/stories">Truyện</a>
-					<a href="/videos">Video</a>
-					<a href="/music">Nhạc</a>
+					<h4>{m.footer_content()}</h4>
+					<a href="/stories">{m.nav_stories()}</a>
+					<a href="/videos">{m.nav_videos()}</a>
+					<a href="/music">{m.nav_music()}</a>
 				</div>
 				<div class="footer-col">
-					<h4>Cộng đồng</h4>
-					<a href="/about">Giới thiệu</a>
-					<a href="/contact">Liên hệ</a>
+					<h4>{m.footer_community()}</h4>
+					<a href="/about">{m.nav_about()}</a>
+					<a href="/contact">{m.footer_contact()}</a>
 					<a href="/faq">FAQ</a>
 				</div>
 				<div class="footer-col">
-					<h4>Pháp lý</h4>
-					<a href="/privacy">Quyền riêng tư</a>
-					<a href="/terms">Điều khoản</a>
+					<h4>{m.footer_legal()}</h4>
+					<a href="/privacy">{m.footer_privacy()}</a>
+					<a href="/terms">{m.footer_terms()}</a>
 				</div>
 			</div>
 

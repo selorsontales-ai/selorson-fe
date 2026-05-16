@@ -2,6 +2,7 @@
 <script lang="ts">
 	import { login, register, forgotPassword, resetPassword, verifyEmail, resendVerification } from '$lib/stores/auth.svelte';
 	import { loginWithGoogle, loginWithFacebook, isOAuthLoading } from '$lib/stores/security.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	let { open = $bindable(false) } = $props();
 
@@ -54,13 +55,13 @@
 			const res = await login(email, password, rememberMe);
 			if (res.requires_2fa) {
 				// TODO: Show 2FA form (future)
-				error = 'Tài khoản yêu cầu xác thực 2 bước. Tính năng này sẽ sớm được hỗ trợ.';
+				error = m.auth_err_2fa_required();
 				return;
 			}
 			open = false;
 			resetForm();
 		} catch (err: any) {
-			error = err.message || 'Đã xảy ra lỗi';
+			error = err.message || m.auth_err_default();
 		} finally {
 			loading = false;
 		}
@@ -72,7 +73,7 @@
 		loading = true;
 		error = '';
 		if (password !== passwordConfirm) {
-			error = 'Mật khẩu xác nhận không khớp';
+			error = m.auth_err_pass_mismatch();
 			loading = false;
 			return;
 		}
@@ -82,9 +83,9 @@
 			mode = 'verify';
 			verifyCode = '';
 			error = '';
-			successMsg = 'Tài khoản đã tạo thành công! Kiểm tra email để lấy mã xác nhận.';
+			successMsg = m.auth_success_register();
 		} catch (err: any) {
-			error = err.message || 'Đã xảy ra lỗi';
+			error = err.message || m.auth_err_default();
 		} finally {
 			loading = false;
 		}
@@ -97,13 +98,13 @@
 		error = '';
 		try {
 			await forgotPassword(email);
-			successMsg = 'Mã xác nhận đã được gửi đến email của bạn!';
+			successMsg = m.auth_success_forgot();
 			// Auto switch to reset mode after 1.5s
 			setTimeout(() => {
 				switchMode('reset');
 			}, 1500);
 		} catch (err: any) {
-			error = err.message || 'Đã xảy ra lỗi';
+			error = err.message || m.auth_err_default();
 		} finally {
 			loading = false;
 		}
@@ -115,23 +116,23 @@
 		loading = true;
 		error = '';
 		if (newPassword !== newPasswordConfirm) {
-			error = 'Mật khẩu xác nhận không khớp';
+			error = m.auth_err_pass_mismatch();
 			loading = false;
 			return;
 		}
 		if (newPassword.length < 8) {
-			error = 'Mật khẩu phải có ít nhất 8 ký tự';
+			error = m.auth_err_pass_length();
 			loading = false;
 			return;
 		}
 		try {
 			await resetPassword(email, resetCode, newPassword);
-			successMsg = 'Đổi mật khẩu thành công! Đang chuyển về đăng nhập...';
+			successMsg = m.auth_success_reset();
 			setTimeout(() => {
 				switchMode('login');
 			}, 2000);
 		} catch (err: any) {
-			error = err.message || 'Mã không đúng hoặc đã hết hạn';
+			error = err.message || m.auth_err_invalid_code();
 		} finally {
 			loading = false;
 		}
@@ -144,14 +145,14 @@
 		error = '';
 		try {
 			await verifyEmail(email, verifyCode);
-			successMsg = 'Email đã được xác nhận thành công! 🎉';
+			successMsg = m.auth_success_verify();
 			setTimeout(() => {
 				open = false;
 				resetForm();
 				mode = 'login';
 			}, 1500);
 		} catch (err: any) {
-			error = err.message || 'Mã không đúng hoặc đã hết hạn';
+			error = err.message || m.auth_err_invalid_code();
 		} finally {
 			loading = false;
 		}
@@ -163,14 +164,14 @@
 		error = '';
 		try {
 			await resendVerification(email);
-			successMsg = 'Mã mới đã được gửi!';
+			successMsg = m.auth_success_resend();
 			resendCooldown = 60;
 			const timer = setInterval(() => {
 				resendCooldown--;
 				if (resendCooldown <= 0) clearInterval(timer);
 			}, 1000);
 		} catch (err: any) {
-			error = err.message || 'Không thể gửi lại mã';
+			error = err.message || m.auth_err_resend();
 		} finally {
 			loading = false;
 		}
@@ -186,11 +187,11 @@
 
 	// Modal titles
 	const titles: Record<string, string> = {
-		login: 'Đăng nhập',
-		register: 'Tạo tài khoản',
-		forgot: 'Quên mật khẩu',
-		reset: 'Đặt lại mật khẩu',
-		verify: 'Xác nhận email',
+		get login() { return m.auth_title_login(); },
+		get register() { return m.auth_title_register(); },
+		get forgot() { return m.auth_title_forgot(); },
+		get reset() { return m.auth_title_reset(); },
+		get verify() { return m.auth_title_verify(); },
 	};
 </script>
 
@@ -205,18 +206,17 @@
 				<button class="close-btn" onclick={() => handleBackdrop()} aria-label="Close">✕</button>
 			</div>
 
-			<!-- Tab Switcher (only login/register) -->
 			{#if mode === 'login' || mode === 'register'}
 				<div class="tab-switcher">
 					<button class="tab" class:active={mode === 'login'} onclick={() => switchMode('login')}>
-						Đăng nhập
+						{m.auth_title_login()}
 					</button>
 					<button
 						class="tab"
 						class:active={mode === 'register'}
 						onclick={() => switchMode('register')}
 					>
-						Đăng ký
+						{m.auth_title_register()}
 					</button>
 				</div>
 			{/if}
@@ -235,7 +235,7 @@
 			{#if mode === 'login'}
 				<form onsubmit={handleLogin}>
 					<div class="field">
-						<label for="auth-email">Email</label>
+						<label for="auth-email">{m.auth_label_email()}</label>
 						<input
 							id="auth-email"
 							type="email"
@@ -245,7 +245,7 @@
 						/>
 					</div>
 					<div class="field">
-						<label for="auth-password">Mật khẩu</label>
+						<label for="auth-password">{m.auth_label_password()}</label>
 						<input
 							id="auth-password"
 							type="password"
@@ -256,14 +256,13 @@
 						/>
 					</div>
 
-					<!-- Remember Me + Forgot Password -->
 					<div class="login-options">
 						<label class="remember-label">
 							<input type="checkbox" bind:checked={rememberMe} />
-							<span>Ghi nhớ đăng nhập</span>
+							<span>{m.auth_remember_me()}</span>
 						</label>
 						<button type="button" class="forgot-link" onclick={() => switchMode('forgot')}>
-							Quên mật khẩu?
+							{m.auth_forgot_link()}
 						</button>
 					</div>
 
@@ -271,7 +270,7 @@
 						{#if loading}
 							<span class="spinner"></span>
 						{:else}
-							Đăng nhập
+							{m.auth_title_login()}
 						{/if}
 					</button>
 				</form>
@@ -295,7 +294,7 @@
 								fill="#EA4335"
 							/></svg
 						>
-						Đăng nhập với Google
+						{m.auth_social_google()}
 					</button>
 					<button
 						class="social-btn facebook"
@@ -308,15 +307,14 @@
 								fill="#1877F2"
 							/></svg
 						>
-						Đăng nhập với Facebook
+						{m.auth_social_facebook()}
 					</button>
 				</div>
 
-			<!-- ════════════ REGISTER FORM ════════════ -->
 			{:else if mode === 'register'}
 				<form onsubmit={handleRegister}>
 					<div class="field">
-						<label for="auth-name">Tên hiển thị</label>
+						<label for="auth-name">{m.auth_label_name()}</label>
 						<input
 							id="auth-name"
 							type="text"
@@ -326,7 +324,7 @@
 						/>
 					</div>
 					<div class="field">
-						<label for="auth-username">Tên người dùng</label>
+						<label for="auth-username">{m.auth_label_username()}</label>
 						<input
 							id="auth-username"
 							type="text"
@@ -337,7 +335,7 @@
 						/>
 					</div>
 					<div class="field">
-						<label for="auth-email-reg">Email</label>
+						<label for="auth-email-reg">{m.auth_label_email()}</label>
 						<input
 							id="auth-email-reg"
 							type="email"
@@ -347,7 +345,7 @@
 						/>
 					</div>
 					<div class="field">
-						<label for="auth-password-reg">Mật khẩu</label>
+						<label for="auth-password-reg">{m.auth_label_password()}</label>
 						<input
 							id="auth-password-reg"
 							type="password"
@@ -358,7 +356,7 @@
 						/>
 					</div>
 					<div class="field">
-						<label for="auth-password-confirm">Xác nhận mật khẩu</label>
+						<label for="auth-password-confirm">{m.auth_label_confirm_password()}</label>
 						<input
 							id="auth-password-confirm"
 							type="password"
@@ -371,19 +369,18 @@
 						{#if loading}
 							<span class="spinner"></span>
 						{:else}
-							Tạo tài khoản
+							{m.auth_title_register()}
 						{/if}
 					</button>
 				</form>
 
-			<!-- ════════════ FORGOT PASSWORD (Step 1) ════════════ -->
 			{:else if mode === 'forgot'}
 				<p class="mode-description">
-					Nhập email đã đăng ký, chúng tôi sẽ gửi mã xác nhận để đặt lại mật khẩu.
+					{m.auth_forgot_desc()}
 				</p>
 				<form onsubmit={handleForgot}>
 					<div class="field">
-						<label for="forgot-email">Email</label>
+						<label for="forgot-email">{m.auth_label_email()}</label>
 						<input
 							id="forgot-email"
 							type="email"
@@ -396,21 +393,20 @@
 						{#if loading}
 							<span class="spinner"></span>
 						{:else}
-							Gửi mã xác nhận
+							{m.auth_btn_send_code()}
 						{/if}
 					</button>
 				</form>
 
-				<button class="back-link" onclick={() => switchMode('login')}>← Quay lại đăng nhập</button>
+				<button class="back-link" onclick={() => switchMode('login')}>{m.auth_back_login()}</button>
 
-			<!-- ════════════ RESET PASSWORD (Step 2) ════════════ -->
 			{:else if mode === 'reset'}
 				<p class="mode-description">
-					Nhập mã 6 chữ số đã gửi đến <strong>{email}</strong> và mật khẩu mới.
+					{m.auth_reset_desc()} <strong>{email}</strong> {m.auth_reset_desc_end()}
 				</p>
 				<form onsubmit={handleReset}>
 					<div class="field">
-						<label for="reset-code">Mã xác nhận</label>
+						<label for="reset-code">{m.auth_label_code()}</label>
 						<input
 							id="reset-code"
 							type="text"
@@ -424,7 +420,7 @@
 						/>
 					</div>
 					<div class="field">
-						<label for="reset-password">Mật khẩu mới</label>
+						<label for="reset-password">{m.auth_label_new_password()}</label>
 						<input
 							id="reset-password"
 							type="password"
@@ -435,7 +431,7 @@
 						/>
 					</div>
 					<div class="field">
-						<label for="reset-password-confirm">Xác nhận mật khẩu</label>
+						<label for="reset-password-confirm">{m.auth_label_confirm_password()}</label>
 						<input
 							id="reset-password-confirm"
 							type="password"
@@ -448,22 +444,21 @@
 						{#if loading}
 							<span class="spinner"></span>
 						{:else}
-							Đổi mật khẩu
+							{m.auth_btn_reset_password()}
 						{/if}
 					</button>
 				</form>
 
-				<button class="back-link" onclick={() => switchMode('forgot')}>← Gửi lại mã</button>
+				<button class="back-link" onclick={() => switchMode('forgot')}>{m.auth_back_resend()}</button>
 
-				<!-- ════════════ VERIFY EMAIL (After Register) ════════════ -->
 				{:else if mode === 'verify'}
 					<div class="verify-illustration">📧</div>
 					<p class="mode-description">
-						Nhập mã 6 chữ số đã gửi đến <strong>{email}</strong> để xác nhận tài khoản.
+						{m.auth_verify_desc()} <strong>{email}</strong> {m.auth_verify_desc_end()}
 					</p>
 					<form onsubmit={handleVerifyEmail}>
 						<div class="field">
-							<label for="verify-code">Mã xác nhận</label>
+							<label for="verify-code">{m.auth_label_code()}</label>
 							<input
 								id="verify-code"
 								type="text"
@@ -481,7 +476,7 @@
 							{#if loading}
 								<span class="spinner"></span>
 							{:else}
-								Xác nhận email
+								{m.auth_btn_verify()}
 							{/if}
 						</button>
 					</form>
@@ -493,13 +488,13 @@
 							disabled={resendCooldown > 0 || loading}
 						>
 							{#if resendCooldown > 0}
-								Gửi lại mã ({resendCooldown}s)
+								{m.auth_btn_resend_wait({ time: resendCooldown })}
 							{:else}
-								📩 Gửi lại mã
+								{m.auth_btn_resend()}
 							{/if}
 						</button>
 						<button class="back-link" onclick={() => { open = false; resetForm(); mode = 'login'; }}>
-							Bỏ qua, xác nhận sau
+							{m.auth_btn_skip()}
 						</button>
 					</div>
 			{/if}
@@ -508,12 +503,12 @@
 			{#if mode === 'login' || mode === 'register'}
 				<p class="modal-footer-text">
 					{#if mode === 'login'}
-						Chưa có tài khoản? <button class="link-btn" onclick={() => switchMode('register')}
-							>Đăng ký ngay</button
+						{m.auth_no_account()} <button class="link-btn" onclick={() => switchMode('register')}
+							>{m.auth_register_now()}</button
 						>
 					{:else}
-						Đã có tài khoản? <button class="link-btn" onclick={() => switchMode('login')}
-							>Đăng nhập</button
+						{m.auth_has_account()} <button class="link-btn" onclick={() => switchMode('login')}
+							>{m.auth_login_now()}</button
 						>
 					{/if}
 				</p>

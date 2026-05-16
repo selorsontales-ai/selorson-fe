@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { api } from '$lib/api';
+	import * as m from '$lib/paraglide/messages';
 
 	let email = $state('');
 	let status = $state<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -8,7 +9,7 @@
 	async function subscribe() {
 		if (!email || !email.includes('@')) {
 			status = 'error';
-			message = 'Vui lòng nhập email hợp lệ';
+			message = m.nl_err_invalid_email();
 			return;
 		}
 		status = 'loading';
@@ -22,15 +23,15 @@
 			if (res.success) email = '';
 		} catch (e: any) {
 			status = 'error';
-			message = e.message || 'Có lỗi xảy ra';
+			message = e.message || m.nl_err_default();
 		}
 	}
 </script>
 
 <div class="newsletter-box">
 	<div class="newsletter-icon">📬</div>
-	<h3>Đăng ký nhận tin</h3>
-	<p>Nhận thông báo chapter mới, cập nhật tính năng và tin tức hấp dẫn.</p>
+	<h3>{m.nl_title()}</h3>
+	<p>{m.nl_desc()}</p>
 
 	{#if status === 'success'}
 		<div class="nl-msg success">{message}</div>
@@ -43,7 +44,7 @@
 				disabled={status === 'loading'}
 			/>
 			<button type="submit" class="btn-brand" disabled={status === 'loading'}>
-				{status === 'loading' ? '...' : 'Đăng ký'}
+				{status === 'loading' ? '...' : m.nl_btn_submit()}
 			</button>
 		</form>
 		{#if status === 'error'}

@@ -4,6 +4,7 @@
 	import { PUBLIC_API_BASE } from '$env/static/public';
 	import { onMount } from 'svelte';
 	import ImageCropper from '$lib/components/ui/ImageCropper.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	let saving = $state(false);
 	let savingPrivacy = $state(false);
@@ -14,16 +15,16 @@
 
 	// Privacy
 	const privacyItems = [
-		{ key: 'show_email', label: 'Hiển thị email' },
-		{ key: 'show_phone', label: 'Hiển thị số điện thoại' },
-		{ key: 'show_bio', label: 'Hiển thị tiểu sử' },
-		{ key: 'show_hobbies', label: 'Hiển thị sở thích' },
-		{ key: 'show_occupation', label: 'Hiển thị nghề nghiệp' },
-		{ key: 'show_birthday', label: 'Hiển thị ngày sinh' },
-		{ key: 'show_gender', label: 'Hiển thị giới tính' },
-		{ key: 'show_address', label: 'Hiển thị địa chỉ' },
-		{ key: 'show_online_status', label: 'Hiển thị trạng thái online' },
-		{ key: 'private_account', label: 'Tài khoản riêng tư' },
+		{ key: 'show_email', label: () => m.priv_show_email() },
+		{ key: 'show_phone', label: () => m.priv_show_phone() },
+		{ key: 'show_bio', label: () => m.priv_show_bio() },
+		{ key: 'show_hobbies', label: () => m.priv_show_hobbies() },
+		{ key: 'show_occupation', label: () => m.priv_show_occupation() },
+		{ key: 'show_birthday', label: () => m.priv_show_birthday() },
+		{ key: 'show_gender', label: () => m.priv_show_gender() },
+		{ key: 'show_address', label: () => m.priv_show_address() },
+		{ key: 'show_online_status', label: () => m.priv_show_online_status() },
+		{ key: 'private_account', label: () => m.priv_private_account() },
 	];
 	let privacy = $state<Record<string, boolean>>({});
 
@@ -67,12 +68,12 @@
 
 	async function saveProfile() {
 		saving = true; message = '';
-		try { const r = await apiFetch('/auth/profile', { method: 'PUT', body: JSON.stringify(form) }); message = r.success ? '✅ Đã lưu!' : r.message || 'Lỗi'; } catch { message = 'Lỗi'; } finally { saving = false; }
+		try { const r = await apiFetch('/auth/profile', { method: 'PUT', body: JSON.stringify(form) }); message = r.success ? m.settings_prof_saved() : r.message || m.settings_prof_err(); } catch { message = m.settings_prof_err(); } finally { saving = false; }
 	}
 
 	async function savePrivacy() {
 		savingPrivacy = true;
-		try { const r = await apiFetch('/auth/privacy', { method: 'PUT', body: JSON.stringify(privacy) }); message = r.success ? '✅ Quyền riêng tư đã lưu!' : 'Lỗi'; } catch { message = 'Lỗi'; } finally { savingPrivacy = false; }
+		try { const r = await apiFetch('/auth/privacy', { method: 'PUT', body: JSON.stringify(privacy) }); message = r.success ? m.settings_priv_saved() : m.settings_prof_err(); } catch { message = m.settings_prof_err(); } finally { savingPrivacy = false; }
 	}
 
 	function onAvatarSelect(e: Event) {
@@ -95,15 +96,15 @@
 			const fd = new FormData();
 			fd.append('avatar', avatarFile);
 			const res = await apiUpload<{ url: string }>('/upload/avatar', fd);
-			message = '✅ Avatar cập nhật!';
+			message = m.settings_ava_updated();
 			avatarFile = null;
 			if (res.success && res.data?.url) avatarPreview = res.data.url;
-		} catch { message = 'Lỗi upload'; } finally { uploadingAvatar = false; }
+		} catch { message = m.settings_err_upload(); } finally { uploadingAvatar = false; }
 	}
 
 	async function deleteAvatar() {
-		if (!confirm('Xóa ảnh đại diện?')) return;
-		try { await apiFetch('/auth/avatar', { method: 'DELETE' }); message = '✅ Đã xóa avatar'; } catch { message = 'Lỗi'; }
+		if (!confirm(m.settings_ava_delete_conf())) return;
+		try { await apiFetch('/auth/avatar', { method: 'DELETE' }); message = m.settings_ava_deleted(); } catch { message = m.settings_prof_err(); }
 	}
 
 	function onCoverSelect(e: Event) {
@@ -129,23 +130,23 @@
 			const res = await apiUpload<{ url: string }>('/upload/image', fd);
 			if (res.success && res.data?.url) {
 				await apiFetch('/profile/me', { method: 'PUT', body: JSON.stringify({ cover_image: res.data.url }) });
-				message = '✅ Ảnh bìa cập nhật!';
+				message = m.settings_cover_updated();
 				coverPreview = res.data.url;
 			} else {
-				message = 'Lỗi xử lý ảnh bìa';
+				message = m.settings_err_cover();
 			}
 			coverFile = null;
-		} catch { message = 'Lỗi upload'; } finally { uploadingCover = false; }
+		} catch { message = m.settings_err_upload(); } finally { uploadingCover = false; }
 	}
 
 	async function deleteCover() {
-		if (!confirm('Xóa ảnh bìa?')) return;
-		try { await apiFetch('/auth/cover', { method: 'DELETE' }); message = '✅ Đã xóa ảnh bìa'; } catch { message = 'Lỗi'; }
+		if (!confirm(m.settings_cover_delete_conf())) return;
+		try { await apiFetch('/auth/cover', { method: 'DELETE' }); message = m.settings_cover_deleted(); } catch { message = m.settings_prof_err(); }
 	}
 
 	async function unblockUser(userId: number) {
 		unblocking = userId;
-		try { const r = await apiFetch(`/social/block/${userId}`, { method: 'POST' }); if (r.success) { blockedUsers = blockedUsers.filter(u => u.id !== userId); message = '✅ Đã bỏ chặn!'; } } catch { message = 'Lỗi'; } finally { unblocking = null; }
+		try { const r = await apiFetch(`/social/block/${userId}`, { method: 'POST' }); if (r.success) { blockedUsers = blockedUsers.filter(u => u.id !== userId); message = m.settings_unblock_success(); } } catch { message = m.settings_prof_err(); } finally { unblocking = null; }
 	}
 </script>
 
@@ -154,48 +155,48 @@
 
 	<!-- Edit Profile -->
 	<section class="card">
-		<h3>✏️ Chỉnh sửa thông tin</h3>
+		<h3>{m.settings_edit_title()}</h3>
 		<div class="form-grid">
-			<label>Tên hiển thị<input bind:value={form.name} placeholder="Tên của bạn" /></label>
-			<label>Biệt danh<input bind:value={form.nickname} placeholder="Biệt danh" /></label>
-			<label>Nghề nghiệp<input bind:value={form.occupation} /></label>
-			<label>Sở thích<input bind:value={form.hobbies} /></label>
-			<label>Số điện thoại<input bind:value={form.phone_number} /></label>
-			<label>Ngày sinh<input type="date" bind:value={form.birthday} /></label>
-			<label>Giới tính<select bind:value={form.gender}><option value="">-- Chọn --</option><option value="male">Nam</option><option value="female">Nữ</option><option value="other">Khác</option></select></label>
-			<label>Địa chỉ<input bind:value={form.address} /></label>
+			<label>{m.settings_label_name()}<input bind:value={form.name} placeholder={m.settings_ph_name()} /></label>
+			<label>{m.settings_label_nickname()}<input bind:value={form.nickname} placeholder={m.settings_label_nickname()} /></label>
+			<label>{m.settings_label_occupation()}<input bind:value={form.occupation} /></label>
+			<label>{m.settings_label_hobbies()}<input bind:value={form.hobbies} /></label>
+			<label>{m.settings_label_phone()}<input bind:value={form.phone_number} /></label>
+			<label>{m.settings_label_birthday()}<input type="date" bind:value={form.birthday} /></label>
+			<label>{m.settings_label_gender()}<select bind:value={form.gender}><option value="">{m.settings_ph_select()}</option><option value="male">{m.profile_gender_male()}</option><option value="female">{m.profile_gender_female()}</option><option value="other">{m.profile_gender_other()}</option></select></label>
+			<label>{m.settings_label_address()}<input bind:value={form.address} /></label>
 		</div>
-		<label class="full">Tiểu sử<textarea bind:value={form.biography} rows="3" placeholder="Giới thiệu bản thân..."></textarea></label>
-		<button class="btn-save" onclick={saveProfile} disabled={saving}>{saving ? '⏳ Đang lưu...' : '💾 Lưu thông tin'}</button>
+		<label class="full">{m.settings_label_bio()}<textarea bind:value={form.biography} rows="3" placeholder={m.settings_ph_bio()}></textarea></label>
+		<button class="btn-save" onclick={saveProfile} disabled={saving}>{saving ? m.settings_btn_saving() : m.settings_btn_save_info()}</button>
 	</section>
 
 	<!-- Avatar & Cover -->
 	<section class="card">
-		<h3>🖼️ Hình đại diện và Ảnh bìa</h3>
+		<h3>{m.settings_media_title()}</h3>
 		<div class="media-row">
 			<div class="media-block">
-				<span class="media-label">Avatar</span>
+				<span class="media-label">{m.settings_label_avatar()}</span>
 				<div class="avatar-upload">
 					<div class="avatar-preview">
 						{#if avatarPreview || getUser()?.avatar}<img src={avatarPreview || getUser()?.avatar} alt="Avatar" />{:else}<span class="avatar-fallback">{getUser()?.name?.charAt(0).toUpperCase()}</span>{/if}
 					</div>
 					<div class="media-actions">
 						<input type="file" accept="image/*" bind:this={avatarInput} onchange={onAvatarSelect} style="display:none" />
-						<button class="btn-upload" onclick={() => avatarInput?.click()}>📷 Chọn hình</button>
-						{#if avatarFile}<button class="btn-upload btn-confirm" onclick={uploadAvatar} disabled={uploadingAvatar}>{uploadingAvatar ? '⏳...' : '✅ Tải lên'}</button>{/if}
-						{#if getUser()?.avatar && !avatarFile}<button class="btn-upload btn-delete" onclick={deleteAvatar}>🗑️ Xóa</button>{/if}
+						<button class="btn-upload" onclick={() => avatarInput?.click()}>{m.settings_btn_choose_img()}</button>
+						{#if avatarFile}<button class="btn-upload btn-confirm" onclick={uploadAvatar} disabled={uploadingAvatar}>{uploadingAvatar ? '⏳...' : m.settings_btn_upload()}</button>{/if}
+						{#if getUser()?.avatar && !avatarFile}<button class="btn-upload btn-delete" onclick={deleteAvatar}>{m.settings_btn_delete()}</button>{/if}
 					</div>
 				</div>
 			</div>
 			<div class="media-block">
-				<span class="media-label">Ảnh bìa</span>
+				<span class="media-label">{m.settings_label_cover()}</span>
 				<div class="cover-upload">
 					<div class="cover-preview" style="background-image:url({coverPreview || (getUser() as any)?.cover_image || ''});{!(coverPreview || (getUser() as any)?.cover_image) ? 'background:linear-gradient(135deg,#0c713d,#064e2b,#1a1a2e)' : ''}"></div>
 					<div class="media-actions">
 						<input type="file" accept="image/*" bind:this={coverInput} onchange={onCoverSelect} style="display:none" />
-						<button class="btn-upload" onclick={() => coverInput?.click()}>🖼️ Chọn bìa</button>
-						{#if coverFile}<button class="btn-upload btn-confirm" onclick={uploadCover} disabled={uploadingCover}>{uploadingCover ? '⏳...' : '✅ Tải lên'}</button>{/if}
-						{#if (getUser() as any)?.cover_image && !coverFile}<button class="btn-upload btn-delete" onclick={deleteCover}>🗑️ Xóa</button>{/if}
+						<button class="btn-upload" onclick={() => coverInput?.click()}>{m.settings_btn_choose_cover()}</button>
+						{#if coverFile}<button class="btn-upload btn-confirm" onclick={uploadCover} disabled={uploadingCover}>{uploadingCover ? '⏳...' : m.settings_btn_upload()}</button>{/if}
+						{#if (getUser() as any)?.cover_image && !coverFile}<button class="btn-upload btn-delete" onclick={deleteCover}>{m.settings_btn_delete()}</button>{/if}
 					</div>
 				</div>
 			</div>
@@ -204,20 +205,20 @@
 
 	<!-- Privacy -->
 	<section class="card">
-		<h3>🔒 Quyền riêng tư</h3>
+		<h3>{m.settings_priv_title()}</h3>
 		<div class="toggle-grid">
 			{#each privacyItems as item}
-				<label class="toggle-label"><input type="checkbox" bind:checked={privacy[item.key]} /><span>{item.label}</span></label>
+				<label class="toggle-label"><input type="checkbox" bind:checked={privacy[item.key]} /><span>{item.label()}</span></label>
 			{/each}
 		</div>
-		<button class="btn-save" onclick={savePrivacy} disabled={savingPrivacy}>{savingPrivacy ? '⏳...' : '🔒 Lưu quyền riêng tư'}</button>
+		<button class="btn-save" onclick={savePrivacy} disabled={savingPrivacy}>{savingPrivacy ? '⏳...' : m.settings_btn_save_priv()}</button>
 	</section>
 
 	<!-- Blocked Users -->
 	<section class="card">
-		<h3>🚫 Người dùng đã chặn</h3>
-		{#if loadingBlocked}<p class="hint">Đang tải...</p>
-		{:else if blockedUsers.length === 0}<p class="hint">✅ Bạn chưa chặn ai.</p>
+		<h3>{m.settings_blocked_title()}</h3>
+		{#if loadingBlocked}<p class="hint">{m.profile_loading()}</p>
+		{:else if blockedUsers.length === 0}<p class="hint">{m.settings_no_blocked()}</p>
 		{:else}
 			<div class="blocked-list">
 				{#each blockedUsers as user}
@@ -226,7 +227,7 @@
 							{#if user.avatar}<img src={user.avatar} alt="" />{:else}<span>{user.name?.charAt(0) || '?'}</span>{/if}
 						</div>
 						<div class="blocked-info"><a href="/profile/{user.username}" class="blocked-name">{user.name}</a><span class="blocked-username">@{user.username}</span></div>
-						<button class="btn-unblock" onclick={() => unblockUser(user.id)} disabled={unblocking === user.id}>{unblocking === user.id ? '⏳...' : '✅ Bỏ chặn'}</button>
+						<button class="btn-unblock" onclick={() => unblockUser(user.id)} disabled={unblocking === user.id}>{unblocking === user.id ? '⏳...' : m.settings_btn_unblock()}</button>
 					</div>
 				{/each}
 			</div>

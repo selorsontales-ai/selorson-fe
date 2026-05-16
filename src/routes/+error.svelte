@@ -1,16 +1,20 @@
+<script lang="ts">
+	import * as m from '$lib/paraglide/messages';
+</script>
+
 <svelte:head>
 	<title>404 — Selorson</title>
-	<meta name="description" content="Trang không tìm thấy" />
+	<meta name="description" content={m.err404_meta()} />
 </svelte:head>
 
 <section class="error-page">
 	<div class="error-content fade-in">
 		<span class="error-code">404</span>
-		<h1>Trang không tồn tại</h1>
-		<p>Xin lỗi, trang bạn đang tìm kiếm không có hoặc đã bị di chuyển.</p>
+		<h1>{m.err404_title()}</h1>
+		<p>{m.err404_desc()}</p>
 		<div class="error-actions">
-			<a href="/" class="btn-brand">← Về trang chủ</a>
-			<a href="/stories" class="btn-ghost">Đọc truyện</a>
+			<a href="/" class="btn-brand">{m.err404_home()}</a>
+			<a href="/stories" class="btn-ghost">{m.err404_stories()}</a>
 		</div>
 	</div>
 </section>

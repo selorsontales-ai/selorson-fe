@@ -7,6 +7,7 @@
 		rateTicket, markSupportRead, getSupportMessages, getActiveConversation,
 		getSupportUnread, isSupportSending, createTicket, closeTicket
 	} from '$lib/stores/support.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	let isOpen = $state(false);
 	let inputText = $state('');
@@ -105,7 +106,7 @@
 		<div class="chat-header">
 			<div class="chat-header-info">
 				<div class="chat-avatar">🎧<span class="online-dot" class:online={isStaffOnline}></span></div>
-				<div><h4>Hỗ Trợ Selorson</h4><span class="online-text">{isStaffOnline ? 'Đang trực' : 'Để lại lời nhắn'}</span></div>
+				<div><h4>{m.support_title()}</h4><span class="online-text">{isStaffOnline ? m.support_online() : m.support_offline()}</span></div>
 			</div>
 			<button class="chat-minimize" onclick={toggle}>−</button>
 		</div>
@@ -113,17 +114,17 @@
 		<!-- Resolved Banner -->
 		{#if getActiveConversation()?.status === 'resolved' && !hasRated}
 			<div class="resolved-banner">
-				<p>✅ Yêu cầu đã được giải quyết!</p>
-				<p class="rating-label">Đánh giá dịch vụ:</p>
+				<p>{m.support_resolved()}</p>
+				<p class="rating-label">{m.support_rating_label()}</p>
 				<div class="star-row">
 					{#each [1,2,3,4,5] as s}
 						<button class="star-btn" class:filled={s <= ratingValue} onclick={() => ratingValue = s}>★</button>
 					{/each}
 				</div>
-				<textarea bind:value={ratingComment} placeholder="Nhận xét..." rows="2" class="rating-comment"></textarea>
+				<textarea bind:value={ratingComment} placeholder={m.support_rating_ph()} rows="2" class="rating-comment"></textarea>
 				<div class="rating-actions">
-					<button class="rating-skip" onclick={skipRating}>Bỏ qua</button>
-					<button class="rating-submit" onclick={submitRating}>Gửi</button>
+					<button class="rating-skip" onclick={skipRating}>{m.support_rating_skip()}</button>
+					<button class="rating-submit" onclick={submitRating}>{m.support_rating_submit()}</button>
 				</div>
 			</div>
 		{/if}
@@ -131,7 +132,7 @@
 		<!-- Messages -->
 		<div class="chat-messages" bind:this={messagesEl}>
 			{#if getSupportMessages().length === 0}
-				<div class="chat-empty"><span>💬</span><p>Xin chào! Bạn cần hỗ trợ gì?</p><p class="hint">Hãy gửi tin nhắn để bắt đầu.</p></div>
+				<div class="chat-empty"><span>💬</span><p>{m.support_welcome_title()}</p><p class="hint">{m.support_welcome_desc()}</p></div>
 			{/if}
 			{#each getSupportMessages() as msg}
 				<div class="msg-bubble" class:mine={msg.sender_type === 'user'} class:staff={msg.sender_type === 'manager'}>
@@ -150,7 +151,7 @@
 		<!-- Input -->
 		{#if getActiveConversation()?.status !== 'resolved' || hasRated}
 			<div class="chat-input">
-				<input bind:value={inputText} placeholder={isStaffOnline ? 'Nhập tin nhắn...' : 'Để lại lời nhắn...'}
+				<input bind:value={inputText} placeholder={isStaffOnline ? m.support_input_online() : m.support_input_offline()}
 					onkeydown={(e) => { if (e.key === 'Enter') handleSend(); }} disabled={isSupportSending()} maxlength="2000" />
 				<button class="send-btn" onclick={handleSend} disabled={!inputText.trim() || isSupportSending()}>
 					{isSupportSending() ? '⏳' : '📤'}

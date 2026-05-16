@@ -1,14 +1,15 @@
 <script lang="ts">
 	import { api } from '$lib/api';
 	import { onMount } from 'svelte';
+	import * as m from '$lib/paraglide/messages';
 
-	const categories = [
-		{ key: '', label: 'Tất cả', icon: '📚' },
-		{ key: 'location', label: 'Địa điểm', icon: '🗺️' },
-		{ key: 'main_character', label: 'Nhân vật chính', icon: '⭐' },
-		{ key: 'side_character', label: 'Nhân vật phụ', icon: '👤' },
-		{ key: 'item', label: 'Vật phẩm', icon: '🔮' },
-		{ key: 'lore', label: 'Truyền thuyết', icon: '📜' },
+	const categories = () => [
+		{ key: '', label: m.lib_cat_all(), icon: '📚' },
+		{ key: 'location', label: m.lib_cat_location(), icon: '🗺️' },
+		{ key: 'main_character', label: m.lib_cat_main_char(), icon: '⭐' },
+		{ key: 'side_character', label: m.lib_cat_side_char(), icon: '👤' },
+		{ key: 'item', label: m.lib_cat_item(), icon: '🔮' },
+		{ key: 'lore', label: m.lib_cat_lore(), icon: '📜' },
 	];
 
 	let items = $state<any[]>([]);
@@ -29,16 +30,16 @@
 	onMount(() => fetchItems());
 </script>
 
-<svelte:head><title>Thư viện — Selorson</title></svelte:head>
+<svelte:head><title>{m.lib_seo_title()}</title></svelte:head>
 
 <section class="lib-page">
 	<div class="page-header">
-		<h1 class="section-title">Thư viện</h1>
-		<p class="page-sub">Bách khoa toàn thư thế giới Selorson</p>
+		<h1 class="section-title">{m.lib_list_title()}</h1>
+		<p class="page-sub">{m.lib_list_subtitle()}</p>
 	</div>
 
 	<div class="filters">
-		{#each categories as cat}
+		{#each categories() as cat}
 			<button class="filter-btn" class:active={activeCategory === cat.key} onclick={() => fetchItems(cat.key)}>
 				{cat.icon} {cat.label}
 			</button>
@@ -48,7 +49,7 @@
 	{#if loading}
 		<div class="grid">{#each Array(6) as _}<div class="skel"></div>{/each}</div>
 	{:else if items.length === 0}
-		<div class="empty"><span>📚</span><h3>Chưa có mục nào</h3></div>
+		<div class="empty"><span>📚</span><h3>{m.lib_empty_title()}</h3></div>
 	{:else}
 		<div class="grid">
 			{#each items as item}

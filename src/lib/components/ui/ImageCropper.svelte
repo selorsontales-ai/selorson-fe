@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import Cropper from 'cropperjs';
 	import 'cropperjs/dist/cropper.css';
+	import * as m from '$lib/paraglide/messages';
 
 	let { imageSrc, aspectRatio = 1, onCrop, onCancel } = $props<{
 		imageSrc: string;
@@ -58,7 +59,7 @@
 			<img bind:this={imageElement} src={imageSrc} alt="Crop" />
 		</div>
 		<div class="crop-actions">
-			<button class="btn-cancel" onclick={onCancel} disabled={loading}>Hủy</button>
+			<button class="btn-cancel" onclick={onCancel} disabled={loading}>{m.crop_cancel()}</button>
 			<button class="btn-confirm" onclick={handleCrop} disabled={loading}>
 				{loading ? '⏳ Đang xử lý...' : '✅ Xong'}
 			</button>

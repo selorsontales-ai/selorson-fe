@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { api } from '$lib/api';
 	import { onMount } from 'svelte';
+	import * as m from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
 
 	interface MilestoneItem {
 		id?: number; date: string; title: string; description: string; image_url?: string | null; image_ratio?: string;
@@ -17,11 +19,11 @@
 	let milestoneModal = $state<MilestoneItem | null>(null);
 	let loading = $state(true);
 
-	const values = [
-		{ icon: '🎯', title: 'Sứ Mệnh', desc: 'Mang đến trải nghiệm giải trí chất lượng cao với nội dung sáng tạo và đa dạng cho cộng đồng Việt Nam.' },
-		{ icon: '💡', title: 'Tầm Nhìn', desc: 'Trở thành nền tảng nội dung đa phương tiện hàng đầu — nơi mỗi câu chuyện đều có giá trị.' },
-		{ icon: '❤️', title: 'Giá Trị', desc: 'Chất lượng, sáng tạo, cộng đồng. Nghệ thuật có sức mạnh kết nối con người và truyền cảm hứng.' },
-	];
+	let values = $derived([
+		{ icon: '🎯', title: m.about_value1_t(), desc: m.about_value1_d() },
+		{ icon: '💡', title: m.about_value2_t(), desc: m.about_value2_d() },
+		{ icon: '❤️', title: m.about_value3_t(), desc: m.about_value3_d() },
+	]);
 
 	const techStack = [
 		{ icon: '🦀', name: 'Rust / Axum', role: 'Backend API' },
@@ -32,7 +34,7 @@
 		{ icon: '🔐', name: 'JWT', role: 'Authentication' },
 	];
 
-	const poemStanzas = [
+	const viPoem = [
 		['Mây trôi nhẹ gió đưa hồn lữ thứ', 'Chân vội vàng cố níu giữ thời gian', 'Đêm dịu dàng lòng quạnh hiu xa xứ', 'Người lữ hành bước đi trong gian nan.'],
 		['Bóng dáng ai bên thềm trăng soi tỏ', 'Đêm thanh tĩnh phiêu du khúc không lời', 'Từ rừng xanh hành trình qua sóng gió', 'Phiêu lưu ký mở cõi bát ngát trời.'],
 		['Vẫn lặng lẽ vầng nguyệt dương lang thang', 'Phiêu lưu cùng những giấc mộng đêm về', 'Màn đêm tối thì thầm những lời thề', 'Bình minh lên chạy đua với thời gian.'],
@@ -55,6 +57,31 @@
 		['Vượt không thời đánh với hắc kiếm sư', 'Những trận đánh đã đi vào lịch sử', 'Thất sắc đạo chi thất sắc hành ca', 'Càn khôn đạo phi thường đạo hành ca.'],
 	];
 
+	const enPoem = [
+		['Clouds drift softly, winds carry the wanderer’s soul,', 'Hurried footsteps reach to hold back time itself.', 'Gentle nights still ache with the sorrow of exile,', 'A lone traveler walks onward through hardship.'],
+		['Who stands there beneath the moonlit porch?', 'In silent nights, a voiceless melody roams free.', 'From emerald forests through storms untold,', 'The book of adventure unfolds beneath endless skies.'],
+		['Still the moon wanders in quiet solitude,', 'Drifting through dreams that return each night.', 'Darkness whispers ancient vows unseen,', 'While dawn rises racing against time.'],
+		['The universe stretches wide with winter stars,', 'Far galaxies shimmer in mystical colors.', 'How dearly that distant planet is remembered,', 'As I stand silent watching Earth spin on.'],
+		['Then one day thunderclouds split the heavens,', 'The wind awakens long-forgotten magic.', 'I gather the strength of my ancestors once more,', 'The Path of Seven Colors flows like cascading rivers.'],
+		['Pure white frost crowns the mountain peaks,', 'White radiance falls like endless shooting stars.', 'Hands joined in prayer before the gods,', 'Ancient sorcery rises once again.'],
+		['Crimson red — the sword of fearless courage,', 'Slayer of fire dragons, hero of blazing wars.', 'Proudly wiping blood from the blade before turning away,', 'The swordsman’s life is one of endless wandering.'],
+		['He and she beneath boundless seas and mountains,', 'Together painting the happiness they once shared.', 'But she departed, leaving no answer for tomorrow,', 'Ah, how war destroys everything.'],
+		['For her, for the homeland I defend,', 'Science and ideals carried as my provisions.', 'Greed echoes with undefeated ambition,', 'Crossing through time in search of worthy souls.'],
+		['Stone and earth become an unyielding golden shield,', 'March onward, trusting those behind you.', 'From Văn Lang they call upon the Golden Hue,', 'A touch of desire, a past filled with sorrow.'],
+		['From deep forests to the sacred age,', 'Bearing the duty of a loyal companion.', 'Without identity, strength itself grows fragile,', 'Love nature, love the pure breath of life.'],
+		['Blue as water, sharp as the open sky,', 'Black hair flowing softly like mist.', 'Studying forbidden tomes, her face shines bright,', 'A blue mage, beloved by countless hearts.'],
+		['Your azure light becomes my healing grace,', 'Every wound will someday fade away.', 'With gluttony lending strength through hardship,', 'Every war must one day end.'],
+		['Indigo lightning spears awaken once more,', 'Ancient Celtic envy cursed into a cat.', 'A gifted master makes even greater disciples,', 'Sleeping by day, fighting fiercer by night.'],
+		['In the divine age, wars stretched without end,', 'Countless souls lost their homes and lands.', 'Purple bow and water struck even the gods,', 'For the sin of laziness, she became a beauty.'],
+		['Black — mysterious, gifted, and unshaken,', 'Powerful with unwavering confidence.', 'Brilliant enough to uncover every secret,', 'The dark swordsman known as Darkin Tenka.'],
+		['Each color carries its own journey,', 'Red, the honest swordsman quick to anger.', 'Orange, the tireless perfectionist scientist.', 'Yellow, the steadfast chef fearing nothing.'],
+		['Green, the strategist devoted to poetry.', 'Blue, the mage filled with deep philosophy.', 'Indigo, the catfolk drifting through endless dreams.', 'Purple, the silver bow whose arrows pierce time itself.'],
+		['Black, the hidden demon cloaked in mystery.', 'White, the pure angel dressed in radiant white.', 'Forever wandering with no thought of stopping,', 'Seven colors, endless tales of change.'],
+		['Crossing beyond time to battle the dark swordmaster,', 'Wars whose legends echo through history.', 'The Sevenfold Path — the Ballad of Seven Colors,', 'The Way of Heaven and Earth — an extraordinary song eternal.']
+	];
+
+	let poemStanzas = $derived(getLocale() === 'vi' ? viPoem : enPoem);
+
 	function truncate(str: string | null | undefined, len: number) {
 		if (!str) return '';
 		return str.length > len ? str.slice(0, len) + '…' : str;
@@ -72,8 +99,8 @@
 </script>
 
 <svelte:head>
-	<title>Giới thiệu — Selorson</title>
-	<meta name="description" content="Tìm hiểu về Selorson - Nền tảng nội dung đa phương tiện với truyện, video, nhạc." />
+	<title>{m.about_page_title()} — Selorson</title>
+	<meta name="description" content={m.about_page_desc()} />
 </svelte:head>
 
 <div class="about-page">
@@ -82,8 +109,8 @@
 		<div class="hero-content">
 			<span class="hero-badge">EST. 2026</span>
 			<h1>Selorson</h1>
-			<p class="hero-tagline">Chút sắc màu cuộc sống</p>
-			<p class="hero-desc">Nền tảng nội dung đa phương tiện — Truyện, Video, Nhạc — được xây dựng với tình yêu và đam mê sáng tạo.</p>
+			<p class="hero-tagline">{m.about_hero_tagline()}</p>
+			<p class="hero-desc">{m.about_hero_desc()}</p>
 		</div>
 		<div class="hero-glow"></div>
 	</section>
@@ -103,8 +130,7 @@
 				<span class="author-title">Founder & Creator</span>
 				<blockquote class="author-slogan">
 					<span class="quote-mark">"</span>
-					Thú vị vì những cái vô vị<br />
-					vô vị trước những cái thú vị
+					{@html m.about_author_slogan()}
 					<span class="quote-mark">"</span>
 				</blockquote>
 			</div>
@@ -116,7 +142,7 @@
 		<!-- LEFT SIDEBAR: Poem + Illustration -->
 		<aside class="about-sidebar">
 			<div class="poem-scroll">
-				<h4 class="poem-scroll-title">🎭 Thất Sắc Hành Ca</h4>
+				<h4 class="poem-scroll-title">{m.about_poem_title()}</h4>
 				<div class="poem-stanzas">
 					{#each poemStanzas as stanza}
 						<div class="poem-stanza">
@@ -139,7 +165,7 @@
 		<div class="about-main">
 			<!-- Timeline Milestones -->
 			<section class="timeline-section">
-				<h2 class="section-title">📅 Hành Trình Phát Triển</h2>
+				<h2 class="section-title">{m.about_timeline_title()}</h2>
 				<div class="timeline">
 					{#each milestones as event, i}
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -154,7 +180,7 @@
 								<span class="timeline-date">{event.date}</span>
 								<h4>{event.title}</h4>
 								<p>{truncate(event.description, 100)}</p>
-								<span class="timeline-view-hint">👁️ Xem chi tiết</span>
+								<span class="timeline-view-hint">{m.about_timeline_hint()}</span>
 							</div>
 						</div>
 					{/each}
@@ -163,7 +189,7 @@
 
 			<!-- Values -->
 			<section class="values-section">
-				<h2 class="section-title">✨ Giá Trị Cốt Lõi</h2>
+				<h2 class="section-title">{m.about_values_title()}</h2>
 				<div class="values-grid">
 					{#each values as item, i}
 						<div class="value-card glass-card" style="animation-delay: {0.1 + i * 0.15}s">
@@ -177,7 +203,7 @@
 
 			<!-- Tech Stack -->
 			<section class="tech-section">
-				<h2 class="section-title">🛠️ Công Nghệ Sử Dụng</h2>
+				<h2 class="section-title">{m.about_tech_title()}</h2>
 				<div class="tech-grid">
 					{#each techStack as tech}
 						<div class="tech-card glass-card">
@@ -257,9 +283,9 @@
 	.poem-scroll-title { font-size: 1.125rem; font-weight: 700; color: var(--color-brand-400); text-align: center; margin: 0 0 1rem; }
 	.poem-stanzas { max-height: 400px; overflow-y: auto; padding-right: 0.5rem; scrollbar-width: thin; }
 	.poem-stanza { margin-bottom: 1rem; }
-	.poem-stanza p { color: rgba(255,255,255,0.7); font-size: 0.8125rem; line-height: 1.8; margin: 0; font-style: italic; font-family: 'Georgia', serif; }
+	.poem-stanza p { color: rgba(255,255,255,0.7); font-size: 0.9rem; line-height: 1.8; margin: 0; font-style: italic; font-family: 'Merriweather', 'Times New Roman', serif; }
 	:global(html[data-theme='light']) .poem-stanza p { color: #444; }
-	.poem-author { text-align: center; color: var(--color-brand-400); font-weight: 700; font-size: 0.8125rem; margin-top: 1rem; }
+	.poem-author { text-align: center; color: var(--color-brand-400); font-weight: 700; font-size: 0.9rem; margin-top: 1rem; }
 
 	/* Illustration */
 	.poem-illustration { position: relative; border-radius: 1rem; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,.15); transition: transform .4s ease, box-shadow .4s ease; }

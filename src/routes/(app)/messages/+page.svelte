@@ -5,11 +5,14 @@
 	import { PUBLIC_API_BASE } from '$env/static/public';
 	import { getToken, getUser, isAuthenticated } from '$lib/stores/auth.svelte';
 	import { getConversations, fetchConversations, sortConversations } from '$lib/stores/chat.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	interface Conversation {
 		id: number;
 		other_user: { id: number; name: string; username: string; avatar: string | null; is_online: boolean } | null;
-		updated_at: string;
+		last_message_at: string | null;
+		created_at: string;
+		unread_count: number;
 	}
 	interface Msg { id: number; sender_id: number; message: string; is_read: boolean; created_at: string; }
 
@@ -43,6 +46,7 @@
 	onDestroy(() => { ws?.close(); });
 
 	async function selectConv(conv: Conversation) {
+		const hadUnread = (conv.unread_count || (conv as any).unread || 0) > 0;
 		activeConv = conv;
 		ws?.close();
 
@@ -51,6 +55,16 @@
 			const res = await api<any>(`/chat/conversations/${conv.id}/messages`);
 			messages = res.data || [];
 		} catch { messages = []; }
+
+		// Smart scroll: if unread, scroll to first unread; otherwise scroll to bottom
+		setTimeout(() => {
+			if (!msgsEl) return;
+			if (hadUnread) {
+				const firstUnread = msgsEl.querySelector('.msg.unread');
+				if (firstUnread) { firstUnread.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+			}
+			msgsEl.scrollTop = msgsEl.scrollHeight;
+		}, 80);
 
 		// Connect WS
 		const token = getToken();
@@ -115,19 +129,19 @@
 	const me = $derived(getUser());
 </script>
 
-<svelte:head><title>Tin nhắn — Selorson</title></svelte:head>
+<svelte:head><title>{m.msg_seo_title()}</title></svelte:head>
 
 <section class="messages-page">
 	{#if !isAuthenticated()}
-		<div class="empty"><h3>Đăng nhập để xem tin nhắn</h3></div>
+		<div class="empty"><h3>{m.msg_require_login()}</h3></div>
 	{:else}
 		<div class="chat-layout">
 			<aside class="conv-list glass-card">
-				<h2>Tin nhắn</h2>
+				<h2>{m.msg_title()}</h2>
 				{#if loading}
-					<p class="loading-text">Đang tải...</p>
+					<p class="loading-text">{m.msg_loading()}</p>
 				{:else if getConversations().length === 0}
-					<p class="empty-text">Chưa có cuộc trò chuyện nào</p>
+					<p class="empty-text">{m.msg_empty_list()}</p>
 				{:else}
 					{#each getConversations() as conv}
 						<button
@@ -146,11 +160,11 @@
 								{/if}
 							</div>
 							<div class="conv-info">
-								<strong>{conv.other_user?.name || 'Unknown'}</strong>
-								<span class="conv-time">{new Date(conv.updated_at).toLocaleDateString('vi-VN')}</span>
+								<strong>{conv.other_user?.name || m.msg_unknown_user()}</strong>
+								<span class="conv-time">{conv.last_message_at ? new Date(conv.last_message_at).toLocaleDateString('vi-VN') : ''}</span>
 							</div>
-							{#if conv.unread > 0}
-								<span class="conv-unread">{conv.unread > 9 ? '9+' : conv.unread}</span>
+							{#if (conv.unread_count || conv.unread || 0) > 0}
+								<span class="conv-unread">{(conv.unread_count || conv.unread) > 9 ? '9+' : (conv.unread_count || conv.unread)}</span>
 							{/if}
 						</button>
 					{/each}
@@ -159,16 +173,16 @@
 
 			<main class="chat-panel glass-card">
 				{#if !activeConv}
-					<div class="no-chat"><p>Chọn cuộc trò chuyện để bắt đầu</p></div>
+					<div class="no-chat"><p>{m.msg_select_chat()}</p></div>
 				{:else}
 					<div class="chat-header">
 						<strong>{activeConv.other_user?.name}</strong>
-						<span class="status">{activeConv.other_user?.is_online ? '🟢 Online' : '⚫ Offline'}</span>
+						<span class="status">{activeConv.other_user?.is_online ? m.msg_status_online() : m.msg_status_offline()}</span>
 					</div>
 
 					<div class="chat-messages" bind:this={msgsEl}>
 						{#each messages as msg}
-							<div class="msg" class:mine={msg.sender_id === getUser()?.id}>
+							<div class="msg" class:mine={msg.sender_id === getUser()?.id} class:unread={!msg.is_read && msg.sender_id !== getUser()?.id}>
 								<div class="msg-bubble">{msg.message}</div>
 								<span class="msg-time">{new Date(msg.created_at).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</span>
 							</div>
@@ -178,11 +192,11 @@
 					<div class="chat-input">
 						<input
 							type="text"
-							placeholder="Nhập tin nhắn..."
+							placeholder={m.msg_input_placeholder()}
 							bind:value={newMsg}
 							onkeydown={handleKeydown}
 						/>
-						<button class="btn-brand" onclick={sendMessage}>Gửi</button>
+						<button class="btn-brand" onclick={sendMessage}>{m.msg_btn_send()}</button>
 					</div>
 				{/if}
 			</main>

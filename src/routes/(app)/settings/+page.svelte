@@ -7,6 +7,8 @@
 		is2FAEnabled, get2FASecret, get2FAQr, getBackupCodes, is2FALoading
 	} from '$lib/stores/security.svelte';
 	import { goto } from '$app/navigation';
+	import { getLocale, setLocale } from '$lib/paraglide/runtime';
+	import * as m from '$lib/paraglide/messages';
 
 	let totpCode = $state('');
 	let show2FASetup = $state(false);
@@ -43,21 +45,21 @@
 	}
 
 	async function changePassword() {
-		if (newPass !== confirmPass) { message = '❌ Mật khẩu xác nhận không khớp'; return; }
+		if (newPass !== confirmPass) { message = m.settings_err_pass_mismatch(); return; }
 		saving = true; message = '';
 		try {
 			const r = await apiFetch('/auth/change-password', { method: 'PUT', body: JSON.stringify({ current_password: currentPass, new_password: newPass }) });
-			message = r.success ? '✅ Đổi mật khẩu thành công!' : r.message || 'Lỗi';
+			message = r.success ? m.settings_success_pass() : r.message || m.settings_err_default();
 			if (r.success) { currentPass = ''; newPass = ''; confirmPass = ''; }
-		} catch { message = 'Lỗi hệ thống'; } finally { saving = false; }
+		} catch { message = m.settings_err_sys(); } finally { saving = false; }
 	}
 
 	async function sendEmailCode() {
-		try { await apiFetch('/auth/email/send-code', { method: 'POST' }); emailCodeSent = true; message = '📩 Mã đã gửi đến email!'; } catch { message = 'Lỗi'; }
+		try { await apiFetch('/auth/email/send-code', { method: 'POST' }); emailCodeSent = true; message = m.settings_success_code(); } catch { message = m.settings_err_default(); }
 	}
 
 	async function verifyEmail() {
-		try { const r = await apiFetch('/auth/email/verify', { method: 'POST', body: JSON.stringify({ code: emailCode }) }); message = r.success ? '✅ Email đã xác thực!' : 'Sai mã'; } catch { message = 'Lỗi'; }
+		try { const r = await apiFetch('/auth/email/verify', { method: 'POST', body: JSON.stringify({ code: emailCode }) }); message = r.success ? m.settings_success_verify() : m.settings_err_code(); } catch { message = m.settings_err_default(); }
 	}
 
 	let devicesUnavailable = $state(false);
@@ -67,7 +69,7 @@
 	}
 
 	async function revokeDevice(id: number) {
-		try { await apiFetch(`/auth/devices/${id}`, { method: 'DELETE' }); devices = devices.filter(d => d.id !== id); message = '✅ Đã đăng xuất thiết bị'; } catch { message = 'Lỗi'; }
+		try { await apiFetch(`/auth/devices/${id}`, { method: 'DELETE' }); devices = devices.filter(d => d.id !== id); message = m.settings_success_revoke(); } catch { message = m.settings_err_default(); }
 	}
 
 	async function exportData() {
@@ -79,17 +81,17 @@
 				const url = URL.createObjectURL(blob);
 				const a = document.createElement('a'); a.href = url; a.download = 'selorson-data-export.json'; a.click();
 				URL.revokeObjectURL(url);
-				message = '✅ Đã xuất dữ liệu!';
+				message = m.settings_success_export();
 			}
-		} catch { message = 'Lỗi'; } finally { exporting = false; }
+		} catch { message = m.settings_err_default(); } finally { exporting = false; }
 	}
 
 	async function deleteAccount() {
 		if (deleteConfirmText !== 'DELETE') return;
 		try {
 			const r = await apiFetch('/account', { method: 'DELETE', body: JSON.stringify({ password: deletePassword, confirmation: deleteConfirmText }) });
-			if (r.success) { message = '✅ Tài khoản đã xóa.'; goto('/'); }
-		} catch { message = 'Lỗi — kiểm tra mật khẩu'; }
+			if (r.success) { message = m.settings_success_delete(); goto('/'); }
+		} catch { message = m.settings_err_delete(); }
 	}
 
 	function formatDate(d: string | null) { if (!d) return '—'; return new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
@@ -100,104 +102,114 @@
 	});
 </script>
 
-<svelte:head><title>Cài Đặt Hệ Thống — Selorson</title></svelte:head>
+<svelte:head><title>{m.settings_title()} — Selorson</title></svelte:head>
 
 <div class="settings-page">
-	<h1>⚙️ Cài Đặt Hệ Thống</h1>
-	<p class="page-sub">Quản lý bảo mật, thiết bị và tài khoản. Để chỉnh sửa thông tin cá nhân, vào <a href="/profile/{getUser()?.id}" class="profile-link">trang cá nhân</a> → tab ⚙️ Cài đặt.</p>
+	<h1>{m.settings_title()}</h1>
+	<p class="page-sub">{@html m.settings_desc({ id: getUser()?.id || 0 })}</p>
 
-	{#if !isAuthenticated()}<p class="muted">Bạn cần đăng nhập để truy cập.</p>
+	{#if !isAuthenticated()}<p class="muted">{m.settings_req_login()}</p>
 	{:else}
 		{#if message}<div class="toast-msg">{message}</div>{/if}
 		<div class="settings-grid">
 
+			<!-- Language -->
+			<section class="card">
+				<h2>🌐 {m.settings_language()}</h2>
+				<p class="hint">{m.settings_language_desc()}</p>
+				<div class="lang-options">
+					<button class="btn-export" class:active={getLocale() === 'vi'} onclick={() => setLocale('vi')}>🇻🇳 Tiếng Việt</button>
+					<button class="btn-export" class:active={getLocale() === 'en'} onclick={() => setLocale('en')}>🇬🇧 English</button>
+				</div>
+			</section>
+
 			<!-- Password -->
 			<section class="card">
-				<h2>🔑 {getUser()?.has_password ? 'Đổi Mật Khẩu' : 'Tạo Mật Khẩu'}</h2>
-				{#if getUser()?.has_password}<label>Mật khẩu hiện tại<input type="password" bind:value={currentPass} placeholder="••••••••" /></label>{/if}
-				<label>Mật khẩu mới<input type="password" bind:value={newPass} placeholder="••••••••" /></label>
-				<label>Xác nhận mật khẩu mới<input type="password" bind:value={confirmPass} placeholder="••••••••" /></label>
-				<button class="btn-save danger-bg" onclick={changePassword} disabled={saving}>🔑 {getUser()?.has_password ? 'Đổi mật khẩu' : 'Tạo mật khẩu'}</button>
+				<h2>🔑 {getUser()?.has_password ? m.settings_pwd_change() : m.settings_pwd_create()}</h2>
+				{#if getUser()?.has_password}<label>{m.settings_pwd_current()}<input type="password" bind:value={currentPass} placeholder="••••••••" /></label>{/if}
+				<label>{m.settings_pwd_new()}<input type="password" bind:value={newPass} placeholder="••••••••" /></label>
+				<label>{m.settings_pwd_confirm()}<input type="password" bind:value={confirmPass} placeholder="••••••••" /></label>
+				<button class="btn-save danger-bg" onclick={changePassword} disabled={saving}>🔑 {getUser()?.has_password ? m.settings_pwd_change() : m.settings_pwd_create()}</button>
 			</section>
 
 			<!-- Email Verification -->
 			<section class="card">
-				<h2>📧 Xác Thực Email</h2>
+				<h2>{m.settings_email_title()}</h2>
 				<div class="status-row">
-					<span class="status-badge" class:verified={getUser()?.email_verified_at}>{getUser()?.email_verified_at ? '✅ Đã xác thực' : '⚠️ Chưa xác thực'}</span>
+					<span class="status-badge" class:verified={getUser()?.email_verified_at}>{getUser()?.email_verified_at ? m.settings_status_verified() : m.settings_status_unverified()}</span>
 					<span class="status-email">{getUser()?.email}</span>
 				</div>
 				{#if !getUser()?.email_verified_at}
-					<p class="hint">Xác thực email để bảo vệ tài khoản và nhận thông báo.</p>
-					{#if emailCodeSent}<label>Mã xác thực<input bind:value={emailCode} placeholder="Nhập mã 6 số" maxlength="6" /></label>{/if}
-					<button class="btn-save" onclick={() => emailCodeSent ? verifyEmail() : sendEmailCode()}>{emailCodeSent ? '✅ Xác nhận mã' : '📩 Gửi mã xác thực'}</button>
+					<p class="hint">{m.settings_email_desc()}</p>
+					{#if emailCodeSent}<label>{m.settings_email_code()}<input bind:value={emailCode} placeholder={m.settings_placeholder_6_code()} maxlength="6" /></label>{/if}
+					<button class="btn-save" onclick={() => emailCodeSent ? verifyEmail() : sendEmailCode()}>{emailCodeSent ? m.settings_btn_verify_code() : m.settings_btn_send_code()}</button>
 				{/if}
 			</section>
 
 			<!-- 2FA -->
 			<section class="card">
-				<h2>🔐 Xác Thực Hai Bước (2FA)</h2>
+				<h2>{m.settings_2fa_title()}</h2>
 				<div class="status-row">
-					<span class="status-badge" class:verified={is2FAEnabled()}>{is2FAEnabled() ? '✅ Đã bật' : '❌ Chưa bật'}</span>
+					<span class="status-badge" class:verified={is2FAEnabled()}>{is2FAEnabled() ? m.settings_status_enabled() : m.settings_status_disabled()}</span>
 				</div>
-				<p class="hint">Bảo vệ tài khoản bằng ứng dụng Authenticator (Google Authenticator, Authy...)</p>
+				<p class="hint">{m.settings_2fa_desc()}</p>
 				{#if is2FAEnabled()}
 					<div class="tfa-actions">
-						<button class="btn-export" onclick={() => generateBackupCodes()}>📋 Mã dự phòng</button>
-						<div class="tfa-disable"><input type="text" bind:value={totpCode} placeholder="Nhập mã 6 số" maxlength="6" /><button class="btn-danger" onclick={() => disable2FA(totpCode)} disabled={is2FALoading()}>❌ Tắt 2FA</button></div>
+						<button class="btn-export" onclick={() => generateBackupCodes()}>{m.settings_btn_backup()}</button>
+						<div class="tfa-disable"><input type="text" bind:value={totpCode} placeholder={m.settings_placeholder_6_code()} maxlength="6" /><button class="btn-danger" onclick={() => disable2FA(totpCode)} disabled={is2FALoading()}>{m.settings_btn_disable_2fa()}</button></div>
 					</div>
-					{#if getBackupCodes().length > 0}<div class="backup-codes"><h4>Mã dự phòng:</h4><div class="codes-grid">{#each getBackupCodes() as code}<span class="backup-code">{code}</span>{/each}</div></div>{/if}
+					{#if getBackupCodes().length > 0}<div class="backup-codes"><h4>{m.settings_backup_title()}</h4><div class="codes-grid">{#each getBackupCodes() as code}<span class="backup-code">{code}</span>{/each}</div></div>{/if}
 				{:else if show2FASetup && get2FASecret()}
 					<div class="tfa-setup">
-						<p class="hint">Quét mã QR bằng ứng dụng xác thực:</p>
-						<div class="tfa-secret">Mã: <code>{get2FASecret()}</code></div>
-						<div class="tfa-verify"><input type="text" bind:value={totpCode} placeholder="Nhập mã 6 số" maxlength="6" /><button class="btn-save" onclick={async () => { const r = await verify2FA(totpCode); message = r.success ? '✅ 2FA đã bật!' : r.message||'Lỗi'; if(r.success){totpCode='';show2FASetup=false;}}} disabled={is2FALoading() || totpCode.length !== 6}>Xác nhận</button></div>
+						<p class="hint">{m.settings_2fa_scan()}</p>
+						<div class="tfa-secret">{m.settings_2fa_secret()} <code>{get2FASecret()}</code></div>
+						<div class="tfa-verify"><input type="text" bind:value={totpCode} placeholder={m.settings_placeholder_6_code()} maxlength="6" /><button class="btn-save" onclick={async () => { const r = await verify2FA(totpCode); message = r.success ? m.settings_success_2fa() : r.message||m.settings_err_default(); if(r.success){totpCode='';show2FASetup=false;}}} disabled={is2FALoading() || totpCode.length !== 6}>{m.settings_btn_confirm()}</button></div>
 					</div>
 				{:else}
-					<button class="btn-save" onclick={async () => { await setup2FA(); show2FASetup = true; }} disabled={is2FALoading()}>{is2FALoading() ? 'Đang tạo...' : '🔐 Bật 2FA'}</button>
+					<button class="btn-save" onclick={async () => { await setup2FA(); show2FASetup = true; }} disabled={is2FALoading()}>{is2FALoading() ? m.settings_btn_creating() : m.settings_btn_enable_2fa()}</button>
 				{/if}
 			</section>
 
 			<!-- Devices -->
 			<section class="card">
-				<h2>📱 Thiết Bị Đang Đăng Nhập</h2>
+				<h2>📱 {m.settings_device_title()}</h2>
 				{#if devicesUnavailable}
-					<p class="hint">⚠️ Tính năng quản lý thiết bị chưa khả dụng.</p>
+					<p class="hint">{m.settings_device_unavail()}</p>
 				{:else if devices.length > 0}
 					<div class="device-list">
 						{#each devices as d}
 							<div class="device-item">
 								<div class="device-info">
-									<span class="device-name">{d.name || 'Trình duyệt'}</span>
-									<span class="device-date">Đăng nhập: {formatDate(d.created_at)}</span>
+									<span class="device-name">{d.name || m.settings_device_browser()}</span>
+									<span class="device-date">{m.settings_device_login()} {formatDate(d.created_at)}</span>
 								</div>
-								{#if d.is_current}<span class="current-badge">Hiện tại</span>
-								{:else}<button class="btn-revoke" onclick={() => revokeDevice(d.id)}>Đăng xuất</button>{/if}
+								{#if d.is_current}<span class="current-badge">{m.settings_device_current()}</span>
+								{:else}<button class="btn-revoke" onclick={() => revokeDevice(d.id)}>{m.settings_btn_logout()}</button>{/if}
 							</div>
 						{/each}
 					</div>
-				{:else}<p class="hint">Đang tải...</p>{/if}
+				{:else}<p class="hint">{m.settings_loading()}</p>{/if}
 			</section>
 
 			<!-- Data Export -->
 			<section class="card">
-				<h2>📤 Xuất Dữ Liệu</h2>
-				<p class="hint">Tải xuống toàn bộ dữ liệu cá nhân (GDPR/PDPA). File có hiệu lực 24 giờ.</p>
-				<button class="btn-export" disabled={exporting} onclick={exportData}>{exporting ? '⏳ Đang xuất...' : '📤 Xuất dữ liệu'}</button>
+				<h2>{m.settings_export_title()}</h2>
+				<p class="hint">{m.settings_export_desc()}</p>
+				<button class="btn-export" disabled={exporting} onclick={exportData}>{exporting ? m.settings_btn_exporting() : m.settings_btn_export()}</button>
 			</section>
 
 			<!-- Delete Account -->
 			<section class="card card-danger">
-				<h2>🗑️ Xóa Tài Khoản</h2>
-				<p class="hint danger-text">Hành động không thể hoàn tác. Tài khoản bị vô hiệu hóa ngay, dữ liệu xóa sau 30 ngày.</p>
+				<h2>{m.settings_delete_title()}</h2>
+				<p class="hint danger-text">{m.settings_delete_desc()}</p>
 				{#if showDeleteConfirm}
-					<label>Mật khẩu<input type="password" bind:value={deletePassword} placeholder="••••••••" /></label>
-					<label>Nhập "DELETE" để xác nhận<input bind:value={deleteConfirmText} placeholder="DELETE" /></label>
+					<label>{m.settings_delete_pwd()}<input type="password" bind:value={deletePassword} placeholder="••••••••" /></label>
+					<label>{m.settings_delete_confirm_label()}<input bind:value={deleteConfirmText} placeholder="DELETE" /></label>
 					<div class="delete-actions">
-						<button class="btn-danger" disabled={deleteConfirmText !== 'DELETE'} onclick={deleteAccount}>🗑️ Xóa vĩnh viễn</button>
-						<button class="btn-export" onclick={() => showDeleteConfirm = false}>Hủy</button>
+						<button class="btn-danger" disabled={deleteConfirmText !== 'DELETE'} onclick={deleteAccount}>{m.settings_btn_delete_forever()}</button>
+						<button class="btn-export" onclick={() => showDeleteConfirm = false}>{m.settings_btn_cancel()}</button>
 					</div>
-				{:else}<button class="btn-danger" onclick={() => showDeleteConfirm = true}>🗑️ Xóa tài khoản</button>{/if}
+				{:else}<button class="btn-danger" onclick={() => showDeleteConfirm = true}>{m.settings_delete_title()}</button>{/if}
 			</section>
 
 		</div>
@@ -253,5 +265,7 @@
 	.backup-codes h4{font-size:.85rem;margin-bottom:.5rem}
 	.codes-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.35rem}
 	.backup-code{font-family:monospace;font-size:.8rem;padding:.3rem .5rem;background:rgba(0,0,0,.2);border-radius:4px;text-align:center;color:var(--color-accent-gold)}
+	.lang-options{display:flex;gap:1rem;}
+	.lang-options .btn-export.active{background:rgba(12,113,61,.15);border-color:var(--color-brand-500);color:var(--color-brand-300);}
 	@media(max-width:640px){.card{padding:1.5rem}}
 </style>

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { api } from '$lib/api';
 	import { goto } from '$app/navigation';
+	import * as m from '$lib/paraglide/messages';
 
 	let step = $state<'email' | 'code' | 'reset'>('email');
 	let email = $state('');
@@ -51,11 +52,11 @@
 	}
 </script>
 
-<svelte:head><title>Quên mật khẩu — Selorson</title></svelte:head>
+<svelte:head><title>{m.forgot_title()} — Selorson</title></svelte:head>
 
 <div class="forgot-page">
 	<div class="forgot-card glass-card">
-		<h1>🔑 Quên mật khẩu</h1>
+		<h1>🔑 {m.forgot_title()}</h1>
 
 		<!-- Step Indicator -->
 		<div class="steps">
@@ -74,7 +75,7 @@
 				<input type="email" bind:value={email} placeholder="email@example.com" />
 			</label>
 			<button class="btn-brand full" onclick={sendCode} disabled={loading}>
-				{loading ? 'Đang gửi...' : 'Gửi mã xác nhận'}
+				{loading ? m.forgot_sending() : m.forgot_send_code()}
 			</button>
 
 		{:else if step === 'code'}
@@ -84,21 +85,21 @@
 			<button class="btn-brand full" onclick={verifyCode} disabled={loading}>
 				{loading ? 'Đang kiểm tra...' : 'Xác nhận mã'}
 			</button>
-			<button class="link-btn" onclick={() => { step = 'email'; error = ''; success = ''; }}>← Gửi lại mã</button>
+			<button class="link-btn" onclick={() => { step = 'email'; error = ''; success = ''; }}>{m.forgot_resend()}</button>
 
 		{:else}
 			<label>Mật khẩu mới
-				<input type="password" bind:value={password} placeholder="Ít nhất 8 ký tự" />
+			<input type="password" bind:value={password} placeholder={m.forgot_ph_password()} />
 			</label>
-			<label>Xác nhận mật khẩu
-				<input type="password" bind:value={confirmPw} placeholder="Nhập lại mật khẩu" />
+			<label>{m.auth_label_confirm_password()}
+				<input type="password" bind:value={confirmPw} placeholder={m.forgot_ph_confirm()} />
 			</label>
 			<button class="btn-brand full" onclick={resetPassword} disabled={loading}>
 				{loading ? 'Đang đổi...' : 'Đổi mật khẩu'}
 			</button>
 		{/if}
 
-		<a href="/" class="back-link">← Về trang chủ</a>
+		<a href="/" class="back-link">{m.err404_home()}</a>
 	</div>
 </div>
 

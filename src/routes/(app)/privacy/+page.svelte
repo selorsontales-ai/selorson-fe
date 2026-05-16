@@ -1,37 +1,41 @@
-<svelte:head><title>Quyền riêng tư — Selorson</title></svelte:head>
+<script lang="ts">
+	import * as m from '$lib/paraglide/messages';
+</script>
+
+<svelte:head><title>{m.privacy_title()} — Selorson</title></svelte:head>
 
 <div class="legal-page">
-	<h1>🔒 Chính sách Quyền riêng tư</h1>
-	<p class="updated">Cập nhật lần cuối: 01/05/2026</p>
+	<h1>{m.privacy_title()}</h1>
+	<p class="updated">{m.privacy_updated()}</p>
 
 	<section class="glass-card legal-section">
-		<h2>1. Thu thập thông tin</h2>
-		<p>Chúng tôi thu thập thông tin cá nhân khi bạn đăng ký tài khoản (tên, email, mật khẩu). Dữ liệu sử dụng (trang đã truy cập, thời gian đọc) được thu thập tự động để cải thiện trải nghiệm.</p>
+		<h2>{m.privacy_s1_t()}</h2>
+		<p>{m.privacy_s1_d()}</p>
 	</section>
 
 	<section class="glass-card legal-section">
-		<h2>2. Sử dụng thông tin</h2>
-		<p>Thông tin của bạn được sử dụng để: cung cấp dịch vụ, cá nhân hóa trải nghiệm, gửi thông báo (nếu đăng ký), và phân tích hành vi sử dụng nhằm cải thiện nền tảng.</p>
+		<h2>{m.privacy_s2_t()}</h2>
+		<p>{m.privacy_s2_d()}</p>
 	</section>
 
 	<section class="glass-card legal-section">
-		<h2>3. Bảo mật dữ liệu</h2>
-		<p>Mật khẩu được mã hóa bằng Argon2id. Kết nối qua HTTPS. Chúng tôi không chia sẻ dữ liệu cá nhân với bên thứ ba ngoại trừ khi pháp luật yêu cầu.</p>
+		<h2>{m.privacy_s3_t()}</h2>
+		<p>{m.privacy_s3_d()}</p>
 	</section>
 
 	<section class="glass-card legal-section">
-		<h2>4. Cookie</h2>
-		<p>Selorson sử dụng localStorage để lưu phiên đăng nhập và tuỳ chỉnh giao diện. Không sử dụng cookie theo dõi từ bên thứ ba.</p>
+		<h2>{m.privacy_s4_t()}</h2>
+		<p>{m.privacy_s4_d()}</p>
 	</section>
 
 	<section class="glass-card legal-section">
-		<h2>5. Quyền của bạn</h2>
-		<p>Bạn có quyền yêu cầu xóa tài khoản, tải xuống dữ liệu cá nhân, và hủy đăng ký nhận tin bất kỳ lúc nào.</p>
+		<h2>{m.privacy_s5_t()}</h2>
+		<p>{m.privacy_s5_d()}</p>
 	</section>
 
 	<section class="glass-card legal-section">
-		<h2>6. Liên hệ</h2>
-		<p>Nếu có câu hỏi về quyền riêng tư, liên hệ qua <a href="/contact">trang liên hệ</a> hoặc email: contact@selorson.com</p>
+		<h2>{m.privacy_s6_t()}</h2>
+		<p>{@html m.privacy_s6_d({ contact_link: `<a href="/contact">${m.privacy_contact_link()}</a>` })}</p>
 	</section>
 </div>
 

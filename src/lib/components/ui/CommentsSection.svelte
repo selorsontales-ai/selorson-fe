@@ -2,6 +2,7 @@
 	import { api } from '$lib/api';
 	import { onMount } from 'svelte';
 	import { isAuthenticated, getUser } from '$lib/stores/auth.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	let { commentableType = 'chapter', commentableId = 0 } = $props();
 
@@ -48,7 +49,7 @@
 	}
 
 	async function deleteComment(id: number) {
-		if (!confirm('Xóa bình luận này?')) return;
+		if (!confirm(m.cmt_delete_confirm())) return;
 		try {
 			await api(`/comments/${id}`, { method: 'DELETE' });
 			await fetchComments();
@@ -58,16 +59,16 @@
 	function timeAgo(date: string) {
 		const diff = Date.now() - new Date(date).getTime();
 		const mins = Math.floor(diff / 60000);
-		if (mins < 1) return 'vừa xong';
-		if (mins < 60) return `${mins} phút trước`;
+		if (mins < 1) return m.cmt_just_now();
+		if (mins < 60) return m.cmt_mins_ago({ n: mins });
 		const hrs = Math.floor(mins / 60);
-		if (hrs < 24) return `${hrs} giờ trước`;
-		return `${Math.floor(hrs / 24)} ngày trước`;
+		if (hrs < 24) return m.cmt_hours_ago({ n: hrs });
+		return m.cmt_days_ago({ n: Math.floor(hrs / 24) });
 	}
 </script>
 
 <div class="comments-section">
-	<h3 class="comments-title">💬 Bình luận ({comments.length})</h3>
+	<h3 class="comments-title">{m.cmt_title({ count: comments.length })}</h3>
 
 	{#if isAuthenticated()}
 		<div class="comment-form">
@@ -79,17 +80,17 @@
 				{/if}
 			</div>
 			<div class="comment-input-wrap">
-				<input type="text" bind:value={newComment} placeholder="Viết bình luận..."
+				<input type="text" bind:value={newComment} placeholder={m.cmt_placeholder()}
 					onkeydown={(e) => { if (e.key === 'Enter') submitComment(); }} />
-				<button class="send-btn" onclick={submitComment} disabled={!newComment.trim()}>Gửi</button>
+				<button class="send-btn" onclick={submitComment} disabled={!newComment.trim()}>{m.cmt_send()}</button>
 			</div>
 		</div>
 	{:else}
-		<p class="login-prompt">Đăng nhập để bình luận</p>
+		<p class="login-prompt">{m.cmt_login()}</p>
 	{/if}
 
 	{#if loading}
-		<div class="loading-comments">Đang tải...</div>
+		<div class="loading-comments">{m.cmt_loading()}</div>
 	{:else}
 		<div class="comment-list">
 			{#each comments as comment}
@@ -110,19 +111,19 @@
 						<div class="comment-actions">
 							{#if isAuthenticated()}
 								<button class="action-btn" onclick={() => { replyTo = replyTo === comment.id ? null : comment.id; }}>
-									{replyTo === comment.id ? 'Hủy' : 'Trả lời'}
+									{replyTo === comment.id ? m.cmt_cancel() : m.cmt_reply()}
 								</button>
 							{/if}
 							{#if getUser()?.id === comment.user_id || getUser()?.role === 'admin'}
-								<button class="action-btn delete" onclick={() => deleteComment(comment.id)}>Xóa</button>
+								<button class="action-btn delete" onclick={() => deleteComment(comment.id)}>{m.cmt_delete()}</button>
 							{/if}
 						</div>
 
 						{#if replyTo === comment.id}
 							<div class="reply-form">
-								<input type="text" bind:value={replyText} placeholder="Trả lời..."
+								<input type="text" bind:value={replyText} placeholder={m.cmt_reply_ph()}
 									onkeydown={(e) => { if (e.key === 'Enter') submitReply(comment.id); }} />
-								<button class="send-btn-sm" onclick={() => submitReply(comment.id)}>Gửi</button>
+								<button class="send-btn-sm" onclick={() => submitReply(comment.id)}>{m.cmt_send()}</button>
 							</div>
 						{/if}
 					</div>

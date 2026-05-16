@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { api } from '$lib/api';
 	import { onMount } from 'svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	interface Chapter {
 		id: number;
@@ -37,14 +38,14 @@
 </script>
 
 <svelte:head>
-	<title>Truyện — Selorson</title>
-	<meta name="description" content="Đọc các chapter truyện Selorson" />
+	<title>{m.stories_seo_title()}</title>
+	<meta name="description" content={m.stories_seo_desc()} />
 </svelte:head>
 
 <section class="stories-page">
 	<div class="page-header">
-		<h1 class="section-title">Danh sách Chapter</h1>
-		<p class="page-subtitle">Hành trình phiêu lưu đang chờ bạn khám phá</p>
+		<h1 class="section-title">{m.stories_list_title()}</h1>
+		<p class="page-subtitle">{m.stories_list_subtitle()}</p>
 	</div>
 
 	{#if loading}
@@ -56,8 +57,8 @@
 	{:else if chapters.length === 0}
 		<div class="empty-state">
 			<span class="empty-icon">📖</span>
-			<h3>Chưa có chapter nào</h3>
-			<p>Nội dung sẽ sớm được cập nhật</p>
+			<h3>{m.stories_empty_title()}</h3>
+			<p>{m.stories_empty_desc()}</p>
 		</div>
 	{:else}
 		<div class="chapter-grid">
@@ -75,9 +76,9 @@
 
 		{#if totalPages > 1}
 			<div class="pagination">
-				<button class="btn-ghost" disabled={currentPage <= 1} onclick={() => fetchChapters(currentPage - 1)}>← Trước</button>
-				<span class="page-info">Trang {currentPage} / {totalPages}</span>
-				<button class="btn-ghost" disabled={currentPage >= totalPages} onclick={() => fetchChapters(currentPage + 1)}>Sau →</button>
+				<button class="btn-ghost" disabled={currentPage <= 1} onclick={() => fetchChapters(currentPage - 1)}>{m.btn_prev()}</button>
+				<span class="page-info">{m.pagination_info({ current: currentPage, total: totalPages })}</span>
+				<button class="btn-ghost" disabled={currentPage >= totalPages} onclick={() => fetchChapters(currentPage + 1)}>{m.btn_next()}</button>
 			</div>
 		{/if}
 	{/if}

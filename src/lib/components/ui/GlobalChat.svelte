@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { isAuthenticated, getUser, getToken } from '$lib/stores/auth.svelte';
 	import { PUBLIC_API_BASE } from '$env/static/public';
+	import * as m from '$lib/paraglide/messages';
 
 	let isOpen = $state(false);
 	let isMinimized = $state(true);
@@ -94,7 +95,7 @@
 				{#if isMinimized}
 					💬 Chat ({onlineCount})
 				{:else}
-					✕ Đóng
+					{m.gchat_close()}
 				{/if}
 			</span>
 		</button>
@@ -103,7 +104,7 @@
 		{#if isOpen}
 			<div class="chat-panel">
 				<div class="chat-header">
-					<h4>💬 Chat chung</h4>
+					<h4>{m.gchat_title()}</h4>
 					<span class="online-dot"></span>
 					<span class="online-count">{onlineCount} online</span>
 				</div>
@@ -134,7 +135,7 @@
 							</div>
 						{/if}
 					{:else}
-						<div class="msg-empty">Chưa có tin nhắn. Hãy bắt đầu cuộc trò chuyện!</div>
+						<div class="msg-empty">{m.gchat_empty()}</div>
 					{/each}
 				</div>
 
@@ -142,7 +143,7 @@
 					<input
 						type="text"
 						bind:value={newMsg}
-						placeholder="Nhập tin nhắn..."
+						placeholder={m.gchat_input()}
 						onkeydown={(e) => { if (e.key === 'Enter') sendMessage(); }}
 					/>
 					<button class="send-btn" onclick={sendMessage} disabled={!newMsg.trim()}>
