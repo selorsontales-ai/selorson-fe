@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { isAuthenticated, getUser, getToken } from '$lib/stores/auth.svelte';
 	import { PUBLIC_API_BASE } from '$env/static/public';
 	import {
@@ -44,7 +43,7 @@
 		const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json', ...(options.headers as Record<string, string> || {}) };
 		const token = getToken();
 		if (token) headers['Authorization'] = `Bearer ${token}`;
-		const res = await fetch(`${PUBLIC_API_BASE}${endpoint}`, { ...options, headers });
+		const res = await fetch(`${PUBLIC_API_BASE}${endpoint}`, { ...options, headers, credentials: 'include' });
 		return res.json();
 	}
 
@@ -67,9 +66,19 @@
 	}
 
 	let devicesUnavailable = $state(false);
+	let devicesFetched = false;
 
 	async function fetchDevices() {
-		try { const r = await apiFetch('/auth/devices'); if (r.success) devices = r.data; else devicesUnavailable = true; } catch { devicesUnavailable = true; }
+		try {
+			const r = await apiFetch('/auth/devices');
+			if (r.success) {
+				devices = r.data;
+			} else {
+				devicesUnavailable = true;
+			}
+		} catch {
+			devicesUnavailable = true;
+		}
 	}
 
 	async function revokeDevice(id: number) {
@@ -100,9 +109,13 @@
 
 	function formatDate(d: string | null) { if (!d) return '—'; return new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 
-	onMount(() => { 
-		// devices already fetched via SSR
-		if (isAuthenticated() && devices.length === 0) fetchDevices(); 
+	// Reactively fetch devices when user becomes authenticated
+	// (onMount fires before fetchMe() completes, so we use $effect instead)
+	$effect(() => {
+		if (isAuthenticated() && !devicesFetched) {
+			devicesFetched = true;
+			fetchDevices();
+		}
 	});
 </script>
 
