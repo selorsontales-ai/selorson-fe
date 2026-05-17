@@ -11,7 +11,7 @@
 	let onlineCount = $state(0);
 	let ws: WebSocket | null = null;
 	let reconnectTimer: ReturnType<typeof setTimeout>;
-	let chatContainer: HTMLElement;
+	let chatContainer = $state<HTMLElement | null>(null);
 
 	onMount(() => {
 		if (isAuthenticated()) connectWebSocket();

@@ -11,7 +11,7 @@
 
 	let { data } = $props();
 
-	let profile = $state<any>(data.profile);
+	let profile = $state<any>(null);
 	let loading = $state(false);
 	let isSelf = $derived(getUser()?.id != null && getUser()?.id === profile?.id);
 	let avatarUploading = $state(false);

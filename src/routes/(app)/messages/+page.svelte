@@ -4,20 +4,14 @@
 	import { page } from '$app/state';
 	import { PUBLIC_API_BASE } from '$env/static/public';
 	import { getToken, getUser, isAuthenticated } from '$lib/stores/auth.svelte';
-	import { getConversations, fetchConversations, sortConversations } from '$lib/stores/chat.svelte';
+	import { getConversations, fetchConversations, sortConversations, type ConvData } from '$lib/stores/chat.svelte';
 	import * as m from '$lib/paraglide/messages';
 
-	interface Conversation {
-		id: number;
-		other_user: { id: number; name: string; username: string; avatar: string | null; is_online: boolean } | null;
-		last_message_at: string | null;
-		created_at: string;
-		unread_count: number;
-	}
+
 	interface Msg { id: number; sender_id: number; message: string; is_read: boolean; created_at: string; }
 
 	let { data } = $props();
-	let activeConv = $state<Conversation | null>(null);
+	let activeConv = $state<ConvData | null>(null);
 	let messages = $state<Msg[]>([]);
 	let newMsg = $state('');
 	let loading = $state(true);
@@ -38,15 +32,15 @@
 			const id = parseInt(convId);
 			if (activeConv?.id !== id) {
 				const c = getConversations().find(x => x.id === id);
-				if (c) selectConv(c as any);
+				if (c) selectConv(c);
 			}
 		}
 	});
 
 	onDestroy(() => { ws?.close(); });
 
-	async function selectConv(conv: Conversation) {
-		const hadUnread = (conv.unread_count || (conv as any).unread || 0) > 0;
+	async function selectConv(conv: ConvData) {
+		const hadUnread = (conv.unread || 0) > 0;
 		activeConv = conv;
 		ws?.close();
 
@@ -163,8 +157,8 @@
 								<strong>{conv.other_user?.name || m.msg_unknown_user()}</strong>
 								<span class="conv-time">{conv.last_message_at ? new Date(conv.last_message_at).toLocaleDateString('vi-VN') : ''}</span>
 							</div>
-							{#if (conv.unread_count || conv.unread || 0) > 0}
-								<span class="conv-unread">{(conv.unread_count || conv.unread) > 9 ? '9+' : (conv.unread_count || conv.unread)}</span>
+							{#if (conv.unread || 0) > 0}
+								<span class="conv-unread">{conv.unread > 9 ? '9+' : conv.unread}</span>
 							{/if}
 						</button>
 					{/each}

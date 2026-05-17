@@ -46,6 +46,6 @@
 	.legal-section{padding:1.25rem;margin-bottom:.75rem}
 	.legal-section h2{font-size:1rem;font-weight:600;margin-bottom:.5rem;color:var(--color-brand-400)}
 	.legal-section p{font-size:.88rem;line-height:1.7;color:var(--color-text-secondary)}
-	.legal-section a{color:var(--color-brand-400);text-decoration:none}
-	.legal-section a:hover{text-decoration:underline}
+	.legal-section :global(a){color:var(--color-brand-400);text-decoration:none}
+	.legal-section :global(a:hover){text-decoration:underline}
 </style>

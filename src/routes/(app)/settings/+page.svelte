@@ -26,7 +26,11 @@
 
 	// Devices
 	let { data } = $props();
-	let devices = $state<any[]>(data.devices || []);
+	let devices = $state<any[]>([]);
+
+	$effect(() => {
+		devices = data.devices || [];
+	});
 
 	// Data export
 	let exporting = $state(false);
@@ -220,8 +224,8 @@
 	.settings-page{max-width:900px;margin:2rem auto;padding:0 1.5rem}
 	h1{font-size:1.75rem;font-weight:800;margin-bottom:.5rem}
 	.page-sub{font-size:.875rem;color:var(--color-text-muted);margin-bottom:2rem}
-	.profile-link{color:var(--color-brand-400);font-weight:600;text-decoration:none}
-	.profile-link:hover{text-decoration:underline}
+	.page-sub :global(.profile-link){color:var(--color-brand-400);font-weight:600;text-decoration:none}
+	.page-sub :global(.profile-link:hover){text-decoration:underline}
 	.muted{color:var(--color-text-muted);text-align:center;padding:3rem}
 	.settings-grid{display:flex;flex-direction:column;gap:1.5rem}
 	.toast-msg{background:rgba(12,113,61,.15);border:1px solid rgba(12,113,61,.3);color:var(--color-brand-300);padding:.65rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.85rem}

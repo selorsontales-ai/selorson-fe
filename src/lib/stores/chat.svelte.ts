@@ -2,7 +2,7 @@ import { api } from '$lib/api';
 import { getToken } from '$lib/stores/auth.svelte';
 import { PUBLIC_API_BASE } from '$env/static/public';
 
-interface ConvData { id: number; other_user: { id: number; name: string; username: string; avatar: string|null }|null; last_message: string|null; last_message_at: string|null; unread: number }
+export interface ConvData { id: number; other_user: { id: number; name: string; username: string; avatar: string|null; is_online: boolean }|null; last_message: string|null; last_message_at: string|null; unread: number }
 interface MsgData { id: number; sender_id: number; message: string; created_at: string }
 interface ChatWin { convId: number; otherUser: ConvData['other_user']; messages: MsgData[]; draft: string; loading: boolean; sending: boolean; unread: number; lastActivity: number }
 
