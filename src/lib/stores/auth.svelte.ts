@@ -196,12 +196,33 @@ export function initAuth() {
 	} else {
 		state.loading = false;
 	}
+
+	// Listen for token refresh from other tabs
+	if (typeof BroadcastChannel !== 'undefined') {
+		try {
+			const bc = new BroadcastChannel('selorson_token_refresh');
+			bc.onmessage = (event) => {
+				if (event.data?.token) {
+					state.token = event.data.token;
+					saveToken(event.data.token);
+				}
+			};
+		} catch {
+			// BroadcastChannel not supported
+		}
+	}
 }
 
 export function setAuth(token: string, user: User) {
 	state.token = token;
 	state.user = user;
 	saveToken(token);
+}
+
+/** Called by api.ts interceptor after a successful token refresh. */
+export function updateToken(newToken: string) {
+	state.token = newToken;
+	saveToken(newToken);
 }
 
 // ---- Getters (exported as functions for reactivity) ----

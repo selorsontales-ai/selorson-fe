@@ -2,8 +2,9 @@
 	import { adminGet, adminPost, adminDelete, toast_success, toast_error, formatDateTime } from '$lib/stores/admin.svelte';
 	import AdminModal from '$lib/components/admin/AdminModal.svelte';
 	import { onMount } from 'svelte';
+	import { PUBLIC_API_BASE } from '$env/static/public';
 
-	const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000/api/v1';
+	const API_BASE = PUBLIC_API_BASE;
 
 	let activeTab = $state<'subscribers' | 'compose' | 'history'>('subscribers');
 	let subs = $state<any[]>([]); let broadcasts = $state<any[]>([]); let statsData = $state<any>(null);

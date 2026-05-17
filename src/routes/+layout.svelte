@@ -101,7 +101,7 @@
 								<hr class="dropdown-divider" />
 								<a href="/profile/{getUser()?.id}" class="dropdown-item" onclick={() => showUserMenu = false}>👤 {m.nav_profile()}</a>
 								<a href="/settings" class="dropdown-item" onclick={() => showUserMenu = false}>⚙️ {m.nav_settings()}</a>
-								{#if getUser()?.role === 'admin' || getUser()?.role === 'manager'}
+								{#if getUser()?.role === 'admin'}
 									<a href="/admin" class="dropdown-item admin-item" onclick={() => showUserMenu = false}>🛡️ Admin Panel</a>
 								{/if}
 								<hr class="dropdown-divider" />
@@ -138,7 +138,7 @@
 				<hr class="mobile-divider" />
 				<a href="/profile/{getUser()?.id}" onclick={() => showMobileMenu = false}>👤 {m.nav_profile()}</a>
 				<a href="/messages" onclick={() => showMobileMenu = false}>💬 {m.nav_messages()}</a>
-				{#if getUser()?.role === 'admin' || getUser()?.role === 'manager'}
+				{#if getUser()?.role === 'admin'}
 					<a href="/admin" class="mobile-admin-link" onclick={() => showMobileMenu = false}>🛡️ Admin Panel</a>
 				{/if}
 			{/if}

@@ -7,6 +7,8 @@ interface ApiOptions {
 	body?: unknown;
 	headers?: Record<string, string>;
 	token?: string;
+	/** @internal — prevents infinite retry loops */
+	_isRetry?: boolean;
 }
 
 export interface ApiResponse<T = unknown> {
@@ -27,15 +29,85 @@ export interface ApiError {
 	errors?: Record<string, string[]>;
 }
 
+// ── Mutex-based token refresh (prevents thundering herd) ──
+
+let isRefreshing = false;
+let waitQueue: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = [];
+
+/**
+ * Attempt to refresh the access token using the HttpOnly refresh cookie.
+ * Only the first 401 caller triggers the refresh; others wait in a queue.
+ */
+async function acquireRefreshedToken(): Promise<string> {
+	if (isRefreshing) {
+		return new Promise((resolve, reject) => {
+			waitQueue.push({ resolve, reject });
+		});
+	}
+
+	isRefreshing = true;
+	try {
+		const res = await fetch(`${PUBLIC_API_BASE}/auth/refresh`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: { Accept: 'application/json' },
+		});
+
+		const json = await res.json();
+		if (!res.ok || !json.success) {
+			throw new Error(json.message || 'Refresh failed');
+		}
+
+		const newToken: string = json.data.token;
+
+		// Update auth store
+		const { updateToken } = await import('./stores/auth.svelte');
+		updateToken(newToken);
+
+		// Broadcast to other tabs
+		try {
+			const bc = new BroadcastChannel('selorson_token_refresh');
+			bc.postMessage({ token: newToken });
+			bc.close();
+		} catch {
+			// BroadcastChannel not supported — ignore
+		}
+
+		// Resolve all queued callers
+		waitQueue.forEach(({ resolve }) => resolve(newToken));
+		waitQueue = [];
+
+		return newToken;
+	} catch (err) {
+		// Reject all queued callers
+		waitQueue.forEach(({ reject }) => reject(err));
+		waitQueue = [];
+		forceLogout();
+		throw err;
+	} finally {
+		isRefreshing = false;
+	}
+}
+
+/** Clear local state and redirect to home. */
+function forceLogout() {
+	if (typeof localStorage !== 'undefined') {
+		localStorage.removeItem('selorson_token');
+	}
+	if (typeof window !== 'undefined') {
+		window.location.href = '/';
+	}
+}
+
 /**
  * Typed fetch wrapper for the V3 API.
- * Matches the V2 response format: { success, data, message }
+ * Automatically retries once on 401 by refreshing the access token.
  */
 export async function api<T = unknown>(
 	endpoint: string,
 	options: ApiOptions = {}
 ): Promise<ApiResponse<T>> {
-	const { method = 'GET', body, headers = {}, token } = options;
+	const { method = 'GET', body, headers = {}, token, _isRetry = false } = options;
 
 	const url = `${PUBLIC_API_BASE}${endpoint}`;
 
@@ -61,6 +133,18 @@ export async function api<T = unknown>(
 		credentials: 'include',
 	});
 
+	// ── Auto-retry on 401 (token expired) ──
+	if (res.status === 401 && !_isRetry && typeof window !== 'undefined') {
+		try {
+			const newToken = await acquireRefreshedToken();
+			return api<T>(endpoint, { ...options, token: newToken, _isRetry: true });
+		} catch {
+			throw { status: 401, success: false, message: 'Session expired' } as ApiError & {
+				status: number;
+			};
+		}
+	}
+
 	const json = await res.json();
 
 	if (!res.ok || !json.success) {
@@ -75,11 +159,12 @@ export async function api<T = unknown>(
 
 /**
  * Upload files via multipart/form-data.
- * Does NOT set Content-Type — lets the browser set the boundary.
+ * Also supports 401 auto-retry.
  */
 export async function apiUpload<T = unknown>(
 	endpoint: string,
-	formData: FormData
+	formData: FormData,
+	options: { _isRetry?: boolean } = {}
 ): Promise<ApiResponse<T>> {
 	const url = `${PUBLIC_API_BASE}${endpoint}`;
 
@@ -98,6 +183,19 @@ export async function apiUpload<T = unknown>(
 		body: formData,
 		credentials: 'include',
 	});
+
+	// ── Auto-retry on 401 ──
+	if (res.status === 401 && !options._isRetry && typeof window !== 'undefined') {
+		try {
+			const newToken = await acquireRefreshedToken();
+			reqHeaders['Authorization'] = `Bearer ${newToken}`;
+			return apiUpload<T>(endpoint, formData, { _isRetry: true });
+		} catch {
+			throw { status: 401, success: false, message: 'Session expired' } as ApiError & {
+				status: number;
+			};
+		}
+	}
 
 	const json = await res.json();
 
