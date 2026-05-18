@@ -1,11 +1,19 @@
 <script lang="ts">
-	import AdminCrudTable from '$lib/components/admin/AdminCrudTable.svelte';
-	import AdminModal from '$lib/components/admin/AdminModal.svelte';
-	import { adminGet, adminPost, adminPut, adminDelete, adminUpload, toast_success, toast_error } from '$lib/stores/admin.svelte';
-	import { onMount } from 'svelte';
+	import AdminCrudTable from "$lib/components/admin/AdminCrudTable.svelte";
+	import AdminModal from "$lib/components/admin/AdminModal.svelte";
+	import {
+		adminGet,
+		adminPost,
+		adminPut,
+		adminDelete,
+		adminUpload,
+		toast_success,
+		toast_error,
+	} from "$lib/stores/admin.svelte";
+	import { onMount } from "svelte";
 
 	// ── State ──
-	let activeTab = $state<'albums' | 'tracks'>('albums');
+	let activeTab = $state<"albums" | "tracks">("albums");
 	let albums = $state<Record<string, unknown>[]>([]);
 	let tracks = $state<Record<string, unknown>[]>([]);
 	let showForm = $state(false);
@@ -19,59 +27,80 @@
 
 	// Forms
 	let albumForm = $state({
-		title: '', description: '', cover_image: '',
-		display_order: 0, is_active: true
+		title: "",
+		description: "",
+		cover_image: "",
+		display_order: 0,
+		is_active: true,
 	});
 	let trackForm = $state({
-		title: '', album_id: 0, artist: '',
-		file_path: '', track_number: 1,
-		duration: 0, is_active: true
+		title: "",
+		album_id: 0,
+		artist: "",
+		file_path: "",
+		track_number: 1,
+		duration: 0,
+		is_active: true,
 	});
 
 	// ── Table Columns ──
 	const albumColumns = [
-		{ key: 'id', label: 'ID' },
-		{ key: 'title', label: 'Album' },
-		{ key: 'display_order', label: 'Thứ tự' },
-		{ key: 'is_active', label: 'Active', type: 'boolean' as const }
+		{ key: "id", label: "ID" },
+		{ key: "title", label: "Album" },
+		{ key: "display_order", label: "Thứ tự" },
+		{ key: "is_active", label: "Active", type: "boolean" as const },
 	];
 	const trackColumns = [
-		{ key: 'id', label: 'ID' },
-		{ key: 'track_number', label: '#' },
-		{ key: 'title', label: 'Bài hát' },
-		{ key: 'artist', label: 'Nghệ sĩ' },
-		{ key: 'album_id', label: 'Album ID' },
-		{ key: 'duration', label: 'Giây' }
+		{ key: "id", label: "ID" },
+		{ key: "track_number", label: "#" },
+		{ key: "title", label: "Bài hát" },
+		{ key: "artist", label: "Nghệ sĩ" },
+		{ key: "album_id", label: "Album ID" },
+		{ key: "duration", label: "Giây" },
 	];
 
 	// ── Fetch ──
 	async function fetchAlbums() {
 		try {
-			const r = await adminGet<Record<string, unknown>[]>('/admin/music/albums');
+			const r = await adminGet<Record<string, unknown>[]>(
+				"/admin/music/albums",
+			);
 			if (r.success) albums = r.data;
-		} catch { /* empty */ }
+		} catch {
+			/* empty */
+		}
 	}
 	async function fetchTracks() {
 		try {
-			const r = await adminGet<Record<string, unknown>[]>('/admin/music/tracks');
+			const r = await adminGet<Record<string, unknown>[]>(
+				"/admin/music/tracks",
+			);
 			if (r.success) tracks = r.data;
-		} catch { /* empty */ }
+		} catch {
+			/* empty */
+		}
 	}
 
 	// ── Album CRUD ──
 	function handleCreateAlbum() {
 		editing = null;
-		albumForm = { title: '', description: '', cover_image: '', display_order: 0, is_active: true };
+		albumForm = {
+			title: "",
+			description: "",
+			cover_image: "",
+			display_order: 0,
+			is_active: true,
+		};
 		showForm = true;
 	}
 	function handleEditAlbum(item: Record<string, unknown>) {
 		editing = item;
 		albumForm = {
-			title: (item.title as string) ?? '',
-			description: (item.description as string) ?? '',
-			cover_image: (item.cover_image as string) ?? '',
+			title: (item.title as string) ?? "",
+			description: (item.description as string) ?? "",
+			cover_image: (item.cover_image as string) ?? "",
 			display_order: (item.display_order as number) ?? 0,
-			is_active: (item.is_active as boolean) ?? true
+			is_active: (item.is_active as boolean) ?? true,
 		};
 		showForm = true;
 	}
@@ -79,43 +108,52 @@
 		try {
 			if (editing) {
 				await adminPut(`/admin/music/albums/${editing.id}`, albumForm);
-				toast_success('Cập nhật album thành công!');
+				toast_success("Cập nhật album thành công!");
 			} else {
-				await adminPost('/admin/music/albums', albumForm);
-				toast_success('Tạo album thành công!');
+				await adminPost("/admin/music/albums", albumForm);
+				toast_success("Tạo album thành công!");
 			}
 			showForm = false;
 			fetchAlbums();
-		} catch { toast_error('Lỗi lưu album'); }
+		} catch {
+			toast_error("Lỗi lưu album");
+		}
 	}
 	async function handleDeleteAlbum(item: Record<string, unknown>) {
-		if (!confirm('Xóa album này?')) return;
+		if (!confirm("Xóa album này?")) return;
 		try {
 			await adminDelete(`/admin/music/albums/${item.id}`);
-			toast_success('Đã xóa album.');
+			toast_success("Đã xóa album.");
 			fetchAlbums();
-		} catch { toast_error('Lỗi xóa album'); }
+		} catch {
+			toast_error("Lỗi xóa album");
+		}
 	}
 
 	// ── Track CRUD ──
 	function handleCreateTrack() {
 		editing = null;
 		trackForm = {
-			title: '', album_id: (albums[0]?.id as number) ?? 0, artist: '',
-			file_path: '', track_number: (tracks.length + 1), duration: 0, is_active: true
+			title: "",
+			album_id: (albums[0]?.id as number) ?? 0,
+			artist: "",
+			file_path: "",
+			track_number: tracks.length + 1,
+			duration: 0,
+			is_active: true,
 		};
 		showForm = true;
 	}
 	function handleEditTrack(item: Record<string, unknown>) {
 		editing = item;
 		trackForm = {
-			title: (item.title as string) ?? '',
+			title: (item.title as string) ?? "",
 			album_id: (item.album_id as number) ?? 0,
-			artist: (item.artist as string) ?? '',
-			file_path: (item.file_path as string) ?? '',
+			artist: (item.artist as string) ?? "",
+			file_path: (item.file_path as string) ?? "",
 			track_number: (item.track_number as number) ?? 1,
 			duration: (item.duration as number) ?? 0,
-			is_active: (item.is_active as boolean) ?? true
+			is_active: (item.is_active as boolean) ?? true,
 		};
 		showForm = true;
 	}
@@ -123,22 +161,26 @@
 		try {
 			if (editing) {
 				await adminPut(`/admin/music/tracks/${editing.id}`, trackForm);
-				toast_success('Cập nhật track thành công!');
+				toast_success("Cập nhật track thành công!");
 			} else {
-				await adminPost('/admin/music/tracks', trackForm);
-				toast_success('Tạo track thành công!');
+				await adminPost("/admin/music/tracks", trackForm);
+				toast_success("Tạo track thành công!");
 			}
 			showForm = false;
 			fetchTracks();
-		} catch { toast_error('Lỗi lưu track'); }
+		} catch {
+			toast_error("Lỗi lưu track");
+		}
 	}
 	async function handleDeleteTrack(item: Record<string, unknown>) {
-		if (!confirm('Xóa track này?')) return;
+		if (!confirm("Xóa track này?")) return;
 		try {
 			await adminDelete(`/admin/music/tracks/${item.id}`);
-			toast_success('Đã xóa track.');
+			toast_success("Đã xóa track.");
 			fetchTracks();
-		} catch { toast_error('Lỗi xóa track'); }
+		} catch {
+			toast_error("Lỗi xóa track");
+		}
 	}
 
 	// ── Upload: Cover (Cloudinary) ──
@@ -148,15 +190,18 @@
 		uploadingImage = true;
 		try {
 			const fd = new FormData();
-			fd.append('image', file);
-			fd.append('folder', 'music');
-			const r = await adminUpload<{ url: string }>('/upload/image', fd);
+			fd.append("image", file);
+			fd.append("folder", "music");
+			const r = await adminUpload<{ url: string }>("/upload/image", fd);
 			if (r.success) {
 				albumForm.cover_image = r.data.url;
-				toast_success('Upload cover thành công!');
+				toast_success("Upload cover thành công!");
 			}
-		} catch { toast_error('Upload cover thất bại'); }
-		finally { uploadingImage = false; }
+		} catch {
+			toast_error("Upload cover thất bại");
+		} finally {
+			uploadingImage = false;
+		}
 	}
 
 	// ── Upload: Audio (Cloudflare R2) ──
@@ -166,34 +211,52 @@
 		uploadingAudio = true;
 		try {
 			const fd = new FormData();
-			fd.append('audio', file);
-			const r = await adminUpload<{ url: string; key: string; size: number }>('/upload/audio', fd);
+			fd.append("audio", file);
+			const r = await adminUpload<{
+				url: string;
+				key: string;
+				size: number;
+			}>("/upload/audio", fd);
 			if (r.success) {
 				trackForm.file_path = r.data.url;
-				toast_success('Upload nhạc thành công!');
+				toast_success("Upload nhạc thành công!");
 			}
-		} catch { toast_error('Upload nhạc thất bại'); }
-		finally { uploadingAudio = false; }
+		} catch {
+			toast_error("Upload nhạc thất bại");
+		} finally {
+			uploadingAudio = false;
+		}
 	}
 
-	onMount(() => { fetchAlbums(); fetchTracks(); });
+	onMount(() => {
+		fetchAlbums();
+		fetchTracks();
+	});
 </script>
 
 <svelte:head><title>Admin - Âm Nhạc — Selorson</title></svelte:head>
 
 <!-- Tab Bar -->
 <div class="tab-bar">
-	<button class:active={activeTab === 'albums'} onclick={() => activeTab = 'albums'}>🎵 Albums</button>
-	<button class:active={activeTab === 'tracks'} onclick={() => activeTab = 'tracks'}>🎶 Tracks</button>
+	<button
+		class:active={activeTab === "albums"}
+		onclick={() => (activeTab = "albums")}>🎵 Albums</button
+	>
+	<button
+		class:active={activeTab === "tracks"}
+		onclick={() => (activeTab = "tracks")}>🎶 Tracks</button
+	>
 </div>
 
 <!-- Table -->
-{#if activeTab === 'albums'}
+{#if activeTab === "albums"}
 	<AdminCrudTable
 		title="🎵 Quản lý Albums"
 		columns={albumColumns}
 		items={albums}
-		showCreate showActions showDelete
+		showCreate
+		showActions
+		showDelete
 		oncreate={handleCreateAlbum}
 		onedit={handleEditAlbum}
 		ondelete={handleDeleteAlbum}
@@ -203,7 +266,9 @@
 		title="🎶 Quản lý Tracks"
 		columns={trackColumns}
 		items={tracks}
-		showCreate showActions showDelete
+		showCreate
+		showActions
+		showDelete
 		oncreate={handleCreateTrack}
 		onedit={handleEditTrack}
 		ondelete={handleDeleteTrack}
@@ -211,63 +276,126 @@
 {/if}
 
 <!-- Modal Form -->
-<AdminModal bind:open={showForm} title={activeTab === 'albums'
-	? (editing ? 'Sửa Album' : 'Tạo Album Mới')
-	: (editing ? 'Sửa Track' : 'Tạo Track Mới')}>
-
-	{#if activeTab === 'albums'}
-		<form onsubmit={(e) => { e.preventDefault(); handleSaveAlbum(); }}>
+<AdminModal
+	bind:open={showForm}
+	title={activeTab === "albums"
+		? editing
+			? "Sửa Album"
+			: "Tạo Album Mới"
+		: editing
+			? "Sửa Track"
+			: "Tạo Track Mới"}
+>
+	{#if activeTab === "albums"}
+		<form
+			onsubmit={(e) => {
+				e.preventDefault();
+				handleSaveAlbum();
+			}}
+		>
 			<div class="form-group">
 				<label for="album-title">Tên album</label>
-				<input id="album-title" bind:value={albumForm.title} placeholder="Tên album" required />
+				<input
+					id="album-title"
+					bind:value={albumForm.title}
+					placeholder="Tên album"
+					required
+				/>
 			</div>
 
 			<!-- Cover Upload (Cloudinary) -->
 			<div class="form-group">
-				<label>Ảnh bìa</label>
+				<label>Hình nền</label>
 				<div class="upload-row">
-					<input type="file" bind:this={imageInput} accept="image/*" onchange={handleUploadCover} style="display:none" />
-					<button type="button" class="btn-upload" onclick={() => imageInput?.click()} disabled={uploadingImage}>
-						{uploadingImage ? '⏳ Đang tải...' : '📤 Upload ảnh'}
+					<input
+						type="file"
+						bind:this={imageInput}
+						accept="image/*"
+						onchange={handleUploadCover}
+						style="display:none"
+					/>
+					<button
+						type="button"
+						class="btn-upload"
+						onclick={() => imageInput?.click()}
+						disabled={uploadingImage}
+					>
+						{uploadingImage ? "⏳ Đang tải..." : "📤 Upload ảnh"}
 					</button>
-					<input bind:value={albumForm.cover_image} placeholder="Hoặc dán URL ảnh" />
+					<input
+						bind:value={albumForm.cover_image}
+						placeholder="Hoặc dán URL ảnh"
+					/>
 				</div>
 				{#if albumForm.cover_image}
-					<img src={albumForm.cover_image} alt="Album cover preview" class="preview-thumb" />
+					<img
+						src={albumForm.cover_image}
+						alt="Album cover preview"
+						class="preview-thumb"
+					/>
 				{/if}
 			</div>
 
 			<div class="form-group">
 				<label for="album-desc">Mô tả</label>
-				<textarea id="album-desc" bind:value={albumForm.description} placeholder="Mô tả album" rows="2"></textarea>
+				<textarea
+					id="album-desc"
+					bind:value={albumForm.description}
+					placeholder="Mô tả album"
+					rows="2"
+				></textarea>
 			</div>
 
 			<div class="form-row">
 				<div class="form-group">
 					<label for="album-order">Thứ tự</label>
-					<input id="album-order" bind:value={albumForm.display_order} type="number" />
+					<input
+						id="album-order"
+						bind:value={albumForm.display_order}
+						type="number"
+					/>
 				</div>
 				<label class="checkbox-label">
-					<input type="checkbox" bind:checked={albumForm.is_active} /> Kích hoạt
+					<input type="checkbox" bind:checked={albumForm.is_active} />
+					Kích hoạt
 				</label>
 			</div>
 
 			<div class="form-actions">
-				<button type="button" class="btn-cancel" onclick={() => showForm = false}>Hủy</button>
-				<button type="submit" class="btn-save">{editing ? 'Cập nhật' : 'Tạo mới'}</button>
+				<button
+					type="button"
+					class="btn-cancel"
+					onclick={() => (showForm = false)}>Hủy</button
+				>
+				<button type="submit" class="btn-save"
+					>{editing ? "Cập nhật" : "Tạo mới"}</button
+				>
 			</div>
 		</form>
-
 	{:else}
-		<form onsubmit={(e) => { e.preventDefault(); handleSaveTrack(); }}>
+		<form
+			onsubmit={(e) => {
+				e.preventDefault();
+				handleSaveTrack();
+			}}
+		>
 			<div class="form-group">
 				<label for="track-title">Tên bài hát</label>
-				<input id="track-title" bind:value={trackForm.title} placeholder="Tên bài hát" required />
+				<input
+					id="track-title"
+					bind:value={trackForm.title}
+					placeholder="Tên bài hát"
+					required
+				/>
 			</div>
 
 			<div class="form-group">
 				<label for="track-artist">Nghệ sĩ</label>
-				<input id="track-artist" bind:value={trackForm.artist} placeholder="Tên nghệ sĩ" />
+				<input
+					id="track-artist"
+					bind:value={trackForm.artist}
+					placeholder="Tên nghệ sĩ"
+				/>
 			</div>
 
 			<div class="form-row">
@@ -281,7 +409,11 @@
 				</div>
 				<div class="form-group">
 					<label for="track-num">Số thứ tự</label>
-					<input id="track-num" bind:value={trackForm.track_number} type="number" />
+					<input
+						id="track-num"
+						bind:value={trackForm.track_number}
+						type="number"
+					/>
 				</div>
 			</div>
 
@@ -289,17 +421,37 @@
 			<div class="form-group">
 				<label>File nhạc</label>
 				<div class="upload-row">
-					<input type="file" bind:this={audioInput} accept="audio/*" onchange={handleUploadAudio} style="display:none" />
-					<button type="button" class="btn-upload audio-btn" onclick={() => audioInput?.click()} disabled={uploadingAudio}>
-						{uploadingAudio ? '⏳ Đang tải lên R2...' : '🎵 Upload nhạc'}
+					<input
+						type="file"
+						bind:this={audioInput}
+						accept="audio/*"
+						onchange={handleUploadAudio}
+						style="display:none"
+					/>
+					<button
+						type="button"
+						class="btn-upload audio-btn"
+						onclick={() => audioInput?.click()}
+						disabled={uploadingAudio}
+					>
+						{uploadingAudio
+							? "⏳ Đang tải lên R2..."
+							: "🎵 Upload nhạc"}
 					</button>
-					<input bind:value={trackForm.file_path} placeholder="Hoặc dán URL audio" />
+					<input
+						bind:value={trackForm.file_path}
+						placeholder="Hoặc dán URL audio"
+					/>
 				</div>
 				{#if trackForm.file_path}
 					<div class="audio-preview">
 						<span class="audio-label">🎧 Xem trước:</span>
 						<!-- svelte-ignore a11y_media_has_caption -->
-						<audio controls src={trackForm.file_path} preload="metadata"></audio>
+						<audio
+							controls
+							src={trackForm.file_path}
+							preload="metadata"
+						></audio>
 					</div>
 				{/if}
 			</div>
@@ -307,16 +459,28 @@
 			<div class="form-row">
 				<div class="form-group">
 					<label for="track-duration">Thời lượng (giây)</label>
-					<input id="track-duration" bind:value={trackForm.duration} type="number" placeholder="0" />
+					<input
+						id="track-duration"
+						bind:value={trackForm.duration}
+						type="number"
+						placeholder="0"
+					/>
 				</div>
 				<label class="checkbox-label">
-					<input type="checkbox" bind:checked={trackForm.is_active} /> Kích hoạt
+					<input type="checkbox" bind:checked={trackForm.is_active} />
+					Kích hoạt
 				</label>
 			</div>
 
 			<div class="form-actions">
-				<button type="button" class="btn-cancel" onclick={() => showForm = false}>Hủy</button>
-				<button type="submit" class="btn-save">{editing ? 'Cập nhật' : 'Tạo mới'}</button>
+				<button
+					type="button"
+					class="btn-cancel"
+					onclick={() => (showForm = false)}>Hủy</button
+				>
+				<button type="submit" class="btn-save"
+					>{editing ? "Cập nhật" : "Tạo mới"}</button
+				>
 			</div>
 		</form>
 	{/if}
@@ -324,77 +488,170 @@
 
 <style>
 	/* Tab Bar */
-	.tab-bar { display: flex; gap: .5rem; margin-bottom: 1.5rem; }
-	.tab-bar button {
-		padding: .75rem 1.25rem; background: var(--color-surface-200);
-		border: none; border-radius: var(--radius-md); font-weight: 600;
-		cursor: pointer; color: var(--color-text-muted); transition: all .2s;
+	.tab-bar {
+		display: flex;
+		gap: 0.5rem;
+		margin-bottom: 1.5rem;
 	}
-	.tab-bar button.active { background: var(--color-brand-500); color: #fff; }
-	.tab-bar button:hover:not(.active) { background: var(--color-surface-300); }
+	.tab-bar button {
+		padding: 0.75rem 1.25rem;
+		background: var(--color-surface-200);
+		border: none;
+		border-radius: var(--radius-md);
+		font-weight: 600;
+		cursor: pointer;
+		color: var(--color-text-muted);
+		transition: all 0.2s;
+	}
+	.tab-bar button.active {
+		background: var(--color-brand-500);
+		color: #fff;
+	}
+	.tab-bar button:hover:not(.active) {
+		background: var(--color-surface-300);
+	}
 
 	/* Form Groups */
-	.form-group { margin-bottom: 1rem; }
-	.form-group label { display: block; font-size: .82rem; font-weight: 600; color: var(--color-text-secondary); margin-bottom: .35rem; }
-	.form-group input, .form-group select, .form-group textarea {
-		width: 100%; padding: .6rem .75rem; background: var(--color-surface-200);
-		border: 1px solid rgba(255,255,255,.08); border-radius: var(--radius-md);
-		color: var(--color-text-primary); font-size: .875rem;
+	.form-group {
+		margin-bottom: 1rem;
 	}
-	.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-		outline: none; border-color: var(--color-brand-500);
+	.form-group label {
+		display: block;
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: var(--color-text-secondary);
+		margin-bottom: 0.35rem;
 	}
-	.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: end; }
+	.form-group input,
+	.form-group select,
+	.form-group textarea {
+		width: 100%;
+		padding: 0.6rem 0.75rem;
+		background: var(--color-surface-200);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-radius: var(--radius-md);
+		color: var(--color-text-primary);
+		font-size: 0.875rem;
+	}
+	.form-group input:focus,
+	.form-group select:focus,
+	.form-group textarea:focus {
+		outline: none;
+		border-color: var(--color-brand-500);
+	}
+	.form-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem;
+		align-items: end;
+	}
 
 	/* Upload Row */
-	.upload-row { display: flex; gap: .5rem; align-items: center; }
-	.upload-row input { flex: 1; }
-	.btn-upload {
-		padding: .6rem 1rem; background: rgba(12, 113, 61, .15);
-		border: 1px solid rgba(12, 113, 61, .3); border-radius: var(--radius-md);
-		color: var(--color-brand-300); font-weight: 600; font-size: .82rem;
-		cursor: pointer; white-space: nowrap; transition: all .2s;
+	.upload-row {
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
 	}
-	.btn-upload:hover:not(:disabled) { background: rgba(12, 113, 61, .25); }
-	.btn-upload:disabled { opacity: .5; cursor: wait; }
+	.upload-row input {
+		flex: 1;
+	}
+	.btn-upload {
+		padding: 0.6rem 1rem;
+		background: rgba(12, 113, 61, 0.15);
+		border: 1px solid rgba(12, 113, 61, 0.3);
+		border-radius: var(--radius-md);
+		color: var(--color-brand-300);
+		font-weight: 600;
+		font-size: 0.82rem;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: all 0.2s;
+	}
+	.btn-upload:hover:not(:disabled) {
+		background: rgba(12, 113, 61, 0.25);
+	}
+	.btn-upload:disabled {
+		opacity: 0.5;
+		cursor: wait;
+	}
 	.btn-upload.audio-btn {
-		background: rgba(6, 182, 212, .15);
-		border-color: rgba(6, 182, 212, .3);
+		background: rgba(6, 182, 212, 0.15);
+		border-color: rgba(6, 182, 212, 0.3);
 		color: var(--color-accent-cyan);
 	}
-	.btn-upload.audio-btn:hover:not(:disabled) { background: rgba(6, 182, 212, .25); }
+	.btn-upload.audio-btn:hover:not(:disabled) {
+		background: rgba(6, 182, 212, 0.25);
+	}
 
 	/* Preview */
 	.preview-thumb {
-		margin-top: .5rem; max-width: 120px; max-height: 120px;
-		border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,.08);
+		margin-top: 0.5rem;
+		max-width: 120px;
+		max-height: 120px;
+		border-radius: var(--radius-md);
+		border: 1px solid rgba(255, 255, 255, 0.08);
 		object-fit: cover;
 	}
 	.audio-preview {
-		margin-top: .5rem; display: flex; align-items: center; gap: .75rem;
-		padding: .75rem; background: rgba(6, 182, 212, .05);
-		border: 1px solid rgba(6, 182, 212, .15); border-radius: var(--radius-md);
+		margin-top: 0.5rem;
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.75rem;
+		background: rgba(6, 182, 212, 0.05);
+		border: 1px solid rgba(6, 182, 212, 0.15);
+		border-radius: var(--radius-md);
 	}
-	.audio-label { font-size: .82rem; font-weight: 600; color: var(--color-accent-cyan); white-space: nowrap; }
-	.audio-preview audio { flex: 1; height: 36px; }
+	.audio-label {
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: var(--color-accent-cyan);
+		white-space: nowrap;
+	}
+	.audio-preview audio {
+		flex: 1;
+		height: 36px;
+	}
 
 	/* Checkbox */
 	.checkbox-label {
-		display: flex; align-items: center; gap: .5rem;
-		font-size: .85rem; color: var(--color-text-secondary); cursor: pointer;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.85rem;
+		color: var(--color-text-secondary);
+		cursor: pointer;
 	}
 
 	/* Actions */
-	.form-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,.06); }
+	.form-actions {
+		display: flex;
+		gap: 0.5rem;
+		justify-content: flex-end;
+		margin-top: 1.5rem;
+		padding-top: 1rem;
+		border-top: 1px solid rgba(255, 255, 255, 0.06);
+	}
 	.btn-cancel {
-		padding: .6rem 1.25rem; background: var(--color-surface-200);
-		border: 1px solid rgba(255,255,255,.08); border-radius: var(--radius-md);
-		color: var(--color-text-muted); font-weight: 500; cursor: pointer;
+		padding: 0.6rem 1.25rem;
+		background: var(--color-surface-200);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		border-radius: var(--radius-md);
+		color: var(--color-text-muted);
+		font-weight: 500;
+		cursor: pointer;
 	}
 	.btn-save {
-		padding: .6rem 1.25rem; background: var(--color-brand-500);
-		border: none; border-radius: var(--radius-md);
-		color: #fff; font-weight: 600; cursor: pointer; transition: background .2s;
+		padding: 0.6rem 1.25rem;
+		background: var(--color-brand-500);
+		border: none;
+		border-radius: var(--radius-md);
+		color: #fff;
+		font-weight: 600;
+		cursor: pointer;
+		transition: background 0.2s;
 	}
-	.btn-save:hover { background: var(--color-brand-600); }
+	.btn-save:hover {
+		background: var(--color-brand-600);
+	}
 </style>

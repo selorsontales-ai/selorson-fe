@@ -18,7 +18,10 @@
 	let username = $state('');
 	let passwordConfirm = $state('');
 	let rememberMe = $state(false);
-	let showPassword = $state(false);
+	let showPwd1 = $state(false);
+	let showPwd2 = $state(false);
+	let showPwd3 = $state(false);
+	let showPwd4 = $state(false);
 
 	// Forgot password fields
 	let resetCode = $state('');
@@ -258,13 +261,13 @@
 						<div class="pwd-wrap">
 							<input
 								id="auth-password"
-								type={showPassword ? 'text' : 'password'}
+								type={showPwd1 ? 'text' : 'password'}
 								bind:value={password}
 								placeholder="••••••••"
 								required
 								minlength="8"
 							/>
-							<button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button>
+							<button type="button" class="pwd-toggle" onclick={() => showPwd1 = !showPwd1}>{showPwd1 ? '🙈' : '👁️'}</button>
 						</div>
 					</div>
 
@@ -361,13 +364,13 @@
 						<div class="pwd-wrap">
 							<input
 								id="auth-password-reg"
-								type={showPassword ? 'text' : 'password'}
+								type={showPwd1 ? 'text' : 'password'}
 								bind:value={password}
 								placeholder="••••••••"
 								required
 								minlength="8"
 							/>
-							<button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button>
+							<button type="button" class="pwd-toggle" onclick={() => showPwd1 = !showPwd1}>{showPwd1 ? '🙈' : '👁️'}</button>
 						</div>
 					</div>
 					<div class="field">
@@ -375,12 +378,12 @@
 						<div class="pwd-wrap">
 							<input
 								id="auth-password-confirm"
-								type={showPassword ? 'text' : 'password'}
+								type={showPwd2 ? 'text' : 'password'}
 								bind:value={passwordConfirm}
 								placeholder="••••••••"
 								required
 							/>
-							<button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button>
+							<button type="button" class="pwd-toggle" onclick={() => showPwd2 = !showPwd2}>{showPwd2 ? '🙈' : '👁️'}</button>
 						</div>
 					</div>
 					<button class="btn-brand submit-btn" type="submit" disabled={loading}>
@@ -442,13 +445,13 @@
 						<div class="pwd-wrap">
 							<input
 								id="reset-password"
-								type={showPassword ? 'text' : 'password'}
+								type={showPwd3 ? 'text' : 'password'}
 								bind:value={newPassword}
 								placeholder="••••••••"
 								required
 								minlength="8"
 							/>
-							<button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button>
+							<button type="button" class="pwd-toggle" onclick={() => showPwd3 = !showPwd3}>{showPwd3 ? '🙈' : '👁️'}</button>
 						</div>
 					</div>
 					<div class="field">
@@ -456,12 +459,12 @@
 						<div class="pwd-wrap">
 							<input
 								id="reset-password-confirm"
-								type={showPassword ? 'text' : 'password'}
+								type={showPwd4 ? 'text' : 'password'}
 								bind:value={newPasswordConfirm}
 								placeholder="••••••••"
 								required
 							/>
-							<button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button>
+							<button type="button" class="pwd-toggle" onclick={() => showPwd4 = !showPwd4}>{showPwd4 ? '🙈' : '👁️'}</button>
 						</div>
 					</div>
 					<button class="btn-brand submit-btn" type="submit" disabled={loading}>
