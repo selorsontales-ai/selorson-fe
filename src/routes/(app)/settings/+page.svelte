@@ -24,11 +24,11 @@
 	let emailCode = $state('');
 
 	// Devices
-	let { data } = $props();
+	let { data = { devices: [] } }: { data?: { devices?: any[] } } = $props();
 	let devices = $state<any[]>([]);
 
 	$effect(() => {
-		devices = data.devices || [];
+		if (data?.devices) devices = data.devices;
 	});
 
 	// Data export

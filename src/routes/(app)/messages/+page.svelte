@@ -10,7 +10,7 @@
 
 	interface Msg { id: number; sender_id: number; message: string; is_read: boolean; created_at: string; }
 
-	let { data } = $props();
+	let { data = { conversations: [], ssrAccessToken: null } }: { data?: { conversations?: any[]; ssrAccessToken?: string | null } } = $props();
 	let activeConv = $state<ConvData | null>(null);
 	let messages = $state<Msg[]>([]);
 	let newMsg = $state('');

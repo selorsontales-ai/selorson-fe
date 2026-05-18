@@ -9,7 +9,7 @@
 	import ImageCropper from '$lib/components/ui/ImageCropper.svelte';
 	import * as m from '$lib/paraglide/messages';
 
-	let { data } = $props();
+	let { data = { profile: null, ssrAccessToken: null } }: { data?: { profile?: any; ssrAccessToken?: string | null } } = $props();
 
 	let profile = $state<any>(null);
 	let loading = $state(false);
@@ -25,7 +25,7 @@
 
 	// Synchronize when navigating between profiles
 	$effect(() => {
-		profile = data.profile;
+		if (data?.profile) profile = data.profile;
 	});
 
 	onMount(async () => {

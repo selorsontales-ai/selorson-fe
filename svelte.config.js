@@ -1,4 +1,7 @@
-import adapter from '@sveltejs/adapter-cloudflare';
+import adapterStatic from '@sveltejs/adapter-static';
+import adapterCloudflare from '@sveltejs/adapter-cloudflare';
+
+const isMobile = process.env.BUILD_TARGET === 'mobile';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
@@ -7,13 +10,20 @@ const config = {
 		runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 	},
 	kit: {
-		adapter: adapter({
-			// See https://developers.cloudflare.com/pages/framework-guides/deploy-a-svelte-site/
-			routes: {
-				include: ['/*'],
-				exclude: ['<all>']
-			}
-		})
+		adapter: isMobile
+			? adapterStatic({
+					pages: 'build',
+					assets: 'build',
+					fallback: 'index.html', // SPA mode cho Capacitor Mobile
+					precompress: false,
+					strict: false
+				})
+			: adapterCloudflare({
+					routes: {
+						include: ['/*'],
+						exclude: ['<all>']
+					}
+				})
 	}
 };
 
