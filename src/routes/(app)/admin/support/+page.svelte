@@ -35,7 +35,7 @@
 		{:else}
 			<table class="perf-table"><thead><tr><th>Nhân viên</th><th>Vai trò</th><th>Đang xử lý</th><th>Đã giải quyết</th><th>Rating TB</th><th></th></tr></thead>
 			<tbody>{#each managers as m (m.id)}
-				<tr><td><div class="mgr-info"><span class="mgr-av">{(m.name ?? '?').charAt(0).toUpperCase()}</span><span class="mgr-name">{m.name}</span></div></td><td><span class="role-tag {m.role}">{m.role}</span></td><td class="num">{m.active_count ?? '—'}</td><td class="num">{m.resolved_count ?? '—'}</td><td class="num">{m.avg_rating ? Number(m.avg_rating).toFixed(1) : '—'}</td><td><button class="view-btn" onclick={() => viewPerformance(m.id)}>📈 Chi tiết</button></td></tr>
+				<tr><td data-label="Nhân viên"><div class="mgr-info"><span class="mgr-av">{(m.name ?? '?').charAt(0).toUpperCase()}</span><span class="mgr-name">{m.name}</span></div></td><td data-label="Vai trò"><span class="role-tag {m.role}">{m.role}</span></td><td data-label="Đang xử lý" class="num">{m.active_count ?? '—'}</td><td data-label="Đã giải quyết" class="num">{m.resolved_count ?? '—'}</td><td data-label="Rating TB" class="num">{m.avg_rating ? Number(m.avg_rating).toFixed(1) : '—'}</td><td data-label="Thao tác"><button class="view-btn" onclick={() => viewPerformance(m.id)}>📈 Chi tiết</button></td></tr>
 			{/each}</tbody></table>
 		{/if}
 	</div>
@@ -48,8 +48,8 @@
 		{:else}
 			<table class="conv-table"><thead><tr><th>ID</th><th>Khách</th><th>Nhân viên</th><th>Trạng thái</th><th>Ưu tiên</th><th>Cập nhật</th><th>Rating</th></tr></thead>
 			<tbody>{#each conversations as c (c.id)}
-				<tr><td class="id-cell">#{c.id}</td><td>{c.user?.name ?? 'User #' + c.user_id}</td><td>{c.manager?.name ?? '—'}</td><td><span class="status-tag {c.status}">{statusLabels[c.status] ?? c.status}</span></td><td><span class="priority-tag {c.priority}">{c.priority}</span></td><td class="time-cell">{formatDateTime(c.updated_at)}</td>
-				<td>{#if c.rating}<span style="color:#fbbf24;font-weight:bold">⭐ {c.rating}/5</span>{#if c.rating_comment}<div style="font-size:.75rem;color:var(--color-text-muted);margin-top:4px;font-style:italic">"{c.rating_comment}"</div>{/if}{:else}—{/if}</td></tr>
+				<tr><td data-label="ID" class="id-cell">#{c.id}</td><td data-label="Khách">{c.user?.name ?? 'User #' + c.user_id}</td><td data-label="Nhân viên">{c.manager?.name ?? '—'}</td><td data-label="Trạng thái"><span class="status-tag {c.status}">{statusLabels[c.status] ?? c.status}</span></td><td data-label="Ưu tiên"><span class="priority-tag {c.priority}">{c.priority}</span></td><td data-label="Cập nhật" class="time-cell">{formatDateTime(c.updated_at)}</td>
+				<td data-label="Rating">{#if c.rating}<span style="color:#fbbf24;font-weight:bold">⭐ {c.rating}/5</span>{#if c.rating_comment}<div style="font-size:.75rem;color:var(--color-text-muted);margin-top:4px;font-style:italic">"{c.rating_comment}"</div>{/if}{:else}—{/if}</td></tr>
 			{/each}</tbody></table>
 		{/if}
 	</div>
@@ -105,5 +105,15 @@
 	.perf-item { text-align: center; padding: 1rem; background: var(--color-surface-200); border-radius: var(--radius-md); }
 	.pn { font-size: 1.5rem; font-weight: 800; color: var(--color-brand-300); display: block; }
 	.pl { font-size: .6875rem; color: var(--color-text-muted); margin-top: .25rem; display: block; }
-	@media (max-width: 768px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+	@media (max-width: 768px) {
+		.stats-grid { grid-template-columns: repeat(2, 1fr); }
+		.perf-table thead, .conv-table thead { display: none; }
+		.perf-table, .perf-table tbody, .conv-table, .conv-table tbody { display: block; width: 100%; }
+		.perf-table tr, .conv-table tr { display: flex; flex-direction: column; margin-bottom: 1rem; border: 1px solid rgba(255,255,255,.1); border-radius: var(--radius-md); background: var(--color-surface-200); padding: .5rem; }
+		:global(html[data-theme='light']) .perf-table tr, :global(html[data-theme='light']) .conv-table tr { border-color: rgba(0,0,0,.1); background: #f9fafb; }
+		.perf-table td, .conv-table td { display: flex; justify-content: space-between; align-items: center; padding: .5rem !important; border: none !important; border-bottom: 1px solid rgba(255,255,255,.05) !important; }
+		:global(html[data-theme='light']) .perf-table td, :global(html[data-theme='light']) .conv-table td { border-bottom-color: rgba(0,0,0,.05) !important; }
+		.perf-table td:last-child, .conv-table td:last-child { border-bottom: none !important; }
+		.perf-table td::before, .conv-table td::before { content: attr(data-label); font-weight: 600; color: var(--color-text-muted); font-size: .75rem; text-transform: uppercase; margin-right: 1rem; }
+	}
 </style>

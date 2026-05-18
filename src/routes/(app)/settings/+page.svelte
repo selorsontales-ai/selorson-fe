@@ -7,6 +7,7 @@
 	} from '$lib/stores/security.svelte';
 	import { goto } from '$app/navigation';
 	import { getLocale, setLocale } from '$lib/paraglide/runtime';
+	import { isChatWidgetHidden, setChatWidgetHidden } from '$lib/stores/support.svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	let totpCode = $state('');
@@ -137,6 +138,21 @@
 				<div class="lang-options">
 					<button class="btn-export" class:active={getLocale() === 'vi'} onclick={() => setLocale('vi')}>🇻🇳 Tiếng Việt</button>
 					<button class="btn-export" class:active={getLocale() === 'en'} onclick={() => setLocale('en')}>🇬🇧 English</button>
+				</div>
+			</section>
+
+			<!-- UI Options -->
+			<section class="card">
+				<h2>🎨 Giao Diện & Tiện Ích</h2>
+				<p class="hint">Tuỳ chỉnh trải nghiệm hiển thị của bạn trên trang web.</p>
+				<div class="setting-item">
+					<div>
+						<strong>Nút Hỗ Trợ (Chat)</strong>
+						<p class="hint">Hiển thị nút chat hỗ trợ ở góc phải màn hình.</p>
+					</div>
+					<button class="btn-toggle" class:active={!isChatWidgetHidden()} onclick={() => setChatWidgetHidden(!isChatWidgetHidden())}>
+						{!isChatWidgetHidden() ? 'Đang Bật' : 'Đang Tắt'}
+					</button>
 				</div>
 			</section>
 
@@ -284,5 +300,10 @@
 	.backup-code{font-family:monospace;font-size:.8rem;padding:.3rem .5rem;background:rgba(0,0,0,.2);border-radius:4px;text-align:center;color:var(--color-accent-gold)}
 	.lang-options{display:flex;gap:1rem;}
 	.lang-options .btn-export.active{background:rgba(12,113,61,.15);border-color:var(--color-brand-500);color:var(--color-brand-300);}
+	.setting-item{display:flex;align-items:center;justify-content:space-between;padding:1rem;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:12px;}
+	.setting-item strong{font-size:0.9rem;}
+	.setting-item .hint{margin:0;font-size:0.8rem;margin-top:0.25rem;}
+	.btn-toggle{padding:0.5rem 1rem;border-radius:20px;border:none;font-weight:600;font-size:0.8rem;cursor:pointer;background:rgba(255,255,255,0.1);color:var(--color-text-secondary);transition:all 0.2s;}
+	.btn-toggle.active{background:var(--color-brand-500);color:white;}
 	@media(max-width:640px){.card{padding:1.5rem}}
 </style>

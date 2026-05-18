@@ -32,13 +32,13 @@
 				{#each users as user (user.id)}
 					<tr>
 						{#each columns as col}
-							<td>
+							<td data-label={col.label}>
 								{#if col.type === 'status'}<span class="badge {user[col.key] === 'admin' ? 'bg-green' : user[col.key] === 'blacklisted' ? 'bg-red' : 'bg-blue'}">{user[col.key]}</span>
 								{:else if col.type === 'date'}<span class="cell-date">{new Date(String(user[col.key])).toLocaleDateString('vi-VN')}</span>
 								{:else}{user[col.key] ?? '—'}{/if}
 							</td>
 						{/each}
-						<td class="td-actions">
+						<td class="td-actions" data-label="Thao tác">
 							<button class="act-btn" onclick={() => openEdit(user)}>✏️</button>
 							{#if user.status !== 'blacklisted'}
 								<button class="act-btn ban" onclick={() => openBan(user)}>🚫</button>

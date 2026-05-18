@@ -5,7 +5,7 @@
 <svelte:head><title>{m.terms_title()} — Selorson</title></svelte:head>
 
 <div class="legal-page">
-	<h1>{m.terms_title()}</h1>
+	<h1 class="section-title">{m.terms_title()}</h1>
 	<p class="updated">{m.terms_updated()}</p>
 
 	<section class="glass-card legal-section">
@@ -46,8 +46,7 @@
 
 <style>
 	.legal-page{max-width:700px;margin:0 auto;padding:2rem 1rem 4rem}
-	h1{font-size:1.5rem;font-weight:700;margin-bottom:.25rem}
-	.updated{font-size:.82rem;color:var(--color-text-muted);margin-bottom:2rem}
+	.updated{text-align:center;font-size:1rem;color:var(--color-text-muted);margin-top:-1rem;margin-bottom:2rem}
 	.legal-section{padding:1.25rem;margin-bottom:.75rem}
 	.legal-section h2{font-size:1rem;font-weight:600;margin-bottom:.5rem;color:var(--color-brand-400)}
 	.legal-section p{font-size:.88rem;line-height:1.7;color:var(--color-text-secondary)}

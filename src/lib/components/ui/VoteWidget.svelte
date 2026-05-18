@@ -25,11 +25,11 @@
 	}
 </script>
 
-{#if !loading && getVoteStats()}
+{#if !loading && getVoteStats() && getVoteStats().options && getVoteStats().options.length > 0}
 	{@const stats = getVoteStats()}
 	<div class="vote-widget">
-		<h3 class="vote-title">{m.vote_title()}</h3>
-		<p class="vote-total">{m.vote_total({ count: stats.total_votes })}</p>
+		<h2 class="section-title">{m.vote_title()}</h2>
+		<p class="page-subtitle">{m.vote_total({ count: stats.total_votes })}</p>
 
 		<div class="options">
 			{#each stats.options as opt}
@@ -57,8 +57,6 @@
 
 <style>
 	.vote-widget { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); border-radius: 16px; padding: 1.5rem; }
-	.vote-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.25rem; }
-	.vote-total { font-size: 0.8rem; color: var(--color-text-muted); margin-bottom: 1rem; }
 
 	.options { display: flex; flex-direction: column; gap: 0.75rem; }
 	.option { display: block; width: 100%; text-align: left; background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.06); border-radius: 10px; padding: 0.75rem 1rem; cursor: pointer; transition: all .2s; color: var(--color-text-primary); }

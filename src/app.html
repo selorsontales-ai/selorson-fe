@@ -20,6 +20,35 @@
 
 		  gtag('config', 'G-45CKHTJECJ');
 		</script>
+		
+		<!-- Anti Self-XSS Console Warning -->
+		<script>
+			Object.defineProperty(window, 'console', {
+				value: window.console,
+				writable: false,
+				configurable: false
+			});
+			setTimeout(() => {
+				const lang = document.documentElement.lang || 'vi';
+				const isVi = lang.startsWith('vi');
+
+				const cssTitle = 'color: red; font-size: 50px; font-weight: bold; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff; font-family: sans-serif;';
+				const cssText = 'font-size: 16px; font-family: sans-serif; line-height: 1.5;';
+				const cssBold = 'font-size: 16px; font-weight: bold; font-family: sans-serif;';
+				
+				const title = isVi ? 'Dừng lại!' : 'Stop!';
+				const msg = isVi 
+					? 'Đây là tính năng của trình duyệt dành cho các nhà phát triển. Nếu ai đó bảo bạn sao chép và dán nội dung nào đó vào đây để bật một tính năng của Selorson hoặc "hack" tài khoản của người khác, đó là hành vi lừa đảo và sẽ khiến họ có thể truy cập vào tài khoản Selorson của bạn.'
+					: 'This is a browser feature intended for developers. If someone told you to copy and paste something here to enable a Selorson feature or "hack" someone\'s account, it is a scam and will give them access to your Selorson account.';
+				const warning = isVi 
+					? 'Tuyệt đối không dán mã lạ vào đây!' 
+					: 'Never paste strange code here!';
+
+				console.log('%c' + title, cssTitle);
+				console.log('%c' + msg, cssText);
+				console.log('%c' + warning, cssBold);
+			}, 100);
+		</script>
 	</head>
 	<body data-sveltekit-preload-data="hover">
 		<div style="display: contents">%sveltekit.body%</div>

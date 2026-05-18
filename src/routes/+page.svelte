@@ -46,22 +46,11 @@
 <!-- Hero Slider -->
 <section class="hero-section">
 	<HeroSlider />
-	<div class="hero-fallback">
-		<div class="hero-bg"></div>
-		<div class="hero-content fade-in">
-			<div class="hero-badge">{m.home_new_version()}</div>
-			<h1 class="hero-title">{m.home_welcome_to()} <span class="gradient-text">Selorson</span></h1>
-			<p class="hero-subtitle">{@html m.home_subtitle()}</p>
-			<div class="hero-cta">
-				<a href="/stories" class="btn-brand">{m.home_read_stories()}</a>
-				<a href="/about" class="btn-ghost">{m.home_learn_more()}</a>
-			</div>
-		</div>
-	</div>
 </section>
 
 <!-- Quick Access -->
 <section class="quick-section">
+	<h2 class="section-title">{m.home_explore()}</h2>
 	<div class="quick-grid">
 		<a href="/stories" class="quick-card">
 			<span class="quick-icon">📖</span>
@@ -142,7 +131,7 @@
 	<div class="split-right">
 		{#if futureProjects.length > 0}
 			<div class="projects-card">
-				<h3>{m.home_future_projects()}</h3>
+				<h2 class="section-title">{m.home_future_projects()}</h2>
 				<div class="project-list">
 					{#each futureProjects as proj}
 						<div class="project-item">
@@ -163,7 +152,7 @@
 
 <!-- Tech Stack -->
 <section class="tech-section">
-	<h2 class="section-title" style="text-align:center;margin-bottom:2rem">{m.home_tech_stack_title()}</h2>
+	<h2 class="section-title">{m.home_tech_stack_title()}</h2>
 	<div class="tech-grid">
 		{#each [
 			{ name: 'Rust + Axum', desc: m.home_tech_rust_desc(), icon: '🦀' },
@@ -185,16 +174,9 @@
 <style>
 	/* Hero */
 	.hero-section { position: relative; }
-	.hero-fallback { position: relative; min-height: 50vh; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-	.hero-bg { position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% 30%, rgba(12,113,61,.15), transparent), radial-gradient(ellipse 60% 50% at 80% 50%, rgba(6,182,212,.08), transparent); }
-	.hero-content { position: relative; text-align: center; max-width: 720px; padding: 2rem; }
-	.hero-badge { display: inline-block; padding: .4rem 1rem; background: rgba(12,113,61,.15); border: 1px solid rgba(12,113,61,.3); border-radius: 999px; font-size: .8rem; font-weight: 600; color: var(--color-brand-300); margin-bottom: 1.5rem; }
-	.hero-title { font-size: clamp(2.2rem, 5vw, 3.5rem); font-weight: 800; line-height: 1.1; letter-spacing: -.03em; margin-bottom: 1rem; }
-	.hero-subtitle { font-size: 1.05rem; color: var(--color-text-secondary); line-height: 1.7; margin-bottom: 1.5rem; }
-	.hero-cta { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; }
 
 	/* Quick Access */
-	.quick-section { max-width: 1100px; margin: -2rem auto 0; padding: 0 1.5rem 3rem; position: relative; z-index: 2; }
+	.quick-section { max-width: 1100px; margin: 3rem auto 0; padding: 0 1.5rem 3rem; position: relative; z-index: 2; }
 	.quick-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
 	.quick-card { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 1.5rem 1rem; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); border-radius: 16px; text-decoration: none; transition: all .25s; }
 	.quick-card:hover { border-color: rgba(12,113,61,.3); background: rgba(12,113,61,.05); transform: translateY(-2px); }
@@ -203,9 +185,10 @@
 	.quick-card p { font-size: .78rem; color: var(--color-text-muted); }
 
 	/* Content Sections */
-	.content-section { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem 3rem; }
-	.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
-	.see-all { font-size: .85rem; color: var(--color-brand-400); text-decoration: none; font-weight: 500; }
+	.content-section { max-width: 1100px; margin: 0 auto 4rem; padding: 0 1.5rem; }
+	.section-header { position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 2rem; }
+	.section-header .section-title { margin-bottom: 0; }
+	.see-all { position: absolute; right: 0; font-size: 0.95rem; font-weight: 600; color: var(--color-brand-400); text-decoration: none; transition: color .2s; }
 	.see-all:hover { text-decoration: underline; }
 
 	.chapter-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
@@ -227,7 +210,6 @@
 	/* Split Section */
 	.split-section { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem 4rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
 	.projects-card { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); border-radius: 16px; padding: 1.5rem; }
-	.projects-card h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; }
 	.project-list { display: flex; flex-direction: column; gap: .75rem; }
 	.project-item { padding: .75rem; background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.04); border-radius: 10px; }
 	.project-item h4 { font-size: .9rem; font-weight: 600; margin-bottom: .15rem; }

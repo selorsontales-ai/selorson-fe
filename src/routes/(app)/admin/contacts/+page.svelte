@@ -45,14 +45,14 @@
 				{#if !items.length}<tr><td colspan="8" class="empty-row">Chưa có dữ liệu</td></tr>{/if}
 				{#each items as item (item.id)}
 					<tr>
-						<td><input type="checkbox" value={item.id} bind:group={selectedIds} /></td>
-						<td>#{item.id}</td>
-						<td><strong>{item.name}</strong><br/><span class="sub">{item.email}</span></td>
-						<td>{item.subject}</td>
-						<td><span class="badge {statusCls(item.status)}">{item.status}</span>{#if item.dispatched_at}<span class="badge badge-purple" style="margin-left:4px">Dispatched</span>{/if}</td>
-						<td class="sub">{#if item.assignee}{item.assignee.name}{/if}{#if item.replier}<br/>Replier: {item.replier.name}{/if}</td>
-						<td class="sub">{formatDateTime(item.created_at)}</td>
-						<td class="action-cell">
+						<td data-label="Chọn"><input type="checkbox" value={item.id} bind:group={selectedIds} /></td>
+						<td data-label="ID">#{item.id}</td>
+						<td data-label="Tên / Email"><strong>{item.name}</strong><br/><span class="sub">{item.email}</span></td>
+						<td data-label="Chủ đề">{item.subject}</td>
+						<td data-label="Trạng thái"><span class="badge {statusCls(item.status)}">{item.status}</span>{#if item.dispatched_at}<span class="badge badge-purple" style="margin-left:4px">Dispatched</span>{/if}</td>
+						<td data-label="Assignee" class="sub">{#if item.assignee}{item.assignee.name}{/if}{#if item.replier}<br/>Replier: {item.replier.name}{/if}</td>
+						<td data-label="Ngày" class="sub">{formatDateTime(item.created_at)}</td>
+						<td data-label="Thao tác" class="action-cell">
 							<button class="btn-sm" onclick={() => viewingItem = item}>Xem</button>
 							{#if item.status !== 'replied'}<button class="btn-sm" onclick={() => { replyingItem = item; replyText = ''; }}>Trả lời</button>{/if}
 							{#if item.status !== 'archived'}<button class="btn-sm btn-gray" onclick={() => archive(item)}>Lưu trữ</button>{/if}

@@ -25,6 +25,7 @@ let supportMessages = $state<any[]>([]);
 let supportUnread = $state(0);
 let supportLoading = $state(false);
 let supportSending = $state(false);
+let chatWidgetHidden = $state(false);
 
 export function getSupportTickets() { return supportTickets; }
 export function getActiveTicket() { return activeTicket; }
@@ -33,6 +34,20 @@ export function getSupportMessages() { return supportMessages; }
 export function getSupportUnread() { return supportUnread; }
 export function isSupportLoading() { return supportLoading; }
 export function isSupportSending() { return supportSending; }
+export function isChatWidgetHidden() { return chatWidgetHidden; }
+
+export function setChatWidgetHidden(hidden: boolean) {
+	chatWidgetHidden = hidden;
+	if (typeof localStorage !== 'undefined') {
+		localStorage.setItem('chatWidgetHidden', hidden.toString());
+	}
+}
+
+export function initSupportUI() {
+	if (typeof localStorage !== 'undefined') {
+		chatWidgetHidden = localStorage.getItem('chatWidgetHidden') === 'true';
+	}
+}
 
 export async function fetchTickets() {
 	supportLoading = true;

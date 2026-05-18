@@ -205,12 +205,24 @@
 
   /* Section Title */
   .section-title {
-    font-size: 2rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, var(--color-text-primary), var(--color-brand-300));
+    font-size: 2.2rem;
+    font-weight: 800;
+    text-align: center;
+    width: 100%;
+    display: block;
+    margin-bottom: 2rem;
+    background: linear-gradient(135deg, var(--color-text-primary), var(--color-brand-400));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+  }
+
+  .page-subtitle {
+    text-align: center;
+    font-size: 1.05rem;
+    color: var(--color-text-muted);
+    margin-top: -1.5rem;
+    margin-bottom: 3rem;
   }
 
   /* Gradient Text */

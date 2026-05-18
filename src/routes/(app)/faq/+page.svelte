@@ -16,7 +16,7 @@
 <svelte:head><title>{m.faq_title()} — Selorson</title></svelte:head>
 
 <div class="faq-page">
-	<h1>{m.faq_title()}</h1>
+	<h1 class="section-title">{m.faq_title()}</h1>
 	<p class="subtitle">{m.faq_subtitle()}</p>
 
 	<div class="faq-list">
@@ -33,8 +33,7 @@
 
 <style>
 	.faq-page { max-width: 700px; margin: 0 auto; padding: 2rem 1rem 4rem; }
-	h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem; }
-	.subtitle { color: var(--color-text-muted); font-size: 0.9rem; margin-bottom: 2rem; }
+	.subtitle { text-align: center; color: var(--color-text-muted); font-size: 1rem; margin-top: -1rem; margin-bottom: 2rem; }
 	.faq-list { display: flex; flex-direction: column; gap: 0.5rem; }
 	.faq-item { padding: 0; overflow: hidden; cursor: pointer; }
 	.faq-item summary {

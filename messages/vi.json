@@ -436,5 +436,6 @@
   "crop_cancel": "Hủy",
   "verify_resend_wait": "Gửi lại ({n}s)",
   "verify_resend": "Gửi lại mã",
-  "verify_ph_code": "Nhập mã 6 số"
+  "verify_ph_code": "Nhập mã 6 số",
+  "home_explore": "Khám phá"
 }

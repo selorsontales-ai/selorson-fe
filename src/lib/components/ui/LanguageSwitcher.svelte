@@ -38,4 +38,16 @@
 		background: rgba(12, 113, 61, 0.1);
 		color: var(--color-brand-300);
 	}
+
+	:global(html[data-theme="light"]) .lang-toggle {
+		background: rgba(255, 255, 255, 0.1);
+		border-color: rgba(255, 255, 255, 0.3);
+		color: white;
+	}
+
+	:global(html[data-theme="light"]) .lang-toggle:hover {
+		background: rgba(255, 255, 255, 0.2);
+		border-color: #ffd700;
+		color: #ffd700;
+	}
 </style>

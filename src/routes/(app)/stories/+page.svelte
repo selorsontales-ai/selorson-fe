@@ -91,15 +91,7 @@
 		padding: 3rem 1.5rem 6rem;
 	}
 
-	.page-header {
-		text-align: center;
-		margin-bottom: 3rem;
-	}
 
-	.page-subtitle {
-		color: var(--color-text-muted);
-		margin-top: 0.5rem;
-	}
 
 	.chapter-grid {
 		display: grid;

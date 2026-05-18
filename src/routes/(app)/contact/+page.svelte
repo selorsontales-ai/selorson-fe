@@ -32,7 +32,7 @@
 
 <div class="contact-page">
 	<div class="contact-header">
-		<h1>{m.contact_title()}</h1>
+		<h1 class="section-title">{m.contact_title()}</h1>
 		<p class="subtitle">{m.contact_subtitle()}</p>
 	</div>
 
@@ -91,8 +91,7 @@
 <style>
 	.contact-page { max-width: 640px; margin: 0 auto; padding: 2rem 1rem 4rem; }
 	.contact-header { text-align: center; margin-bottom: 2rem; }
-	h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem; }
-	.subtitle { color: var(--color-text-muted); font-size: 0.9rem; }
+	.subtitle { color: var(--color-text-muted); font-size: 1rem; margin-top: -1rem; margin-bottom: 2rem; }
 
 	.success-card { text-align: center; padding: 3rem 2rem; }
 	.success-icon { font-size: 2.5rem; display: block; margin-bottom: 0.75rem; }

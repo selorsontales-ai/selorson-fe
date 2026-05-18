@@ -38,16 +38,16 @@
 				<table class="crud-table"><thead><tr><th>User</th><th>Email</th><th>Lý do</th><th>Thời hạn</th><th>Ban bởi</th><th>Ngày</th><th>Thao tác</th></tr></thead>
 				<tbody>{#if !bannedUsers.length}<tr><td colspan="7" class="empty-row">Không có 🎉</td></tr>{/if}
 				{#each bannedUsers as user (user.id)}
-					<tr><td><strong>{user.name}</strong> <span class="meta">@{user.username}</span></td><td>{user.email}</td><td class="cell-trunc">{user.ban_reason}</td><td>{#if user.banned_until}<span class="badge badge-yellow">{formatDate(user.banned_until)}</span>{:else}<span class="badge badge-red">Vĩnh viễn</span>{/if}</td><td>{user.banned_by_admin?.name ?? '—'}</td><td class="cell-date">{formatDate(user.banned_at)}</td><td><button class="btn-unban" onclick={() => unbanUser(user)}>✅ Unban</button></td></tr>
+					<tr><td data-label="User"><strong>{user.name}</strong> <span class="meta">@{user.username}</span></td><td data-label="Email">{user.email}</td><td data-label="Lý do" class="cell-trunc">{user.ban_reason}</td><td data-label="Thời hạn">{#if user.banned_until}<span class="badge badge-yellow">{formatDate(user.banned_until)}</span>{:else}<span class="badge badge-red">Vĩnh viễn</span>{/if}</td><td data-label="Ban bởi">{user.banned_by_admin?.name ?? '—'}</td><td data-label="Ngày" class="cell-date">{formatDate(user.banned_at)}</td><td data-label="Thao tác" class="td-actions"><button class="btn-unban" onclick={() => unbanUser(user)}>✅ Unban</button></td></tr>
 				{/each}</tbody></table>
 			{:else if activeTab === 'logins'}
 				<table class="crud-table"><thead><tr><th>Email</th><th>IP</th><th>Số lần</th><th>Lần cuối</th></tr></thead>
 				<tbody>{#if !loginAttempts.length}<tr><td colspan="4" class="empty-row">Không có 🎉</td></tr>{/if}
-				{#each loginAttempts as a, idx}<tr><td><strong>{a.email}</strong></td><td><code class="ip">{a.ip_address}</code></td><td><span class="badge {a.attempts >= 5 ? 'badge-red' : a.attempts >= 3 ? 'badge-yellow' : 'badge-blue'}">{a.attempts} lần</span></td><td class="cell-date">{formatDateTime(a.last_attempt)}</td></tr>{/each}</tbody></table>
+				{#each loginAttempts as a, idx}<tr><td data-label="Email"><strong>{a.email}</strong></td><td data-label="IP"><code class="ip">{a.ip_address}</code></td><td data-label="Số lần"><span class="badge {a.attempts >= 5 ? 'badge-red' : a.attempts >= 3 ? 'badge-yellow' : 'badge-blue'}">{a.attempts} lần</span></td><td data-label="Lần cuối" class="cell-date">{formatDateTime(a.last_attempt)}</td></tr>{/each}</tbody></table>
 			{:else}
 				<table class="crud-table"><thead><tr><th>Admin</th><th>Hành động</th><th>Đối tượng</th><th>ID</th><th>IP</th><th>Thời gian</th></tr></thead>
 				<tbody>{#if !auditLogs.length}<tr><td colspan="6" class="empty-row">Chưa có</td></tr>{/if}
-				{#each auditLogs as log (log.id)}<tr><td><strong>{log.admin_name}</strong></td><td><span class="badge {actionClass(log.action)}">{actionLabel(log.action)}</span></td><td>{log.resource_type}</td><td>{log.resource_id ?? '—'}</td><td><code class="ip">{log.ip_address}</code></td><td class="cell-date">{formatDateTime(log.created_at)}</td></tr>{/each}</tbody></table>
+				{#each auditLogs as log (log.id)}<tr><td data-label="Admin"><strong>{log.admin_name}</strong></td><td data-label="Hành động"><span class="badge {actionClass(log.action)}">{actionLabel(log.action)}</span></td><td data-label="Đối tượng">{log.resource_type}</td><td data-label="ID">{log.resource_id ?? '—'}</td><td data-label="IP"><code class="ip">{log.ip_address}</code></td><td data-label="Thời gian" class="cell-date">{formatDateTime(log.created_at)}</td></tr>{/each}</tbody></table>
 			{/if}
 		</div>
 	{/if}

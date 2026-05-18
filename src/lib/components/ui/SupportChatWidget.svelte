@@ -5,7 +5,8 @@
 	import {
 		fetchActiveConversation, sendSupportMessage, fetchUnreadCount,
 		rateTicket, markSupportRead, getSupportMessages, getActiveConversation,
-		getSupportUnread, isSupportSending, createTicket, closeTicket
+		getSupportUnread, isSupportSending, createTicket, closeTicket,
+		isChatWidgetHidden, setChatWidgetHidden
 	} from '$lib/stores/support.svelte';
 	import * as m from '$lib/paraglide/messages';
 
@@ -17,9 +18,67 @@
 	let isStaffOnline = $state(false);
 	let messagesEl = $state<HTMLDivElement>();
 
+	// Drag to dismiss states
+	let isDragging = $state(false);
+	let dragX = $state(0);
+	let dragY = $state(0);
+	let startX = $state(0);
+	let startY = $state(0);
+	let showDismissZone = $state(false);
+	let isHoveringZone = $state(false);
+
 	function scrollBottom() { setTimeout(() => { if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight; }, 50); }
 
-	async function toggle() {
+	function closeWidget(e?: Event) {
+		if (e) {
+			e.stopPropagation();
+			e.preventDefault();
+		}
+		setChatWidgetHidden(true);
+		isOpen = false;
+	}
+
+	function handleTouchStart(e: TouchEvent) {
+		if (isOpen) return; // Don't drag if open
+		isDragging = true;
+		startX = e.touches[0].clientX - dragX;
+		startY = e.touches[0].clientY - dragY;
+		setTimeout(() => {
+			if (isDragging) showDismissZone = true;
+		}, 200);
+	}
+
+	function handleTouchMove(e: TouchEvent) {
+		if (!isDragging) return;
+		e.preventDefault(); // Prevent scrolling while dragging
+		dragX = e.touches[0].clientX - startX;
+		dragY = e.touches[0].clientY - startY;
+
+		// Check if inside dismiss zone (bottom 100px)
+		const windowHeight = window.innerHeight;
+		if (e.touches[0].clientY > windowHeight - 100) {
+			isHoveringZone = true;
+		} else {
+			isHoveringZone = false;
+		}
+	}
+
+	function handleTouchEnd(e: TouchEvent) {
+		if (!isDragging) return;
+		isDragging = false;
+		showDismissZone = false;
+		if (isHoveringZone) {
+			closeWidget();
+		}
+		// Reset position
+		dragX = 0;
+		dragY = 0;
+		isHoveringZone = false;
+	}
+
+	async function toggle(e?: Event) {
+		if (isDragging) return; // Prevent toggle if it was a drag
+		if (e && (e.target as HTMLElement).closest('.fab-close')) return;
 		isOpen = !isOpen;
 		if (isOpen) {
 			await fetchActiveConversation();
@@ -89,16 +148,36 @@
 	});
 </script>
 
-{#if isAuthenticated()}
-<div class="support-widget">
+{#if isAuthenticated() && !isChatWidgetHidden()}
+<div class="support-widget" style="transform: translate({dragX}px, {dragY}px);">
 	<!-- FAB Button -->
-	<button class="support-fab" class:active={isOpen} class:has-unread={getSupportUnread() > 0 && !isOpen} onclick={toggle}>
-		{#if isOpen}<span class="fab-icon">✕</span>{:else}<span class="fab-icon">💬</span>{/if}
+	<div class="support-fab" class:active={isOpen} class:has-unread={getSupportUnread() > 0 && !isOpen} class:dragging={isDragging}
+		role="button"
+		tabindex="0"
+		onclick={toggle}
+		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e); } }}
+		ontouchstart={handleTouchStart}
+		ontouchmove={handleTouchMove}
+		ontouchend={handleTouchEnd}
+	>
+		{#if isOpen}
+			<span class="fab-icon">✕</span>
+		{:else}
+			<img src="/images/ST.jpg" alt="Support" class="fab-image" />
+			<button class="fab-close" onclick={closeWidget} title="Tắt hỗ trợ" aria-label="Close">✕</button>
+		{/if}
 		{#if getSupportUnread() > 0 && !isOpen}
 			<span class="fab-badge">{getSupportUnread() > 9 ? '9+' : getSupportUnread()}</span>
 		{/if}
 		{#if !isOpen}<span class="fab-pulse"></span>{/if}
-	</button>
+	</div>
+
+	{#if showDismissZone}
+	<div class="dismiss-zone" class:hovering={isHoveringZone}>
+		<span class="dismiss-icon">🗑️</span>
+		<span>Kéo vào đây để tắt</span>
+	</div>
+	{/if}
 
 	<!-- Chat Window -->
 	{#if isOpen}
@@ -164,15 +243,28 @@
 {/if}
 
 <style>
-	.support-widget{position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;font-family:var(--font-sans)}
-	.support-fab{position:relative;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#0c713d,#085a30);border:none;box-shadow:0 4px 20px rgba(12,113,61,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .3s}
+	.support-widget{position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;font-family:var(--font-sans);transition:transform 0.1s}
+	.support-fab{position:relative;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#0c713d,#085a30);border:none;box-shadow:0 4px 20px rgba(12,113,61,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .3s;user-select:none;touch-action:none}
+	.support-fab.dragging{transition:none;transform:scale(1.1);opacity:0.9;z-index:10001}
 	.support-fab:hover{transform:scale(1.1);box-shadow:0 6px 28px rgba(12,113,61,.5)}
 	.support-fab.active{background:linear-gradient(135deg,#dc2626,#b91c1c);box-shadow:0 4px 20px rgba(220,38,38,.4)}
 	.fab-icon{font-size:1.5rem;color:#fff}
+	.fab-image{width:100%;height:100%;object-fit:cover;border-radius:50%}
+	.fab-close{position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;background:#ef4444;color:white;border:2px solid var(--color-surface-50);display:none;align-items:center;justify-content:center;font-size:0.75rem;font-weight:bold;cursor:pointer;z-index:10;box-shadow:0 2px 5px rgba(0,0,0,0.2)}
+	@media (hover: hover) {
+		.support-fab:not(.active):hover .fab-close { display: flex; }
+		.support-fab.dragging .fab-close { display: none !important; }
+	}
+	.fab-close:hover{background:#dc2626;transform:scale(1.1)}
 	.support-fab.active .fab-icon{font-size:1.25rem;font-weight:700}
-	.fab-badge{position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:.625rem;font-weight:700;min-width:20px;height:20px;border-radius:10px;display:flex;align-items:center;justify-content:center;padding:0 4px;border:2px solid var(--color-surface-50);animation:badge-pop .3s ease}
+	.fab-badge{position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:.625rem;font-weight:700;min-width:20px;height:20px;border-radius:10px;display:flex;align-items:center;justify-content:center;padding:0 4px;border:2px solid var(--color-surface-50);animation:badge-pop .3s ease;z-index:5}
 	.fab-pulse{position:absolute;inset:-4px;border-radius:50%;border:2px solid rgba(12,113,61,.4);animation:pulse-ring 2s infinite ease-out;pointer-events:none}
 	.support-fab.active .fab-pulse{display:none}
+
+	.dismiss-zone{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);width:200px;height:60px;background:rgba(0,0,0,0.7);backdrop-filter:blur(10px);border-radius:30px;display:flex;align-items:center;justify-content:center;gap:10px;color:white;font-weight:600;font-size:0.9rem;z-index:10000;border:2px dashed rgba(255,255,255,0.3);animation:fadeUp 0.3s ease;pointer-events:none}
+	.dismiss-zone.hovering{background:rgba(239,68,68,0.9);border-color:#ef4444;transform:translateX(-50%) scale(1.1)}
+	.dismiss-icon{font-size:1.2rem}
+	@keyframes fadeUp{from{opacity:0;transform:translate(-50%,20px)}to{opacity:1;transform:translate(-50%,0)}}
 
 	.chat-window{position:absolute;bottom:calc(100% + .75rem);right:0;width:380px;max-width:calc(100vw - 2rem);height:520px;max-height:calc(100vh - 6rem);background:var(--color-surface-100);border-radius:1rem;box-shadow:0 12px 40px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;overflow:hidden;animation:chatIn .3s ease}
 	@keyframes chatIn{from{opacity:0;transform:translateY(20px) scale(.95)}to{opacity:1;transform:none}}

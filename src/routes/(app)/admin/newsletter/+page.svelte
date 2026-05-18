@@ -61,7 +61,7 @@
 			<tbody>
 				{#if !subs.length}<tr><td colspan="6" class="empty-row">Chưa có subscriber</td></tr>{/if}
 				{#each subs as sub (sub.id)}
-					<tr><td><input type="checkbox" value={sub.id} bind:group={selectedIds} /></td><td><strong>{sub.email}</strong></td><td><span class="badge {sub.unsubscribed_at ? 'bg-gray' : 'bg-green'}">{sub.unsubscribed_at ? 'Đã hủy' : 'Active'}</span></td><td class="cell-date">{formatDateTime(sub.subscribed_at ?? sub.created_at)}</td><td class="cell-date">{sub.unsubscribed_at ? formatDateTime(sub.unsubscribed_at) : '—'}</td><td><button class="btn-sm btn-red" onclick={() => deleteSub(sub.id)}>🗑</button></td></tr>
+					<tr><td data-label="Chọn"><input type="checkbox" value={sub.id} bind:group={selectedIds} /></td><td data-label="Email"><strong>{sub.email}</strong></td><td data-label="Trạng thái"><span class="badge {sub.unsubscribed_at ? 'bg-gray' : 'bg-green'}">{sub.unsubscribed_at ? 'Đã hủy' : 'Active'}</span></td><td data-label="Ngày đăng ký" class="cell-date">{formatDateTime(sub.subscribed_at ?? sub.created_at)}</td><td data-label="Ngày hủy" class="cell-date">{sub.unsubscribed_at ? formatDateTime(sub.unsubscribed_at) : '—'}</td><td data-label="Thao tác" class="td-actions"><button class="btn-sm btn-red" onclick={() => deleteSub(sub.id)}>🗑</button></td></tr>
 				{/each}
 			</tbody></table>
 		</div>
@@ -86,12 +86,12 @@
 				{#if !broadcasts.length}<tr><td colspan="6" class="empty-row">Chưa gửi bản tin nào</td></tr>{/if}
 				{#each broadcasts as bc (bc.id)}
 					<tr>
-						<td>#{bc.id}</td>
-						<td><strong>{bc.subject}</strong></td>
-						<td class="cell-num">{bc.recipient_count}</td>
-						<td><span class="badge {bc.status === 'sent' ? 'bg-green' : 'bg-yellow'}">{bc.status}</span></td>
-						<td class="cell-date">{bc.sent_at ? formatDateTime(bc.sent_at) : '—'}</td>
-						<td>
+						<td data-label="ID">#{bc.id}</td>
+						<td data-label="Tiêu đề"><strong>{bc.subject}</strong></td>
+						<td data-label="Số người nhận" class="cell-num">{bc.recipient_count}</td>
+						<td data-label="Trạng thái"><span class="badge {bc.status === 'sent' ? 'bg-green' : 'bg-yellow'}">{bc.status}</span></td>
+						<td data-label="Ngày gửi" class="cell-date">{bc.sent_at ? formatDateTime(bc.sent_at) : '—'}</td>
+						<td data-label="Thao tác" class="td-actions">
 							<button class="btn-sm btn-view" onclick={() => viewBroadcast = bc}>👁 Xem</button>
 							<button class="btn-sm btn-red" onclick={() => deleteBroadcast(bc.id)}>🗑</button>
 						</td>

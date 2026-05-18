@@ -35,7 +35,7 @@
 <section class="lib-page">
 	<div class="page-header">
 		<h1 class="section-title">{m.lib_list_title()}</h1>
-		<p class="page-sub">{m.lib_list_subtitle()}</p>
+		<p class="page-subtitle">{m.lib_list_subtitle()}</p>
 	</div>
 
 	<div class="filters">
@@ -72,8 +72,6 @@
 
 <style>
 	.lib-page{max-width:1100px;margin:0 auto;padding:3rem 1.5rem 6rem}
-	.page-header{text-align:center;margin-bottom:2rem}
-	.page-sub{color:var(--color-text-muted);margin-top:.5rem}
 	.filters{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;margin-bottom:2.5rem}
 	.filter-btn{padding:.45rem .9rem;border:1px solid rgba(255,255,255,.08);border-radius:999px;background:transparent;color:var(--color-text-muted);font-size:.82rem;cursor:pointer;transition:all .2s;font-family:inherit}
 	.filter-btn:hover{border-color:var(--color-brand-500);color:var(--color-text-primary)}

@@ -436,5 +436,6 @@
   "crop_cancel": "Cancel",
   "verify_resend_wait": "Resend ({n}s)",
   "verify_resend": "Resend code",
-  "verify_ph_code": "Enter 6-digit code"
+  "verify_ph_code": "Enter 6-digit code",
+  "home_explore": "Explore"
 }

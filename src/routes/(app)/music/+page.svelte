@@ -144,7 +144,7 @@
 <section class="music-page">
 	<div class="page-header">
 		<h1 class="section-title">{m.music_list_title()}</h1>
-		<p class="page-sub">{m.music_list_subtitle()}</p>
+		<p class="page-subtitle">{m.music_list_subtitle()}</p>
 	</div>
 
 	{#if loading}
@@ -262,8 +262,6 @@
 
 <style>
 	.music-page{max-width:900px;margin:0 auto;padding:3rem 1.5rem 8rem}
-	.page-header{text-align:center;margin-bottom:3rem}
-	.page-sub{color:var(--color-text-muted);margin-top:.5rem}
 	.loading,.empty{text-align:center;padding:4rem;color:var(--color-text-muted)}
 	.empty span{font-size:3rem;display:block;margin-bottom:1rem}
 

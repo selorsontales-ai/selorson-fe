@@ -66,7 +66,7 @@
 				{#each items as item (item.id ?? Math.random())}
 					<tr>
 						{#each columns as col}
-							<td>
+							<td data-label={col.label}>
 								{#if col.type === 'boolean'}
 									<span class="badge {item[col.key] ? 'badge-green' : 'badge-gray'}">
 										{item[col.key] ? '✓' : '✗'}
@@ -93,7 +93,7 @@
 							</td>
 						{/each}
 						{#if showActions}
-							<td class="td-actions">
+							<td class="td-actions" data-label="Thao tác">
 								<button class="btn-edit" onclick={() => onedit?.(item)} title="Chỉnh sửa">✏️</button>
 								{#if showDelete}
 									<button class="btn-delete" onclick={() => ondelete?.(item)} title="Xóa">🗑️</button>
@@ -275,11 +275,60 @@
 		transition: all 0.2s;
 	}
 
-	.btn-edit:hover {
-		background: rgba(12, 113, 61, 0.1);
-	}
-
 	.btn-delete:hover {
 		background: rgba(239, 68, 68, 0.1);
+	}
+
+	@media (max-width: 768px) {
+		.crud-header {
+			flex-direction: column;
+			gap: 1rem;
+			align-items: flex-start;
+		}
+		.crud-table thead {
+			display: none;
+		}
+		.crud-table, .crud-table tbody {
+			display: block;
+			width: 100%;
+		}
+		.crud-table tr {
+			display: flex;
+			flex-direction: column;
+			margin-bottom: 1rem;
+			border: 1px solid rgba(255, 255, 255, 0.1);
+			border-radius: var(--radius-md);
+			background: var(--color-surface-200);
+			padding: 0.5rem;
+		}
+		:global(html[data-theme='light']) .crud-table tr {
+			border-color: rgba(0, 0, 0, 0.1);
+			background: #f9fafb;
+		}
+		.crud-table td {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 0.5rem !important;
+			border: none !important;
+			border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+		}
+		:global(html[data-theme='light']) .crud-table td {
+			border-bottom-color: rgba(0, 0, 0, 0.05) !important;
+		}
+		.crud-table td:last-child {
+			border-bottom: none !important;
+		}
+		.crud-table td::before {
+			content: attr(data-label);
+			font-weight: 600;
+			color: var(--color-text-muted);
+			font-size: 0.75rem;
+			text-transform: uppercase;
+			margin-right: 1rem;
+		}
+		.td-actions {
+			justify-content: flex-end !important;
+		}
 	}
 </style>

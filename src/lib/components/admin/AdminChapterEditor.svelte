@@ -859,6 +859,60 @@
 	.image-caption-input { flex: 1; padding: 0.4rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.85rem; background: var(--color-surface-100); color: var(--color-text-primary); }
 	.rotation-label { font-size: 0.85rem; color: var(--color-text-secondary); display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; }
 	.rotation-slider { width: 100px; cursor: pointer; accent-color: var(--color-brand-500); }
+
+	@media (max-width: 768px) {
+		.editor-container {
+			flex-direction: column;
+		}
+		.asset-sidebar {
+			width: 100%;
+			height: auto;
+			max-height: 50vh;
+			position: static;
+		}
+		.header-top {
+			flex-direction: column;
+			gap: 0.75rem;
+		}
+		.title-input {
+			font-size: 1.25rem;
+			width: 100%;
+		}
+		.header-meta {
+			flex-direction: column;
+			align-items: stretch;
+		}
+		.toolbar {
+			justify-content: flex-start;
+			padding: 0.5rem;
+		}
+		.block-wrapper {
+			padding-left: 2.25rem;
+		}
+		.block-controls {
+			width: 2rem;
+		}
+		.tag-chip {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0.5rem;
+			padding: 0.75rem;
+		}
+		.role-select {
+			width: 100%;
+			padding: 0.5rem;
+		}
+		.tag-remove {
+			align-self: flex-end;
+		}
+		.btn-save, .btn-secondary {
+			width: 100%;
+		}
+		.image-meta-inputs {
+			flex-direction: column;
+			align-items: stretch;
+		}
+	}
 </style>
 
 {#if showImportConfirm}

@@ -275,7 +275,7 @@
 	.quote-mark { font-size: 2.5rem; font-weight: 900; color: rgba(12,113,61,.25); line-height: 0; vertical-align: -.5rem; }
 
 	/* Section titles */
-	.section-title { text-align: center; font-size: 1.75rem; font-weight: 800; margin: 0 0 2.5rem; }
+
 
 	/* Parchment Poem */
 	.poem-scroll { padding: 1.5rem; border-radius: 1rem; background: linear-gradient(135deg, #2a2416 0%, #1f1a10 100%); border-left: 6px solid #8b7355; border-right: 6px solid #8b7355; box-shadow: inset 0 0 10px rgba(0,0,0,.08), 0 4px 20px rgba(0,0,0,.1); }
