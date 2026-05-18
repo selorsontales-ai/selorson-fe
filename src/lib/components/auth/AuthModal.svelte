@@ -18,6 +18,7 @@
 	let username = $state('');
 	let passwordConfirm = $state('');
 	let rememberMe = $state(false);
+	let showPassword = $state(false);
 
 	// Forgot password fields
 	let resetCode = $state('');
@@ -246,14 +247,17 @@
 					</div>
 					<div class="field">
 						<label for="auth-password">{m.auth_label_password()}</label>
-						<input
-							id="auth-password"
-							type="password"
-							bind:value={password}
-							placeholder="••••••••"
-							required
-							minlength="8"
-						/>
+						<div class="pwd-wrap">
+							<input
+								id="auth-password"
+								type={showPassword ? 'text' : 'password'}
+								bind:value={password}
+								placeholder="••••••••"
+								required
+								minlength="8"
+							/>
+							<button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button>
+						</div>
 					</div>
 
 					<div class="login-options">
@@ -346,24 +350,30 @@
 					</div>
 					<div class="field">
 						<label for="auth-password-reg">{m.auth_label_password()}</label>
-						<input
-							id="auth-password-reg"
-							type="password"
-							bind:value={password}
-							placeholder="••••••••"
-							required
-							minlength="8"
-						/>
+						<div class="pwd-wrap">
+							<input
+								id="auth-password-reg"
+								type={showPassword ? 'text' : 'password'}
+								bind:value={password}
+								placeholder="••••••••"
+								required
+								minlength="8"
+							/>
+							<button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button>
+						</div>
 					</div>
 					<div class="field">
 						<label for="auth-password-confirm">{m.auth_label_confirm_password()}</label>
-						<input
-							id="auth-password-confirm"
-							type="password"
-							bind:value={passwordConfirm}
-							placeholder="••••••••"
-							required
-						/>
+						<div class="pwd-wrap">
+							<input
+								id="auth-password-confirm"
+								type={showPassword ? 'text' : 'password'}
+								bind:value={passwordConfirm}
+								placeholder="••••••••"
+								required
+							/>
+							<button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button>
+						</div>
 					</div>
 					<button class="btn-brand submit-btn" type="submit" disabled={loading}>
 						{#if loading}
@@ -421,24 +431,30 @@
 					</div>
 					<div class="field">
 						<label for="reset-password">{m.auth_label_new_password()}</label>
-						<input
-							id="reset-password"
-							type="password"
-							bind:value={newPassword}
-							placeholder="••••••••"
-							required
-							minlength="8"
-						/>
+						<div class="pwd-wrap">
+							<input
+								id="reset-password"
+								type={showPassword ? 'text' : 'password'}
+								bind:value={newPassword}
+								placeholder="••••••••"
+								required
+								minlength="8"
+							/>
+							<button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button>
+						</div>
 					</div>
 					<div class="field">
 						<label for="reset-password-confirm">{m.auth_label_confirm_password()}</label>
-						<input
-							id="reset-password-confirm"
-							type="password"
-							bind:value={newPasswordConfirm}
-							placeholder="••••••••"
-							required
-						/>
+						<div class="pwd-wrap">
+							<input
+								id="reset-password-confirm"
+								type={showPassword ? 'text' : 'password'}
+								bind:value={newPasswordConfirm}
+								placeholder="••••••••"
+								required
+							/>
+							<button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button>
+						</div>
 					</div>
 					<button class="btn-brand submit-btn" type="submit" disabled={loading}>
 						{#if loading}
@@ -910,5 +926,37 @@
 	.resend-btn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	/* ---- Light Mode Overrides ---- */
+	:global(html[data-theme="light"]) .modal-content {
+		background: var(--color-surface-0);
+		border-color: rgba(0, 0, 0, 0.1);
+		box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15);
+	}
+	:global(html[data-theme="light"]) .close-btn {
+		background: rgba(0, 0, 0, 0.05);
+	}
+	:global(html[data-theme="light"]) .close-btn:hover {
+		background: rgba(0, 0, 0, 0.1);
+	}
+	:global(html[data-theme="light"]) .field input {
+		border-color: rgba(0, 0, 0, 0.15);
+		background: var(--color-surface-50);
+	}
+	:global(html[data-theme="light"]) .divider::before,
+	:global(html[data-theme="light"]) .divider::after {
+		background: rgba(0, 0, 0, 0.1);
+	}
+	:global(html[data-theme="light"]) .social-btn {
+		border-color: rgba(0, 0, 0, 0.15);
+		background: var(--color-surface-50);
+	}
+	:global(html[data-theme="light"]) .social-btn:hover {
+		background: rgba(0, 0, 0, 0.03);
+		border-color: rgba(0, 0, 0, 0.25);
+	}
+	:global(html[data-theme="light"]) .resend-btn {
+		border-color: rgba(0, 0, 0, 0.15);
 	}
 </style>

@@ -11,6 +11,7 @@
 	let loading = $state(false);
 	let error = $state('');
 	let success = $state('');
+	let showPassword = $state(false);
 
 	async function sendCode() {
 		error = '';
@@ -89,10 +90,16 @@
 
 		{:else}
 			<label>Mật khẩu mới
-			<input type="password" bind:value={password} placeholder={m.forgot_ph_password()} />
+				<div class="pwd-wrap">
+					<input type={showPassword ? 'text' : 'password'} bind:value={password} placeholder={m.forgot_ph_password()} />
+					<button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button>
+				</div>
 			</label>
 			<label>{m.auth_label_confirm_password()}
-				<input type="password" bind:value={confirmPw} placeholder={m.forgot_ph_confirm()} />
+				<div class="pwd-wrap">
+					<input type={showPassword ? 'text' : 'password'} bind:value={confirmPw} placeholder={m.forgot_ph_confirm()} />
+					<button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button>
+				</div>
 			</label>
 			<button class="btn-brand full" onclick={resetPassword} disabled={loading}>
 				{loading ? 'Đang đổi...' : 'Đổi mật khẩu'}

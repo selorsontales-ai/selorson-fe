@@ -14,6 +14,7 @@
 	let show2FASetup = $state(false);
 	let saving = $state(false);
 	let message = $state('');
+	let showPassword = $state(false);
 
 	// Password
 	let currentPass = $state('');
@@ -159,9 +160,9 @@
 			<!-- Password -->
 			<section class="card">
 				<h2>🔑 {getUser()?.has_password ? m.settings_pwd_change() : m.settings_pwd_create()}</h2>
-				{#if getUser()?.has_password}<label>{m.settings_pwd_current()}<input type="password" bind:value={currentPass} placeholder="••••••••" /></label>{/if}
-				<label>{m.settings_pwd_new()}<input type="password" bind:value={newPass} placeholder="••••••••" /></label>
-				<label>{m.settings_pwd_confirm()}<input type="password" bind:value={confirmPass} placeholder="••••••••" /></label>
+				{#if getUser()?.has_password}<label>{m.settings_pwd_current()}<div class="pwd-wrap"><input type={showPassword?'text':'password'} bind:value={currentPass} placeholder="••••••••" /><button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button></div></label>{/if}
+				<label>{m.settings_pwd_new()}<div class="pwd-wrap"><input type={showPassword?'text':'password'} bind:value={newPass} placeholder="••••••••" /><button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button></div></label>
+				<label>{m.settings_pwd_confirm()}<div class="pwd-wrap"><input type={showPassword?'text':'password'} bind:value={confirmPass} placeholder="••••••••" /><button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button></div></label>
 				<button class="btn-save danger-bg" onclick={changePassword} disabled={saving}>🔑 {getUser()?.has_password ? m.settings_pwd_change() : m.settings_pwd_create()}</button>
 			</section>
 
@@ -236,7 +237,7 @@
 				<h2>{m.settings_delete_title()}</h2>
 				<p class="hint danger-text">{m.settings_delete_desc()}</p>
 				{#if showDeleteConfirm}
-					<label>{m.settings_delete_pwd()}<input type="password" bind:value={deletePassword} placeholder="••••••••" /></label>
+					<label>{m.settings_delete_pwd()}<div class="pwd-wrap"><input type={showPassword?'text':'password'} bind:value={deletePassword} placeholder="••••••••" /><button type="button" class="pwd-toggle" onclick={() => showPassword = !showPassword}>{showPassword ? '🙈' : '👁️'}</button></div></label>
 					<label>{m.settings_delete_confirm_label()}<input bind:value={deleteConfirmText} placeholder="DELETE" /></label>
 					<div class="delete-actions">
 						<button class="btn-danger" disabled={deleteConfirmText !== 'DELETE'} onclick={deleteAccount}>{m.settings_btn_delete_forever()}</button>

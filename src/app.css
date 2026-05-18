@@ -243,6 +243,31 @@
   .pulse-glow {
     animation: pulseGlow 3s ease-in-out infinite;
   }
+
+  /* Password Input Toggle */
+  .pwd-wrap {
+    position: relative;
+    width: 100%;
+  }
+  .pwd-toggle {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+  }
+  .pwd-toggle:hover {
+    color: var(--color-brand-400);
+  }
 }
 
 /* ============================================

@@ -589,8 +589,8 @@
 		.slide-content, .welcome-content { padding: 2rem; }
 		.slide-title { font-size: 1.75rem; }
 		.welcome-title { font-size: 2.5rem; }
-		.welcome-actions { flex-direction: column; width: 100%; }
-		.welcome-actions a { width: 100%; text-align: center; }
+		.welcome-actions { flex-direction: row; flex-wrap: nowrap; gap: 0.5rem; justify-content: center; width: 100%; }
+		.welcome-actions a { width: auto; flex: 1; padding: 0.75rem 0.5rem; font-size: 0.85rem; text-align: center; white-space: nowrap; max-width: 180px; }
 		.vote-panel { max-width: 100%; }
 	}
 
