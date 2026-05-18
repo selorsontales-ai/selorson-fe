@@ -91,9 +91,7 @@ export async function register(data: {
 		body: JSON.stringify(data),
 	});
 
-	state.token = res.data.token;
-	state.user = res.data.user;
-	saveToken(res.data.token);
+	// No JWT returned — user must verify email first
 	return res;
 }
 

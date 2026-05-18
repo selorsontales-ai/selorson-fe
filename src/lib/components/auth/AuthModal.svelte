@@ -62,6 +62,13 @@
 			open = false;
 			resetForm();
 		} catch (err: any) {
+			if (err.requires_verification) {
+				mode = 'verify';
+				error = '';
+				successMsg = err.message || 'Vui lòng xác nhận email trước khi đăng nhập.';
+				loading = false;
+				return;
+			}
 			error = err.message || m.auth_err_default();
 		} finally {
 			loading = false;
@@ -148,9 +155,8 @@
 			await verifyEmail(email, verifyCode);
 			successMsg = m.auth_success_verify();
 			setTimeout(() => {
-				open = false;
-				resetForm();
-				mode = 'login';
+				switchMode('login');
+				successMsg = 'Email đã xác nhận thành công! Hãy đăng nhập. 🎉';
 			}, 1500);
 		} catch (err: any) {
 			error = err.message || m.auth_err_invalid_code();
@@ -179,7 +185,7 @@
 	}
 
 	function handleBackdrop() {
-		if (!loading) {
+		if (!loading && mode !== 'verify') {
 			open = false;
 			resetForm();
 			mode = 'login';
@@ -204,7 +210,9 @@
 			<!-- Header -->
 			<div class="modal-header">
 				<h2>{titles[mode]}</h2>
-				<button class="close-btn" onclick={() => handleBackdrop()} aria-label="Close">✕</button>
+				{#if mode !== 'verify'}
+					<button class="close-btn" onclick={() => handleBackdrop()} aria-label="Close">✕</button>
+				{/if}
 			</div>
 
 			{#if mode === 'login' || mode === 'register'}
@@ -424,7 +432,7 @@
 							placeholder="123456"
 							required
 							maxlength="6"
-							pattern="[0-9]{6}"
+							pattern={'[0-9]{6}'}
 							inputmode="numeric"
 							class="code-input"
 						/>
@@ -482,7 +490,7 @@
 								placeholder="123456"
 								required
 								maxlength="6"
-								pattern="[0-9]{6}"
+								pattern={'[0-9]{6}'}
 								inputmode="numeric"
 								class="code-input"
 								autocomplete="one-time-code"
@@ -509,9 +517,7 @@
 								{m.auth_btn_resend()}
 							{/if}
 						</button>
-						<button class="back-link" onclick={() => { open = false; resetForm(); mode = 'login'; }}>
-							{m.auth_btn_skip()}
-						</button>
+
 					</div>
 			{/if}
 

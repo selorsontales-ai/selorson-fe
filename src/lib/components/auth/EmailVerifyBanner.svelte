@@ -1,6 +1,6 @@
 <!-- Email Verification Banner — shown for logged-in users with unverified email -->
 <script lang="ts">
-	import { getUser, isAuthenticated, isEmailVerified, verifyEmail, resendVerification } from '$lib/stores/auth.svelte';
+	import { getUser, isAuthenticated, isEmailVerified, verifyEmail, resendVerification, fetchMe } from '$lib/stores/auth.svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	let showVerifyForm = $state(false);
@@ -9,7 +9,6 @@
 	let error = $state('');
 	let successMsg = $state('');
 	let resendCooldown = $state(0);
-	let dismissed = $state(false);
 
 	async function handleVerify(e: Event) {
 		e.preventDefault();
@@ -20,7 +19,7 @@
 		try {
 			await verifyEmail(user.email, verifyCode);
 			successMsg = 'Email đã xác nhận thành công! 🎉';
-			setTimeout(() => { dismissed = true; }, 1500);
+			setTimeout(() => { fetchMe(); }, 1500);
 		} catch (err: any) {
 			error = err.message || 'Mã không đúng hoặc đã hết hạn';
 		} finally {
@@ -49,7 +48,7 @@
 	}
 </script>
 
-{#if isAuthenticated() && !isEmailVerified() && !dismissed}
+{#if isAuthenticated() && !isEmailVerified()}
 	<div class="verify-banner">
 		<div class="verify-banner-inner">
 			{#if !showVerifyForm}
@@ -61,7 +60,6 @@
 					<button class="banner-btn" onclick={() => showVerifyForm = true}>
 						Xác nhận ngay
 					</button>
-					<button class="banner-dismiss" onclick={() => dismissed = true} aria-label="Đóng">✕</button>
 				</div>
 			{:else}
 				{#if successMsg}
@@ -76,7 +74,7 @@
 						bind:value={verifyCode}
 						placeholder={m.verify_ph_code()}
 						maxlength="6"
-						pattern="[0-9]{6}"
+						pattern={'[0-9]{6}'}
 						inputmode="numeric"
 						required
 						class="banner-input"
