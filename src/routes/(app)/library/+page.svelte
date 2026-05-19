@@ -80,11 +80,11 @@
 	.lib-content{max-width:1100px;margin:0 auto;padding:0 1.5rem 6rem}
 
 	/* ===== Hero ===== */
-	.page-hero{position:relative;text-align:center;padding:3.5rem 2rem 2.5rem;background:linear-gradient(135deg,var(--color-brand-800) 0%,var(--color-brand-500) 50%,var(--color-brand-700) 100%);overflow:hidden;margin-bottom:2rem}
+	.page-hero{position:relative;text-align:center;padding:3.5rem 2rem 2.5rem;background:var(--color-surface-0);overflow:hidden;margin-bottom:2rem}
 	.hero-content{position:relative;z-index:1}
-	.page-hero h1{font-size:2.5rem;font-weight:800;color:#fff;margin:0 0 .375rem;text-shadow:0 2px 12px rgba(0,0,0,.3)}
-	.hero-tagline{color:rgba(255,255,255,.8);font-size:1.05rem;margin:0;font-weight:400}
-	.hero-glow{position:absolute;top:-50%;left:50%;transform:translateX(-50%);width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,rgba(74,222,128,.12) 0%,transparent 70%);pointer-events:none}
+	.page-hero h1{font-size:2.5rem;font-weight:800;color:var(--color-text-primary);margin:0 0 .375rem}
+	.hero-tagline{color:var(--color-text-muted);font-size:1.05rem;margin:0;font-weight:400}
+	.hero-glow{position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 30%,rgba(12,113,61,.15),transparent),radial-gradient(ellipse 60% 50% at 80% 50%,rgba(6,182,212,.08),transparent);pointer-events:none}
 
 	.filters{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;margin-bottom:2.5rem}
 	.filter-btn{padding:.45rem .9rem;border:1px solid rgba(255,255,255,.08);border-radius:999px;background:transparent;color:var(--color-text-muted);font-size:.82rem;cursor:pointer;transition:all .2s;font-family:inherit}
