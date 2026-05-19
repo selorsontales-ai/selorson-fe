@@ -96,6 +96,63 @@
 	});
 	
 	let avatarError = $state(false);
+
+	// Custom Scrollbar Logic
+	let poemContainer = $state<HTMLElement | null>(null);
+	let thumbTop = $state(0);
+	let isDragging = $state(false);
+	let canScroll = $state(false);
+	let startY = 0;
+	let startScrollTop = 0;
+
+	function handlePoemScroll() {
+		if (!poemContainer || isDragging) return;
+		const { scrollTop, scrollHeight, clientHeight } = poemContainer;
+		const maxScroll = scrollHeight - clientHeight;
+		if (maxScroll <= 0) return;
+		const maxThumb = clientHeight - 24; // 24 is thumb height
+		thumbTop = (scrollTop / maxScroll) * maxThumb;
+	}
+
+	function startDrag(e: MouseEvent) {
+		isDragging = true;
+		startY = e.clientY;
+		startScrollTop = poemContainer?.scrollTop || 0;
+		window.addEventListener('mousemove', onDrag);
+		window.addEventListener('mouseup', stopDrag);
+		e.preventDefault();
+	}
+
+	function onDrag(e: MouseEvent) {
+		if (!isDragging || !poemContainer) return;
+		const deltaY = e.clientY - startY;
+		const { scrollHeight, clientHeight } = poemContainer;
+		const maxScroll = scrollHeight - clientHeight;
+		const maxThumb = clientHeight - 24;
+		
+		const scrollDelta = (deltaY / maxThumb) * maxScroll;
+		poemContainer.scrollTop = Math.max(0, Math.min(maxScroll, startScrollTop + scrollDelta));
+		thumbTop = (poemContainer.scrollTop / maxScroll) * maxThumb;
+	}
+
+	function stopDrag() {
+		isDragging = false;
+		window.removeEventListener('mousemove', onDrag);
+		window.removeEventListener('mouseup', stopDrag);
+	}
+
+	$effect(() => {
+		if (poemContainer) {
+			const checkScroll = () => {
+				canScroll = poemContainer!.scrollHeight > poemContainer!.clientHeight;
+				handlePoemScroll();
+			};
+			// Small delay to ensure content is rendered
+			setTimeout(checkScroll, 100);
+			window.addEventListener('resize', checkScroll);
+			return () => window.removeEventListener('resize', checkScroll);
+		}
+	});
 </script>
 
 <svelte:head>
@@ -143,15 +200,33 @@
 		<aside class="about-sidebar">
 			<div class="poem-scroll">
 				<h4 class="poem-scroll-title">{m.about_poem_title()}</h4>
-				<div class="poem-stanzas">
-					{#each poemStanzas as stanza}
-						<div class="poem-stanza">
-							{#each stanza as line}
-								<p>{line}</p>
-							{/each}
+				
+				<div class="poem-wrapper">
+					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+					<div class="poem-stanzas" bind:this={poemContainer} onscroll={handlePoemScroll} role="region" tabindex="0">
+						{#each poemStanzas as stanza}
+							<div class="poem-stanza">
+								{#each stanza as line}
+									<p>{line}</p>
+								{/each}
+							</div>
+						{/each}
+					</div>
+
+					{#if canScroll}
+						<div class="custom-scrollbar">
+							<div class="scroll-track"></div>
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
+							<div class="scroll-thumb" class:dragging={isDragging} style="top: {thumbTop}px" onmousedown={startDrag}>
+								<svg class="rune-star" viewBox="0 0 24 24" fill="currentColor">
+									<path d="M12 0L14 10L24 12L14 14L12 24L10 14L0 12L10 10Z" />
+								</svg>
+							</div>
 						</div>
-					{/each}
+					{/if}
 				</div>
+
 				<p class="poem-author">— Redfox —</p>
 			</div>
 
@@ -281,15 +356,34 @@
 	.poem-scroll { padding: 1.5rem; border-radius: 1rem; background: linear-gradient(135deg, #2a2416 0%, #1f1a10 100%); border-left: 6px solid #8b7355; border-right: 6px solid #8b7355; box-shadow: inset 0 0 10px rgba(0,0,0,.08), 0 4px 20px rgba(0,0,0,.1); }
 	:global(html[data-theme='light']) .poem-scroll { background: linear-gradient(135deg, #fdf4e3 0%, #f9ead5 100%); border-left-color: #d9b382; border-right-color: #d9b382; }
 	.poem-scroll-title { font-size: 1.125rem; font-weight: 700; color: var(--color-brand-400); text-align: center; margin: 0 0 1rem; }
-	.poem-stanzas { max-height: 400px; overflow-y: auto; padding-right: 0.5rem; scrollbar-width: thin; scrollbar-color: rgba(139, 115, 85, 0.5) transparent; }
-	.poem-stanzas::-webkit-scrollbar { width: 6px; }
-	.poem-stanzas::-webkit-scrollbar-track { background: transparent; }
-	.poem-stanzas::-webkit-scrollbar-thumb { background: rgba(139, 115, 85, 0.5); border-radius: 10px; }
-	.poem-stanzas::-webkit-scrollbar-thumb:hover { background: rgba(139, 115, 85, 0.8); }
+	
+	/* Magic Custom Scrollbar styles */
+	.poem-wrapper { position: relative; padding-right: 28px; }
+	.poem-stanzas {
+		max-height: 400px; overflow-y: auto; padding: 1rem 0;
+		-ms-overflow-style: none; scrollbar-width: none;
+		mask-image: linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%);
+		-webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%);
+	}
+	.poem-stanzas::-webkit-scrollbar { display: none; }
+	
+	.custom-scrollbar { position: absolute; top: 1rem; bottom: 1rem; right: 0; width: 24px; display: flex; justify-content: center; pointer-events: none; }
+	.scroll-track { position: absolute; top: 0; bottom: 0; width: 1px; background: linear-gradient(to bottom, transparent, rgba(200, 168, 75, 0.4), transparent); }
+	.scroll-thumb {
+		position: absolute; width: 24px; height: 24px; color: #c8a84b; cursor: grab; pointer-events: auto;
+		display: flex; align-items: center; justify-content: center;
+		transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.3s;
+		filter: drop-shadow(0 0 4px rgba(200, 168, 75, 0.5));
+	}
+	.scroll-thumb:active { cursor: grabbing; }
+	.scroll-thumb:hover, .scroll-thumb.dragging {
+		transform: scale(1.5) rotate(90deg);
+		filter: drop-shadow(0 0 10px rgba(200, 168, 75, 1));
+	}
+	.rune-star { width: 14px; height: 14px; fill: currentColor; }
+	
 	.poem-stanza { margin-bottom: 1rem; }
 	.poem-stanza p { color: rgba(255,255,255,0.7); font-size: 0.9rem; line-height: 1.8; margin: 0; font-style: italic; font-family: 'Merriweather', 'Times New Roman', serif; }
-	:global(html[data-theme='light']) .poem-stanzas { scrollbar-color: rgba(217, 179, 130, 0.8) transparent; }
-	:global(html[data-theme='light']) .poem-stanzas::-webkit-scrollbar-thumb { background: rgba(217, 179, 130, 0.8); }
 	:global(html[data-theme='light']) .poem-stanza p { color: #444; }
 	.poem-author { text-align: center; color: var(--color-brand-400); font-weight: 700; font-size: 0.9rem; margin-top: 1rem; }
 
