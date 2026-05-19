@@ -176,6 +176,7 @@
   "settings_btn_disable_2fa": "❌ Disable 2FA",
   "settings_backup_title": "Backup Codes:",
   "settings_2fa_scan": "Scan the QR code with your authenticator app:",
+  "settings_2fa_secret_hint": "Or manually enter this secret code into the app:",
   "settings_2fa_secret": "Secret:",
   "settings_btn_confirm": "Confirm",
   "settings_btn_creating": "Creating...",

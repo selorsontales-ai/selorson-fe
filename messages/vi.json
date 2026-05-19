@@ -176,6 +176,7 @@
   "settings_btn_disable_2fa": "❌ Tắt 2FA",
   "settings_backup_title": "Mã dự phòng:",
   "settings_2fa_scan": "Quét mã QR bằng ứng dụng xác thực:",
+  "settings_2fa_secret_hint": "Hoặc nhập thủ công đoạn mã bí mật này vào ứng dụng:",
   "settings_2fa_secret": "Mã:",
   "settings_btn_confirm": "Xác nhận",
   "settings_btn_creating": "Đang tạo...",
