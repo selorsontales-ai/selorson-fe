@@ -51,11 +51,17 @@ export async function fetchConversations() {
 	initChatSSE();
 }
 
+let sseRetryCount = 0;
+const MAX_SSE_RETRIES = 15;
+
 function initChatSSE() {
 	if (chatSSE) return;
 	const token = getToken();
 	if (!token) return;
 	chatSSE = new EventSource(`${PUBLIC_API_BASE}/chat/stream?token=${token}`);
+	chatSSE.onopen = () => {
+		sseRetryCount = 0; // Reset retry count on successful connection
+	};
 	chatSSE.onmessage = (e) => {
 		try {
 			const data = JSON.parse(e.data);
@@ -63,6 +69,15 @@ function initChatSSE() {
 				handleIncomingMessage(data);
 			}
 		} catch {}
+	};
+	chatSSE.onerror = () => {
+		chatSSE?.close();
+		chatSSE = null;
+		if (sseRetryCount < MAX_SSE_RETRIES) {
+			sseRetryCount++;
+			const delay = Math.min(1000 * Math.pow(2, sseRetryCount), 30000);
+			setTimeout(() => initChatSSE(), delay);
+		}
 	};
 }
 

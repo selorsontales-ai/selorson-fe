@@ -191,6 +191,38 @@
 	async function dismissReport(id: number) { try { await api(`/admin/reports/${id}/dismiss`, { method: 'POST' }); fetchReports(reportFilter); } catch {} }
 
 	let sse: EventSource | null = null;
+	let sseRetryCount = 0;
+	const MAX_SSE_RETRIES = 15;
+
+	function initWorkspaceSSE() {
+		if (sse) return;
+		const token = getToken();
+		if (!token) return;
+		const sseUrl = `${PUBLIC_API_BASE}/support/stream?token=${token}`;
+		sse = new EventSource(sseUrl);
+		sse.onopen = () => { sseRetryCount = 0; };
+		sse.onmessage = async (event) => {
+			try {
+				const data = JSON.parse(event.data);
+				if (data.type === 'support_update' && workspaceMode === 'support') {
+					await fetchConversations(activeTab);
+					if (selectedConv && selectedConv.id === data.conversation_id) {
+						const r = await api<any>(`/manager/support/${selectedConv.id}/messages`);
+						if (r.data) selectedMessages = r.data.messages || [];
+					}
+				}
+			} catch {}
+		};
+		sse.onerror = () => {
+			sse?.close();
+			sse = null;
+			if (sseRetryCount < MAX_SSE_RETRIES) {
+				sseRetryCount++;
+				const delay = Math.min(1000 * Math.pow(2, sseRetryCount), 30000);
+				setTimeout(() => initWorkspaceSSE(), delay);
+			}
+		};
+	}
     
     $effect(() => {
 		const hasSending = nlBroadcasts.some(b => b.status === 'sending');
@@ -204,24 +236,7 @@
 		const user = getUser();
 		if (!isAuthenticated() || (user?.role !== 'admin' && user?.role !== 'manager')) { goto('/'); return; }
 		await Promise.all([fetchConversations('pending'), fetchStats(), fetchManagers()]);
-
-		const token = getToken();
-		if (token) {
-			const sseUrl = `${PUBLIC_API_BASE}/support/stream?token=${token}`;
-			sse = new EventSource(sseUrl);
-			sse.onmessage = async (event) => {
-				try {
-					const data = JSON.parse(event.data);
-					if (data.type === 'support_update' && workspaceMode === 'support') {
-						await fetchConversations(activeTab);
-						if (selectedConv && selectedConv.id === data.conversation_id) {
-							const r = await api<any>(`/manager/support/${selectedConv.id}/messages`);
-							if (r.data) selectedMessages = r.data.messages || [];
-						}
-					}
-				} catch {}
-			};
-		}
+		initWorkspaceSSE();
 	});
 
 	onDestroy(() => {

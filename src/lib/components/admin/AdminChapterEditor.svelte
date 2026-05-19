@@ -505,41 +505,46 @@
 
 <div class="editor-container" class:with-sidebar={showAssetSidebar}>
 	<div class="editor-main">
-		<!-- HEADER -->
-		<div class="editor-header">
-			<div class="header-top">
-				<input type="text" class="title-input" bind:value={title} placeholder="Tiêu đề chương..." />
-				<button class="btn-secondary" onclick={openPreview} style="margin-right: 0.5rem; padding: 0.5rem 1rem; border-radius: var(--radius-md);">👁️ Xem thử</button>
-				<button class="btn-save" onclick={handleSave}>💾 Lưu Chương</button>
-			</div>
-			<div class="header-meta">
-				<label>Số chương: <input type="number" bind:value={chapter_number} min="1" class="small-input"/></label>
-				<label>Trạng thái: 
-					<select bind:value={status} class="small-input">
-						<option value="draft">Nháp</option>
-						<option value="published">Xuất bản</option>
-					</select>
-				</label>
-				<div class="toolbar">
-					<button onclick={undo} disabled={historyIndex <= 0} title="Undo (Ctrl+Z)">↩</button>
-					<button onclick={redo} disabled={historyIndex >= history.length - 1} title="Redo (Ctrl+Y)">↪</button>
-					<div class="divider"></div>
-					<button onclick={() => document.execCommand('bold')} title="Bold"><b>B</b></button>
-					<button onclick={() => document.execCommand('italic')} title="Italic"><i>I</i></button>
-					<button onclick={() => document.execCommand('underline')} title="Underline"><u>U</u></button>
-					<div class="divider"></div>
-					<label class="toolbar-btn" title="Nạp file TXT" style="cursor: pointer;">
-						📄 Nạp
-						<input type="file" accept=".txt,.md,.text" style="display:none" onchange={handleImportFile} />
+		<!-- STICKY HEADER -->
+		<div class="editor-header-sticky">
+			<div class="editor-header">
+				<div class="header-top">
+					<button class="btn-back" onclick={() => window.history.back()} title="Quay lại">← Quay lại</button>
+					<input type="text" class="title-input" bind:value={title} placeholder="Tiêu đề chương..." />
+					<div class="header-actions">
+						<button class="btn-preview" onclick={openPreview}>👁️ Xem thử</button>
+						<button class="btn-save" onclick={handleSave}>💾 Lưu Chương</button>
+					</div>
+				</div>
+				<div class="header-meta">
+					<label>Số chương: <input type="number" bind:value={chapter_number} min="1" class="small-input"/></label>
+					<label>Trạng thái: 
+						<select bind:value={status} class="small-input">
+							<option value="draft">Nháp</option>
+							<option value="published">Xuất bản</option>
+						</select>
 					</label>
-					<button onclick={clearAllBlocks} title="Xóa trắng" class="danger-text">🗑️ Xóa hết</button>
-					<div class="divider"></div>
-					<button onclick={() => collapsedMode = !collapsedMode} title="Thu gọn/Mở rộng">
-						{collapsedMode ? '📂 Mở rộng' : '📁 Thu gọn'}
-					</button>
-					<button onclick={() => showAssetSidebar = !showAssetSidebar} title="Quản lý ảnh">
-						🖼️ Ảnh
-					</button>
+					<div class="toolbar">
+						<button onclick={undo} disabled={historyIndex <= 0} title="Undo (Ctrl+Z)">↩</button>
+						<button onclick={redo} disabled={historyIndex >= history.length - 1} title="Redo (Ctrl+Y)">↪</button>
+						<div class="divider"></div>
+						<button onclick={() => document.execCommand('bold')} title="Bold"><b>B</b></button>
+						<button onclick={() => document.execCommand('italic')} title="Italic"><i>I</i></button>
+						<button onclick={() => document.execCommand('underline')} title="Underline"><u>U</u></button>
+						<div class="divider"></div>
+						<label class="toolbar-btn" title="Nạp file TXT" style="cursor: pointer;">
+							📄 Nạp
+							<input type="file" accept=".txt,.md,.text" style="display:none" onchange={handleImportFile} />
+						</label>
+						<button onclick={clearAllBlocks} title="Xóa trắng" class="danger-text">🗑️ Xóa hết</button>
+						<div class="divider"></div>
+						<button onclick={() => collapsedMode = !collapsedMode} title="Thu gọn/Mở rộng">
+							{collapsedMode ? '📂 Mở rộng' : '📁 Thu gọn'}
+						</button>
+						<button onclick={() => showAssetSidebar = !showAssetSidebar} title="Quản lý ảnh" class:active-toggle={showAssetSidebar}>
+							🖼️ Ảnh
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -627,7 +632,7 @@
 				</div>
 			{/if}
 		</div>
-		
+	
 		<!-- AUTHOR NOTE -->
 		<div class="author-note-section">
 			<h4>📝 Ghi chú tác giả</h4>
@@ -700,27 +705,29 @@
 		</div>
 	</div>
 
-	<!-- ASSET SIDEBAR -->
+	<!-- ASSET SIDEBAR (STICKY) -->
 	{#if showAssetSidebar}
-		<div class="asset-sidebar" transition:slide={{axis: 'x'}}>
-			<div class="sidebar-header">
-				<h4>🖼️ Thư viện ảnh</h4>
-				<button class="close-btn" onclick={() => showAssetSidebar = false}>✕</button>
-			</div>
-			
-			<label class="upload-zone">
-				<input type="file" multiple accept="image/*" style="display:none" onchange={handleUploadAsset} />
-				☁️ Nhấn để chọn ảnh
-			</label>
+		<div class="asset-sidebar-wrapper" transition:slide={{axis: 'x'}}>
+			<div class="asset-sidebar">
+				<div class="sidebar-header">
+					<h4>🖼️ Thư viện ảnh</h4>
+					<button class="close-btn" onclick={() => showAssetSidebar = false}>✕</button>
+				</div>
+				
+				<label class="upload-zone">
+					<input type="file" multiple accept="image/*" style="display:none" onchange={handleUploadAsset} />
+					☁️ Nhấn để chọn ảnh
+				</label>
 
-			<div class="asset-grid">
-				{#each assets as asset (asset.id)}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<div class="asset-thumb" draggable="true" ondragstart={(e) => handleDragStart(e, asset)}>
-						<img src={asset.cloudinary_url} alt={asset.filename} loading="lazy" />
-						<button class="del-asset" onclick={() => deleteAsset(asset)}>✕</button>
-					</div>
-				{/each}
+				<div class="asset-grid">
+					{#each assets as asset (asset.id)}
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div class="asset-thumb" draggable="true" ondragstart={(e) => handleDragStart(e, asset)}>
+							<img src={asset.cloudinary_url} alt={asset.filename} loading="lazy" />
+							<button class="del-asset" onclick={() => deleteAsset(asset)}>✕</button>
+						</div>
+					{/each}
+				</div>
 			</div>
 		</div>
 	{/if}
@@ -735,25 +742,36 @@
 }} />
 
 <style>
-	.editor-container { display: flex; gap: 1rem; max-width: 1400px; margin: 0 auto; min-height: 80vh; }
+	.editor-container { display: flex; gap: 1rem; max-width: 1400px; margin: 0 auto; min-height: 80vh; padding: 0 1rem; align-items: flex-start; }
 	.editor-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1rem; }
-	.asset-sidebar { width: 300px; background: var(--color-surface-100); border-left: 1px solid var(--color-border); padding: 1rem; display: flex; flex-direction: column; gap: 1rem; height: calc(100vh - 100px); position: sticky; top: 80px; overflow-y: auto; }
-	
-	/* HEADER */
-	.editor-header { background: var(--color-surface-100); padding: 1rem; border-radius: var(--radius-lg); border: 1px solid var(--color-border); display: flex; flex-direction: column; gap: 1rem; }
-	.header-top { display: flex; gap: 1rem; }
-	.title-input { flex: 1; font-size: 1.5rem; font-weight: 700; padding: 0.5rem; border: none; background: transparent; color: var(--color-text-primary); border-bottom: 2px solid transparent; }
+
+	/* STICKY HEADER */
+	.editor-header-sticky { position: sticky; top: 0; z-index: 40; background: var(--color-surface-50); padding: 0.5rem 0; }
+	.editor-header { background: var(--color-surface-100); padding: 0.75rem 1rem; border-radius: var(--radius-lg); border: 1px solid var(--color-border); display: flex; flex-direction: column; gap: 0.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+	.header-top { display: flex; gap: 0.5rem; align-items: center; }
+	.btn-back { background: transparent; border: 1px solid var(--color-border); padding: 0.4rem 0.75rem; border-radius: var(--radius-md); cursor: pointer; color: var(--color-text-secondary); font-size: 0.8rem; white-space: nowrap; flex-shrink: 0; }
+	.btn-back:hover { background: var(--color-surface-200); color: var(--color-text-primary); }
+	.title-input { flex: 1; font-size: 1.25rem; font-weight: 700; padding: 0.4rem 0.5rem; border: none; background: transparent; color: var(--color-text-primary); border-bottom: 2px solid transparent; min-width: 0; }
 	.title-input:focus { outline: none; border-bottom-color: var(--color-brand-500); }
-	.btn-save { background: linear-gradient(135deg, var(--color-brand-500), var(--color-brand-600)); color: #fff; padding: 0.5rem 1.5rem; border: none; border-radius: var(--radius-md); font-weight: 600; cursor: pointer; }
-	
-	.header-meta { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+	.header-actions { display: flex; gap: 0.375rem; flex-shrink: 0; }
+	.btn-preview { background: transparent; border: 1px solid var(--color-border); padding: 0.4rem 0.75rem; border-radius: var(--radius-md); cursor: pointer; color: var(--color-text-secondary); font-size: 0.8rem; white-space: nowrap; }
+	.btn-preview:hover { background: var(--color-surface-200); }
+	.btn-save { background: linear-gradient(135deg, var(--color-brand-500), var(--color-brand-600)); color: #fff; padding: 0.4rem 1rem; border: none; border-radius: var(--radius-md); font-weight: 600; cursor: pointer; font-size: 0.8rem; white-space: nowrap; flex-shrink: 0; }
+	.btn-save:hover { filter: brightness(1.1); }
+
+	.header-meta { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
 	.small-input { padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface-200); color: var(--color-text-primary); }
-	
+
 	.toolbar { display: flex; gap: 0.25rem; align-items: center; margin-left: auto; background: var(--color-surface-200); padding: 0.25rem; border-radius: var(--radius-md); flex-wrap: wrap; justify-content: flex-end; }
-	.toolbar button { background: transparent; border: none; padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); cursor: pointer; color: var(--color-text-secondary); }
+	.toolbar button { background: transparent; border: none; padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); cursor: pointer; color: var(--color-text-secondary); font-size: 0.8rem; }
 	.toolbar button:hover { background: var(--color-surface-300); color: var(--color-brand-400); }
 	.toolbar button:disabled { opacity: 0.3; cursor: not-allowed; }
+	.toolbar button.active-toggle { background: var(--color-brand-500); color: #fff; }
 	.divider { width: 1px; height: 1.2rem; background: var(--color-border); margin: 0 0.25rem; }
+
+	/* STICKY SIDEBAR */
+	.asset-sidebar-wrapper { width: 280px; flex-shrink: 0; position: sticky; top: 0; align-self: flex-start; height: 100vh; }
+	.asset-sidebar { height: 100%; overflow-y: auto; background: var(--color-surface-100); border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 0.75rem; display: flex; flex-direction: column; gap: 0.75rem; }
 
 	/* BLOCKS */
 	.blocks-container { display: flex; flex-direction: column; gap: 1rem; padding-bottom: 4rem; }
@@ -863,21 +881,30 @@
 	@media (max-width: 768px) {
 		.editor-container {
 			flex-direction: column;
+			padding: 0 0.5rem;
+		}
+		.asset-sidebar-wrapper {
+			width: 100%;
+			order: -1;
 		}
 		.asset-sidebar {
-			width: 100%;
-			height: auto;
-			max-height: 50vh;
 			position: static;
+			height: auto;
+			max-height: 40vh;
+		}
+		.editor-header-sticky {
+			top: 56px;
 		}
 		.header-top {
-			flex-direction: column;
-			gap: 0.75rem;
+			flex-wrap: wrap;
 		}
 		.title-input {
-			font-size: 1.25rem;
-			width: 100%;
+			font-size: 1.1rem;
+			order: 2;
+			flex-basis: 100%;
 		}
+		.btn-back { order: 1; }
+		.header-actions { order: 3; margin-left: auto; }
 		.header-meta {
 			flex-direction: column;
 			align-items: stretch;
@@ -905,8 +932,9 @@
 		.tag-remove {
 			align-self: flex-end;
 		}
-		.btn-save, .btn-secondary {
-			width: 100%;
+		.btn-save, .btn-preview, .btn-back {
+			font-size: 0.75rem;
+			padding: 0.35rem 0.5rem;
 		}
 		.image-meta-inputs {
 			flex-direction: column;

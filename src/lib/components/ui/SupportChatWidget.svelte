@@ -118,28 +118,43 @@
 	function formatTime(d: string) { return new Date(d).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); }
 
 	let sse: EventSource | null = null;
+	let sseRetryCount = 0;
+	const MAX_SSE_RETRIES = 15;
+
+	function initSupportSSE() {
+		if (sse) return;
+		const token = getToken();
+		if (!token) return;
+		const sseUrl = `${PUBLIC_API_BASE}/support/stream?token=${token}`;
+		sse = new EventSource(sseUrl);
+		sse.onopen = () => { sseRetryCount = 0; };
+		sse.onmessage = (event) => {
+			try {
+				const data = JSON.parse(event.data);
+				if (data.type === 'support_update') {
+					if (isOpen && getActiveConversation()?.id === data.conversation_id) {
+						fetchActiveConversation();
+					} else {
+						fetchUnreadCount();
+					}
+				}
+			} catch {}
+		};
+		sse.onerror = () => {
+			sse?.close();
+			sse = null;
+			if (sseRetryCount < MAX_SSE_RETRIES) {
+				sseRetryCount++;
+				const delay = Math.min(1000 * Math.pow(2, sseRetryCount), 30000);
+				setTimeout(() => initSupportSSE(), delay);
+			}
+		};
+	}
 
 	$effect(() => { 
 		if (isAuthenticated()) {
 			fetchUnreadCount(); 
-			
-			const token = getToken();
-			if (token && !sse) {
-				const sseUrl = `${PUBLIC_API_BASE}/support/stream?token=${token}`;
-				sse = new EventSource(sseUrl);
-				sse.onmessage = (event) => {
-					try {
-						const data = JSON.parse(event.data);
-						if (data.type === 'support_update') {
-							if (isOpen && getActiveConversation()?.id === data.conversation_id) {
-								fetchActiveConversation();
-							} else {
-								fetchUnreadCount();
-							}
-						}
-					} catch {}
-				};
-			}
+			initSupportSSE();
 		}
 	});
 
