@@ -9,12 +9,14 @@
 	import { getLocale, setLocale } from '$lib/paraglide/runtime';
 	import { isChatWidgetHidden, setChatWidgetHidden } from '$lib/stores/support.svelte';
 	import * as m from '$lib/paraglide/messages';
+	import QRCode from 'qrcode';
 
 	let totpCode = $state('');
 	let show2FASetup = $state(false);
 	let saving = $state(false);
 	let message = $state('');
 	let showPassword = $state(false);
+	let qrCodeDataUrl = $state('');
 
 	// Password
 	let currentPass = $state('');
@@ -31,6 +33,17 @@
 
 	$effect(() => {
 		if (data?.devices) devices = data.devices;
+	});
+
+	$effect(() => {
+		const uri = get2FAQr();
+		if (uri && show2FASetup) {
+			QRCode.toDataURL(uri, { width: 160, margin: 2, color: { dark: '#111827', light: '#ffffff' } })
+				.then(url => qrCodeDataUrl = url)
+				.catch(err => console.error(err));
+		} else {
+			qrCodeDataUrl = '';
+		}
 	});
 
 	// Data export
@@ -196,6 +209,9 @@
 				{:else if show2FASetup && get2FASecret()}
 					<div class="tfa-setup">
 						<p class="hint">{m.settings_2fa_scan()}</p>
+						{#if qrCodeDataUrl}
+							<img src={qrCodeDataUrl} alt="QR Code" class="tfa-qr" />
+						{/if}
 						<div class="tfa-secret">{m.settings_2fa_secret()} <code>{get2FASecret()}</code></div>
 						<div class="tfa-verify"><input type="text" bind:value={totpCode} placeholder={m.settings_placeholder_6_code()} maxlength="6" /><button class="btn-save" onclick={async () => { const r = await verify2FA(totpCode); message = r.success ? m.settings_success_2fa() : r.message||m.settings_err_default(); if(r.success){totpCode='';show2FASetup=false;}}} disabled={is2FALoading() || totpCode.length !== 6}>{m.settings_btn_confirm()}</button></div>
 					</div>
@@ -292,6 +308,7 @@
 	.tfa-actions{display:flex;flex-direction:column;gap:.75rem;margin-top:.75rem}
 	.tfa-disable{display:flex;gap:.5rem}.tfa-disable input{flex:1}
 	.tfa-setup{padding:.75rem 0}
+	.tfa-qr{display:block;margin:0 0 1rem;border-radius:8px;background:#fff;padding:.25rem;width:160px;height:160px;box-shadow:0 4px 12px rgba(0,0,0,.15)}
 	.tfa-secret{font-size:.8rem;color:var(--color-text-secondary);margin-bottom:.75rem;word-break:break-all}
 	.tfa-secret code{background:rgba(255,255,255,.06);padding:.15rem .4rem;border-radius:4px;font-size:.78rem}
 	.tfa-verify{display:flex;gap:.5rem}.tfa-verify input{flex:1}
