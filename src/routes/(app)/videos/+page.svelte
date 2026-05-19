@@ -31,11 +31,11 @@
 		return fillerVideos;
 	}
 
-	const tabs = [
-		{ key: 'main' as const, icon: '📺', label: 'Chính' },
-		{ key: 'side' as const, icon: '📘', label: 'Ngoại truyện' },
-		{ key: 'filler' as const, icon: '🎭', label: 'Filler' },
-	];
+	const tabs = $derived([
+		{ key: 'main' as const, icon: '📺', label: m.videos_tab_main() },
+		{ key: 'side' as const, icon: '📘', label: m.videos_tab_side() },
+		{ key: 'filler' as const, icon: '🎭', label: m.videos_tab_filler() },
+	]);
 
 	// Extract embed URL (handle raw YouTube URLs + already-embedded URLs)
 	function getEmbedUrl(path: string): string {
@@ -62,9 +62,9 @@
 	}
 
 	function typeLabel(type: string) {
-		if (type === 'main') return 'Chính';
-		if (type === 'side') return 'Ngoại truyện';
-		return 'Filler';
+		if (type === 'main') return m.videos_type_main();
+		if (type === 'side') return m.videos_type_side();
+		return m.videos_type_filler();
 	}
 
 	// Navigation
@@ -109,8 +109,8 @@
 	<section class="page-hero">
 		<div class="hero-glow"></div>
 		<div class="hero-content">
-			<h1>🎬 Hoạt Hình</h1>
-			<p class="hero-tagline">Thế giới hoạt hình của Selorson</p>
+			<h1>{m.videos_hero_title()}</h1>
+			<p class="hero-tagline">{m.videos_hero_subtitle()}</p>
 		</div>
 	</section>
 
@@ -118,7 +118,7 @@
 		{#if loading}
 			<div class="loading-state">
 				<div class="pulse-loader"><span></span><span></span><span></span></div>
-				<p>Đang tải nội dung...</p>
+				<p>{m.videos_loading()}</p>
 			</div>
 		{:else if allVideos.length === 0}
 			<div class="empty-state">
@@ -145,7 +145,7 @@
 							{:else}
 								<div class="video-error">
 									<span class="error-icon">⚠️</span>
-									<p>Không nhận diện được nguồn video</p>
+									<p>⚠ Error</p>
 								</div>
 							{/if}
 						</div>
@@ -153,7 +153,7 @@
 						<!-- Episode Controls -->
 						<div class="episode-controls">
 							<button class="ctrl-btn" disabled={!prevEpisode} onclick={() => prevEpisode && selectVideo(prevEpisode)}>
-								← Tập trước
+								{m.videos_prev()}
 							</button>
 							<div class="episode-info-bar">
 								<span class="ep-badge {currentVideo.video_type}">
@@ -161,13 +161,13 @@
 								</span>
 								<h2 class="ep-title">
 									{#if currentVideo.episode_number}
-										<span class="ep-num">Tập {currentVideo.episode_number}</span>
+										<span class="ep-num">{m.videos_episode({ num: currentVideo.episode_number })}</span>
 									{/if}
 									{currentVideo.video_name}
 								</h2>
 							</div>
 							<button class="ctrl-btn" disabled={!nextEpisode} onclick={() => nextEpisode && selectVideo(nextEpisode)}>
-								Tập tiếp →
+								{m.videos_next()}
 							</button>
 						</div>
 
@@ -181,7 +181,7 @@
 						<!-- Placeholder -->
 						<div class="player-placeholder">
 							<span class="placeholder-icon">🎬</span>
-							<p>Chọn một tập phim để bắt đầu xem</p>
+							<p>{m.videos_placeholder()}</p>
 						</div>
 					{/if}
 				</div>
@@ -226,18 +226,18 @@
 								</div>
 								<div class="item-info">
 									{#if video.episode_number}
-										<span class="item-ep">Tập {video.episode_number}</span>
+										<span class="item-ep">{m.videos_episode({ num: video.episode_number })}</span>
 									{/if}
 									<span class="item-name">{video.video_name}</span>
 									{#if video.is_featured}
-										<span class="item-featured">⭐ Nổi bật</span>
+										<span class="item-featured">{m.videos_featured()}</span>
 									{/if}
 								</div>
 							</div>
 						{/each}
 
 						{#if getTabVideos(activeTab).length === 0}
-							<p class="empty-tab">Chưa có nội dung.</p>
+							<p class="empty-tab">{m.videos_empty_desc()}</p>
 						{/if}
 					</div>
 				</aside>

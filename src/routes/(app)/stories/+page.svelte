@@ -43,10 +43,13 @@
 </svelte:head>
 
 <section class="stories-page">
-	<div class="page-header">
-		<h1 class="section-title">{m.stories_list_title()}</h1>
-		<p class="page-subtitle">{m.stories_list_subtitle()}</p>
-	</div>
+	<section class="page-hero">
+		<div class="hero-glow"></div>
+		<div class="hero-content">
+			<h1>{m.stories_list_title()}</h1>
+			<p class="hero-tagline">{m.stories_list_subtitle()}</p>
+		</div>
+	</section>
 
 	{#if loading}
 		<div class="skeleton-grid">
@@ -86,14 +89,32 @@
 
 <style>
 	.stories-page {
-		max-width: 1024px;
-		margin: 0 auto;
-		padding: 3rem 1.5rem 6rem;
+		min-height: 70vh;
 	}
 
-
+	/* ===== Hero ===== */
+	.page-hero {
+		position: relative; text-align: center; padding: 3.5rem 2rem 2.5rem;
+		background: linear-gradient(135deg, var(--color-brand-800) 0%, var(--color-brand-500) 50%, var(--color-brand-700) 100%);
+		overflow: hidden; margin-bottom: 2rem;
+	}
+	.hero-content { position: relative; z-index: 1; }
+	.page-hero h1 {
+		font-size: 2.5rem; font-weight: 800; color: #fff; margin: 0 0 0.375rem;
+		text-shadow: 0 2px 12px rgba(0,0,0,0.3);
+	}
+	.hero-tagline { color: rgba(255,255,255,0.8); font-size: 1.05rem; margin: 0; font-weight: 400; }
+	.hero-glow {
+		position: absolute; top: -50%; left: 50%; transform: translateX(-50%);
+		width: 700px; height: 700px; border-radius: 50%;
+		background: radial-gradient(circle, rgba(74,222,128,0.12) 0%, transparent 70%);
+		pointer-events: none;
+	}
 
 	.chapter-grid {
+		max-width: 1024px;
+		margin: 0 auto;
+		padding: 0 1.5rem;
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 		gap: 1rem;
@@ -140,6 +161,9 @@
 
 	/* Skeleton */
 	.skeleton-grid {
+		max-width: 1024px;
+		margin: 0 auto;
+		padding: 0 1.5rem;
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 		gap: 1rem;
@@ -175,11 +199,13 @@
 
 	/* Pagination */
 	.pagination {
+		max-width: 1024px;
+		margin: 2.5rem auto 0;
+		padding: 0 1.5rem;
 		display: flex;
 		justify-content: center;
 		align-items: center;
 		gap: 1rem;
-		margin-top: 2.5rem;
 	}
 
 	.page-info {
@@ -187,3 +213,4 @@
 		color: var(--color-text-muted);
 	}
 </style>
+

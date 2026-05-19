@@ -142,11 +142,15 @@
 <svelte:head><title>{m.music_seo_title()}</title></svelte:head>
 
 <section class="music-page">
-	<div class="page-header">
-		<h1 class="section-title">{m.music_list_title()}</h1>
-		<p class="page-subtitle">{m.music_list_subtitle()}</p>
-	</div>
+	<section class="page-hero">
+		<div class="hero-glow"></div>
+		<div class="hero-content">
+			<h1>{m.music_list_title()}</h1>
+			<p class="hero-tagline">{m.music_list_subtitle()}</p>
+		</div>
+	</section>
 
+	<div class="music-content">
 	{#if loading}
 		<div class="loading">{m.loading_text()}</div>
 	{:else if albums.length === 0}
@@ -209,6 +213,7 @@
 			</div>
 		{/each}
 	{/if}
+	</div>
 </section>
 
 <!-- Vidstack-powered Mini Player -->
@@ -261,7 +266,16 @@
 {/if}
 
 <style>
-	.music-page{max-width:900px;margin:0 auto;padding:3rem 1.5rem 8rem}
+	.music-page{min-height:70vh}
+	.music-content{max-width:900px;margin:0 auto;padding:0 1.5rem 8rem}
+
+	/* ===== Hero ===== */
+	.page-hero{position:relative;text-align:center;padding:3.5rem 2rem 2.5rem;background:linear-gradient(135deg,var(--color-brand-800) 0%,var(--color-brand-500) 50%,var(--color-brand-700) 100%);overflow:hidden;margin-bottom:2rem}
+	.hero-content{position:relative;z-index:1}
+	.page-hero h1{font-size:2.5rem;font-weight:800;color:#fff;margin:0 0 .375rem;text-shadow:0 2px 12px rgba(0,0,0,.3)}
+	.hero-tagline{color:rgba(255,255,255,.8);font-size:1.05rem;margin:0;font-weight:400}
+	.hero-glow{position:absolute;top:-50%;left:50%;transform:translateX(-50%);width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,rgba(74,222,128,.12) 0%,transparent 70%);pointer-events:none}
+
 	.loading,.empty{text-align:center;padding:4rem;color:var(--color-text-muted)}
 	.empty span{font-size:3rem;display:block;margin-bottom:1rem}
 
