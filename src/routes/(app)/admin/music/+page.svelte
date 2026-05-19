@@ -305,9 +305,10 @@
 
 			<!-- Cover Upload (Cloudinary) -->
 			<div class="form-group">
-				<label>Hình nền</label>
+				<label for="album-cover-file">Hình nền</label>
 				<div class="upload-row">
 					<input
+						id="album-cover-file"
 						type="file"
 						bind:this={imageInput}
 						accept="image/*"
@@ -320,9 +321,11 @@
 						onclick={() => imageInput?.click()}
 						disabled={uploadingImage}
 					>
-						{uploadingImage ? "⏳ Đang tải..." : "📤 Upload ảnh"}
+						{uploadingImage ? "⏳ Đang tải..." : "📤 Upload hình"}
 					</button>
 					<input
+						id="album-cover-input"
+						aria-label="URL Hình nền"
 						bind:value={albumForm.cover_image}
 						placeholder="Hoặc dán URL ảnh"
 					/>
@@ -419,9 +422,10 @@
 
 			<!-- Audio Upload (Cloudflare R2) -->
 			<div class="form-group">
-				<label>File nhạc</label>
+				<label for="track-audio-file">File nhạc</label>
 				<div class="upload-row">
 					<input
+						id="track-audio-file"
 						type="file"
 						bind:this={audioInput}
 						accept="audio/*"
@@ -439,6 +443,8 @@
 							: "🎵 Upload nhạc"}
 					</button>
 					<input
+						id="track-audio-input"
+						aria-label="URL File nhạc"
 						bind:value={trackForm.file_path}
 						placeholder="Hoặc dán URL audio"
 					/>

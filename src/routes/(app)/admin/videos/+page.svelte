@@ -116,16 +116,16 @@
 
 		<div class="form-row-2">
 			<div class="form-group">
-				<label class="form-label">Loại video</label>
-				<select bind:value={form.video_type}>
+				<label class="form-label" for="video_type_input">Loại video</label>
+				<select id="video_type_input" bind:value={form.video_type}>
 					<option value="main">📺 Chính</option>
 					<option value="side">📘 Ngoại truyện</option>
 					<option value="filler">🎭 Filler</option>
 				</select>
 			</div>
 			<div class="form-group">
-				<label class="form-label">Số tập</label>
-				<input bind:value={form.episode_number} placeholder="VD: 1, 2, 3..." type="number" min="0" />
+				<label class="form-label" for="episode_number_input">Số tập</label>
+				<input id="episode_number_input" bind:value={form.episode_number} placeholder="VD: 1, 2, 3..." type="number" min="0" />
 			</div>
 		</div>
 
@@ -135,8 +135,8 @@
 				<span>⭐ Nổi bật (hiển thị trang chủ)</span>
 			</label>
 			<div class="form-group">
-				<label class="form-label">Thứ tự hiển thị</label>
-				<input bind:value={form.display_order} type="number" />
+				<label class="form-label" for="display_order_input">Thứ tự hiển thị</label>
+				<input id="display_order_input" bind:value={form.display_order} type="number" />
 			</div>
 		</div>
 
