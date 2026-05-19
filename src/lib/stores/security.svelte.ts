@@ -1,4 +1,5 @@
 import { api } from '$lib/api';
+import { PUBLIC_API_BASE } from '$env/static/public';
 
 // ─── 2FA Store ───
 
@@ -13,6 +14,13 @@ export function get2FASecret() { return twoFactorSecret; }
 export function get2FAQr() { return twoFactorQr; }
 export function getBackupCodes() { return backupCodes; }
 export function is2FALoading() { return isLoading2FA; }
+
+/** Sync 2FA state from user object (called after fetchMe). */
+export function sync2FAState(user: { two_factor_enabled?: boolean } | null) {
+	if (user && typeof user.two_factor_enabled === 'boolean') {
+		twoFactorEnabled = user.two_factor_enabled;
+	}
+}
 
 export async function setup2FA() {
 	isLoading2FA = true;
@@ -52,6 +60,24 @@ export async function generateBackupCodes() {
 		const res = await api<any>('/auth/2fa/backup-codes', { method: 'POST' });
 		if (res.success) backupCodes = res.data.backup_codes;
 		return res;
+	} finally { isLoading2FA = false; }
+}
+
+/**
+ * Complete 2FA login: POST /auth/2fa/login with temp_token + TOTP code.
+ * Returns { success, data: { token, user } } on success.
+ */
+export async function login2FA(tempToken: string, code: string): Promise<any> {
+	isLoading2FA = true;
+	try {
+		const res = await fetch(`${PUBLIC_API_BASE}/auth/2fa/login`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+			body: JSON.stringify({ temp_token: tempToken, code }),
+			credentials: 'include',
+		});
+		const json = await res.json();
+		return json;
 	} finally { isLoading2FA = false; }
 }
 

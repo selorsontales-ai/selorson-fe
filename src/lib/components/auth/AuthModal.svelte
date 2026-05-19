@@ -1,12 +1,12 @@
-<!-- Auth Modal — Login / Register / Forgot Password / Reset Password / Verify Email -->
+<!-- Auth Modal — Login / Register / Forgot Password / Reset Password / Verify Email / 2FA -->
 <script lang="ts">
-	import { login, register, forgotPassword, resetPassword, verifyEmail, resendVerification } from '$lib/stores/auth.svelte';
-	import { loginWithGoogle, loginWithFacebook, isOAuthLoading } from '$lib/stores/security.svelte';
+	import { login, register, forgotPassword, resetPassword, verifyEmail, resendVerification, setAuth } from '$lib/stores/auth.svelte';
+	import { loginWithGoogle, loginWithFacebook, isOAuthLoading, login2FA } from '$lib/stores/security.svelte';
 	import * as m from '$lib/paraglide/messages';
 
 	let { open = $bindable(false) } = $props();
 
-	let mode = $state<'login' | 'register' | 'forgot' | 'reset' | 'verify'>('login');
+	let mode = $state<'login' | 'register' | 'forgot' | 'reset' | 'verify' | '2fa'>('login');
 	let loading = $state(false);
 	let error = $state('');
 	let successMsg = $state('');
@@ -32,6 +32,10 @@
 	let resendCooldown = $state(0);
 	let newPasswordConfirm = $state('');
 
+	// 2FA
+	let tempToken2FA = $state('');
+	let totpCode2FA = $state('');
+
 	function resetForm() {
 		password = '';
 		name = '';
@@ -45,7 +49,7 @@
 		successMsg = '';
 	}
 
-	function switchMode(m: 'login' | 'register' | 'forgot' | 'reset' | 'verify') {
+	function switchMode(m: 'login' | 'register' | 'forgot' | 'reset' | 'verify' | '2fa') {
 		mode = m;
 		resetForm();
 	}
@@ -58,8 +62,11 @@
 		try {
 			const res = await login(email, password, rememberMe);
 			if (res.requires_2fa) {
-				// TODO: Show 2FA form (future)
-				error = m.auth_err_2fa_required();
+				tempToken2FA = res.data.temp_token;
+				totpCode2FA = '';
+				mode = '2fa';
+				error = '';
+				loading = false;
 				return;
 			}
 			open = false;
@@ -188,7 +195,7 @@
 	}
 
 	function handleBackdrop() {
-		if (!loading && mode !== 'verify') {
+		if (!loading && mode !== 'verify' && mode !== '2fa') {
 			open = false;
 			resetForm();
 			mode = 'login';
@@ -202,6 +209,7 @@
 		get forgot() { return m.auth_title_forgot(); },
 		get reset() { return m.auth_title_reset(); },
 		get verify() { return m.auth_title_verify(); },
+		get '2fa'() { return '🔐 Xác thực 2 bước'; },
 	};
 </script>
 
@@ -522,6 +530,57 @@
 						</button>
 
 					</div>
+			{/if}
+
+			<!-- ════════════ 2FA FORM ════════════ -->
+			{#if mode === '2fa'}
+				<div class="verify-illustration">🔐</div>
+				<p class="mode-description">
+					Nhập mã 6 chữ số từ ứng dụng xác thực (Google Authenticator, Authy...) hoặc mã dự phòng để hoàn tất đăng nhập.
+				</p>
+				<form onsubmit={async (e) => {
+					e.preventDefault();
+					loading = true;
+					error = '';
+					try {
+						const res = await login2FA(tempToken2FA, totpCode2FA);
+						if (res.success) {
+							setAuth(res.data.token, res.data.user);
+							open = false;
+							resetForm();
+							mode = 'login';
+						} else {
+							error = res.message || 'Mã xác thực không đúng';
+						}
+					} catch {
+						error = 'Lỗi hệ thống';
+					} finally {
+						loading = false;
+					}
+				}}>
+					<div class="field">
+						<label for="auth-2fa-code">Mã xác thực</label>
+						<input
+							id="auth-2fa-code"
+							type="text"
+							bind:value={totpCode2FA}
+							placeholder="123456"
+							required
+							maxlength="8"
+							inputmode="numeric"
+							class="code-input"
+							autocomplete="one-time-code"
+						/>
+					</div>
+					<button class="btn-brand submit-btn" type="submit" disabled={loading || totpCode2FA.length < 6}>
+						{#if loading}
+							<span class="spinner"></span>
+						{:else}
+							Xác nhận
+						{/if}
+					</button>
+				</form>
+				<button class="back-link" onclick={() => { mode = 'login'; error = ''; }}>← Quay lại đăng nhập</button>
 			{/if}
 
 			<!-- Footer hint -->

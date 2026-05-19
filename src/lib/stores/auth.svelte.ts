@@ -1,4 +1,5 @@
 import { PUBLIC_API_BASE } from '$env/static/public';
+import { sync2FAState } from './security.svelte';
 
 // ---- Types ----
 
@@ -15,6 +16,7 @@ export interface User {
 	is_online: boolean;
 	has_password: boolean;
 	email_verified_at: string | null;
+	two_factor_enabled: boolean;
 	created_at: string;
 }
 
@@ -176,6 +178,7 @@ export async function fetchMe() {
 	try {
 		const res: any = await authFetch('/auth/me');
 		state.user = res.data;
+		sync2FAState(res.data);
 	} catch {
 		// Token invalid — clear
 		state.user = null;
