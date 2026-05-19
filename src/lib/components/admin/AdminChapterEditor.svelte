@@ -340,13 +340,13 @@
 		}
 		
 		if (addedCount > 0) {
-			toast_success(`Đã thêm ${addedCount} ảnh vào thư viện (chưa upload)`);
+			toast_success(`Đã thêm ${addedCount} hình vào thư viện (chưa upload)`);
 		}
 		input.value = '';
 	}
 
 	async function deleteAsset(asset: ChapterAsset) {
-		if (!confirm('Xóa ảnh này?')) return;
+		if (!confirm('Xóa hình này?')) return;
 		
 		try {
 			if (asset.id < 0) {
@@ -358,9 +358,9 @@
 				await adminDelete(`/admin/chapters/${chapterId}/assets/${asset.id}`);
 			}
 			assets = assets.filter(a => a.id !== asset.id);
-			toast_success('Đã xóa ảnh');
+			toast_success('Đã xóa hình');
 		} catch {
-			toast_error('Lỗi khi xóa ảnh');
+			toast_error('Lỗi khi xóa hình');
 		}
 	}
 
@@ -541,8 +541,8 @@
 						<button onclick={() => collapsedMode = !collapsedMode} title="Thu gọn/Mở rộng">
 							{collapsedMode ? '📂 Mở rộng' : '📁 Thu gọn'}
 						</button>
-						<button onclick={() => showAssetSidebar = !showAssetSidebar} title="Quản lý ảnh" class:active-toggle={showAssetSidebar}>
-							🖼️ Ảnh
+						<button onclick={() => showAssetSidebar = !showAssetSidebar} title="Quản lý hình" class:active-toggle={showAssetSidebar}>
+							🖼️ Hình
 						</button>
 					</div>
 				</div>
@@ -589,16 +589,16 @@
 										<option value="single-1-1">Vuông (1:1)</option>
 										<option value="single-16-9">Ngang (16:9)</option>
 										<option value="single-9-16">Dọc (9:16)</option>
-										<option value="combo-2">Combo 2 ảnh</option>
-										<option value="combo-2-overlap">Combo 2 ảnh (Chèn)</option>
-										<option value="combo-3">Combo 3 ảnh</option>
+										<option value="combo-2">Combo 2 hình</option>
+										<option value="combo-2-overlap">Combo 2 hình (Chèn)</option>
+										<option value="combo-3">Combo 3 hình</option>
 									</select>
-									<span class="img-hint">Kéo thả ảnh từ bên phải vào đây</span>
+									<span class="img-hint">Kéo thả hình từ bên phải vào đây</span>
 								</div>
 
 								<div class="images-preview {block.layout}">
 									{#if !block.images || block.images.length === 0}
-										<div class="empty-dropzone">Kéo thả ảnh vào đây</div>
+										<div class="empty-dropzone">Kéo thả hình vào đây</div>
 									{:else}
 										{#each block.images as img, j}
 											<div class="img-item">
@@ -609,7 +609,7 @@
 									{/if}
 								</div>
 								<div class="image-meta-inputs">
-									<input type="text" bind:value={block.caption} placeholder="Tiêu đề / Chú thích ảnh..." class="image-caption-input" />
+									<input type="text" bind:value={block.caption} placeholder="Tiêu đề / Chú thích hình..." class="image-caption-input" />
 									<label class="rotation-label">
 										Góc xoay: {block.rotation || 0}°
 										<input type="range" bind:value={block.rotation} min="0" max="360" step="1" class="rotation-slider" />
@@ -621,7 +621,7 @@
 
 					<div class="block-adders">
 						<button onclick={() => addParagraph(i)}>+ Đoạn văn</button>
-						<button onclick={() => addImageBlock(i)}>+ Khối ảnh</button>
+						<button onclick={() => addImageBlock(i)}>+ Khối hình</button>
 					</div>
 				</div>
 			{/each}
@@ -710,13 +710,13 @@
 		<div class="asset-sidebar-wrapper" transition:slide={{axis: 'x'}}>
 			<div class="asset-sidebar">
 				<div class="sidebar-header">
-					<h4>🖼️ Thư viện ảnh</h4>
+					<h4>🖼️ Thư viện hình</h4>
 					<button class="close-btn" onclick={() => showAssetSidebar = false}>✕</button>
 				</div>
 				
 				<label class="upload-zone">
 					<input type="file" multiple accept="image/*" style="display:none" onchange={handleUploadAsset} />
-					☁️ Nhấn để chọn ảnh
+					☁️ Nhấn để chọn hình
 				</label>
 
 				<div class="asset-grid">
