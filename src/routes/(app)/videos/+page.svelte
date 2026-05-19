@@ -106,19 +106,19 @@
 				<button class="modal-close" onclick={closeVideo} aria-label="Close">✕</button>
 			</div>
 			<div class="video-container">
-				{#if selectedVideo.youtube_id}
+				{#if selectedVideo.video_path && selectedVideo.video_path.includes('youtube.com/embed')}
 					<iframe
-						src="https://www.youtube.com/embed/{selectedVideo.youtube_id}?autoplay=1"
+						src="{selectedVideo.video_path}?autoplay=1"
 						title={selectedVideo.video_name}
 						frameborder="0"
 						allow="autoplay; fullscreen; picture-in-picture"
 						allowfullscreen
 						class="video-iframe"
 					></iframe>
-				{:else if selectedVideo.video_url}
+				{:else if selectedVideo.video_path}
 					<media-player
 						title={selectedVideo.video_name}
-						src={selectedVideo.video_url}
+						src={selectedVideo.video_path}
 						autoPlay
 						crossOrigin="anonymous"
 						class="vidstack-player"
