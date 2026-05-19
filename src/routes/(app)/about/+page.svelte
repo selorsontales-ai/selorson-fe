@@ -281,9 +281,15 @@
 	.poem-scroll { padding: 1.5rem; border-radius: 1rem; background: linear-gradient(135deg, #2a2416 0%, #1f1a10 100%); border-left: 6px solid #8b7355; border-right: 6px solid #8b7355; box-shadow: inset 0 0 10px rgba(0,0,0,.08), 0 4px 20px rgba(0,0,0,.1); }
 	:global(html[data-theme='light']) .poem-scroll { background: linear-gradient(135deg, #fdf4e3 0%, #f9ead5 100%); border-left-color: #d9b382; border-right-color: #d9b382; }
 	.poem-scroll-title { font-size: 1.125rem; font-weight: 700; color: var(--color-brand-400); text-align: center; margin: 0 0 1rem; }
-	.poem-stanzas { max-height: 400px; overflow-y: auto; padding-right: 0.5rem; scrollbar-width: thin; }
+	.poem-stanzas { max-height: 400px; overflow-y: auto; padding-right: 0.5rem; scrollbar-width: thin; scrollbar-color: rgba(139, 115, 85, 0.5) transparent; }
+	.poem-stanzas::-webkit-scrollbar { width: 6px; }
+	.poem-stanzas::-webkit-scrollbar-track { background: transparent; }
+	.poem-stanzas::-webkit-scrollbar-thumb { background: rgba(139, 115, 85, 0.5); border-radius: 10px; }
+	.poem-stanzas::-webkit-scrollbar-thumb:hover { background: rgba(139, 115, 85, 0.8); }
 	.poem-stanza { margin-bottom: 1rem; }
 	.poem-stanza p { color: rgba(255,255,255,0.7); font-size: 0.9rem; line-height: 1.8; margin: 0; font-style: italic; font-family: 'Merriweather', 'Times New Roman', serif; }
+	:global(html[data-theme='light']) .poem-stanzas { scrollbar-color: rgba(217, 179, 130, 0.8) transparent; }
+	:global(html[data-theme='light']) .poem-stanzas::-webkit-scrollbar-thumb { background: rgba(217, 179, 130, 0.8); }
 	:global(html[data-theme='light']) .poem-stanza p { color: #444; }
 	.poem-author { text-align: center; color: var(--color-brand-400); font-weight: 700; font-size: 0.9rem; margin-top: 1rem; }
 
