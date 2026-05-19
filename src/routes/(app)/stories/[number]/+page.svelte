@@ -33,6 +33,10 @@
 		{ value: 'Merriweather, serif', label: 'Merriweather' },
 		{ value: 'Lora, serif', label: 'Lora' },
 		{ value: '"Roboto Mono", monospace', label: 'Roboto Mono' },
+		{ value: '"Cinzel Decorative", serif', label: 'Cinzel Decorative' },
+		{ value: '"Uncial Antiqua", cursive', label: 'Uncial Antiqua' },
+		{ value: '"Metamorphous", serif', label: 'Metamorphous' },
+		{ value: '"IM Fell English", serif', label: 'IM Fell English' }
 	];
 
 	let themes = $derived([
@@ -42,6 +46,7 @@
 		{ id: 'sky', name: m.reader_theme_sky(), bg: '#e3f2fd', color: '#1a3a5c', preview: '#e3f2fd', previewText: '#1a3a5c' },
 		{ id: 'lavender', name: m.reader_theme_lavender(), bg: '#f3e5f5', color: '#4a2560', preview: '#f3e5f5', previewText: '#4a2560' },
 		{ id: 'night', name: m.reader_theme_night(), bg: '#0f0f1a', color: '#b8c0d0', preview: '#0f0f1a', previewText: '#b8c0d0' },
+		{ id: 'classic', name: m.reader_theme_classic(), bg: '#2a1f0e', color: '#f5e6c8', preview: '#2a1f0e', previewText: '#c8a84b' },
 	]);
 
 	const speedOptions = [
@@ -142,7 +147,12 @@
 	function getThemeStyle() {
 		const t = themes.find(th => th.id === theme);
 		if (!t || t.id === 'default') return '';
-		return `background:${t.bg};color:${t.color};border-radius:1rem;padding:2.5rem;border:1px solid rgba(0,0,0,.06);`;
+		
+		let borderStyle = '1px solid rgba(0,0,0,.06)';
+		if (t.id === 'night') borderStyle = '1px solid rgba(255,255,255,.06)';
+		if (t.id === 'classic') borderStyle = '1px solid rgba(200,168,75,.3)';
+		
+		return `background:${t.bg};color:${t.color};border-radius:1rem;padding:2.5rem;border:${borderStyle};`;
 	}
 </script>
 
@@ -153,6 +163,7 @@
 	{/if}
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Merriweather:wght@400;700&display=swap" rel="stylesheet" />
+	<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Uncial+Antiqua&family=Metamorphous&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet" />
 </svelte:head>
 
 <!-- Scroll Progress -->
