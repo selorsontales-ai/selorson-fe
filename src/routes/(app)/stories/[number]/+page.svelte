@@ -190,66 +190,69 @@
 				<time>{new Date(chapter.created_at).toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' })}</time>
 			</header>
 
-			<!-- Reading Toolbar -->
-			<div class="reading-toolbar">
-				<!-- Font Size -->
-				<div class="toolbar-group">
-					<button class="tool-btn" onclick={() => { fontSize = Math.max(12, fontSize - 2); }} title={m.reader_font_smaller()}>A-</button>
-					<span class="font-size-label">{fontSize}px</span>
-					<button class="tool-btn" onclick={() => { fontSize = Math.min(32, fontSize + 2); }} title={m.reader_font_larger()}>A+</button>
-				</div>
+			<!-- Sticky Toolbar Wrapper -->
+			<div class="toolbar-sticky-wrapper">
+				<!-- Reading Toolbar -->
+				<div class="reading-toolbar">
+					<!-- Font Size -->
+					<div class="toolbar-group">
+						<button class="tool-btn" onclick={() => { fontSize = Math.max(12, fontSize - 2); }} title={m.reader_font_smaller()}>A-</button>
+						<span class="font-size-label">{fontSize}px</span>
+						<button class="tool-btn" onclick={() => { fontSize = Math.min(32, fontSize + 2); }} title={m.reader_font_larger()}>A+</button>
+					</div>
 
-				<!-- Font Family -->
-				<div class="toolbar-group">
-					<select class="font-select" bind:value={fontFamily}>
-						{#each fontOptions as f}
-							<option value={f.value}>{f.label}</option>
-						{/each}
-					</select>
-				</div>
-
-				<!-- Themes -->
-				<div class="toolbar-group">
-					{#each themes as t}
-						<button class="theme-btn" class:active={theme === t.id}
-							style="background:{t.preview};color:{t.previewText}"
-							title={t.name} onclick={() => theme = t.id}>Aa</button>
-					{/each}
-				</div>
-
-				<!-- Auto Scroll -->
-				<div class="toolbar-group auto-scroll-group">
-					<button class="tool-btn" class:active={autoScrolling} onclick={toggleAutoScroll}
-						title={autoScrolling ? m.reader_stop_scroll() : m.reader_auto_scroll()}>{autoScrolling ? '⏸' : '▶'}</button>
-					{#if showSpeedPicker}
-						<div class="speed-picker">
-							{#each speedOptions as s}
-								<button class="speed-btn" class:active={autoScrolling && autoScrollSpeed === s.value}
-									onclick={() => pickSpeed(s.value)}>{s.label}</button>
+					<!-- Font Family -->
+					<div class="toolbar-group">
+						<select class="font-select" bind:value={fontFamily}>
+							{#each fontOptions as f}
+								<option value={f.value}>{f.label}</option>
 							{/each}
-						</div>
-					{/if}
+						</select>
+					</div>
+
+					<!-- Themes -->
+					<div class="toolbar-group">
+						{#each themes as t}
+							<button class="theme-btn" class:active={theme === t.id}
+								style="background:{t.preview};color:{t.previewText}"
+								title={t.name} onclick={() => theme = t.id}>Aa</button>
+						{/each}
+					</div>
+
+					<!-- Auto Scroll -->
+					<div class="toolbar-group auto-scroll-group">
+						<button class="tool-btn" class:active={autoScrolling} onclick={toggleAutoScroll}
+							title={autoScrolling ? m.reader_stop_scroll() : m.reader_auto_scroll()}>{autoScrolling ? '⏸' : '▶'}</button>
+						{#if showSpeedPicker}
+							<div class="speed-picker">
+								{#each speedOptions as s}
+									<button class="speed-btn" class:active={autoScrolling && autoScrollSpeed === s.value}
+										onclick={() => pickSpeed(s.value)}>{s.label}</button>
+								{/each}
+							</div>
+						{/if}
+					</div>
+
+					<!-- Settings (Width, Line height) -->
+					<button class="tool-btn" onclick={() => showSettings = !showSettings} title={m.reader_settings()} class:active={showSettings}>⚙️</button>
 				</div>
 
-				<!-- Settings (Width, Line height) -->
-				<button class="tool-btn" onclick={() => showSettings = !showSettings} title={m.reader_settings()} class:active={showSettings}>⚙️</button>
+				<!-- Extended Settings Panel -->
+				{#if showSettings}
+					<div class="reader-settings glass-card">
+						<label>
+							<span>{m.reader_line_height()}</span>
+							<input type="range" min="1.4" max="2.4" step="0.1" bind:value={lineHeight} />
+							<span class="val">{lineHeight}</span>
+						</label>
+						<label>
+							<span>{m.reader_width()}</span>
+							<input type="range" min="500" max="1000" step="20" bind:value={maxWidth} />
+							<span class="val">{maxWidth}px</span>
+						</label>
+					</div>
+				{/if}
 			</div>
-
-			<!-- Extended Settings Panel -->
-			{#if showSettings}
-				<div class="reader-settings glass-card">
-					<label>
-						<span>{m.reader_line_height()}</span>
-						<input type="range" min="1.4" max="2.4" step="0.1" bind:value={lineHeight} />
-						<span class="val">{lineHeight}</span>
-					</label>
-					<label>
-						<span>{m.reader_width()}</span>
-						<input type="range" min="500" max="1000" step="20" bind:value={maxWidth} />
-						<span class="val">{maxWidth}px</span>
-					</label>
-				</div>
-			{/if}
 
 			<!-- Chapter Navigation (Top) -->
 			<nav class="chapter-nav-top">
@@ -345,13 +348,18 @@
 	.reader-header h1 { font-size: clamp(1.5rem, 4vw, 2.25rem); font-weight: 800; line-height: 1.2; margin-bottom: 0.5rem; }
 	.reader-header time { font-size: .8rem; color: var(--color-text-muted); }
 
+	/* ─── Sticky Toolbar Wrapper ─── */
+	.toolbar-sticky-wrapper {
+		position: sticky; top: 64px; z-index: 50;
+		margin-bottom: 1rem;
+	}
 	/* ─── Reading Toolbar ─── */
 	.reading-toolbar {
 		display: flex; align-items: center; gap: 0.75rem; padding: 0.625rem 1rem;
-		background: var(--color-surface-100); border-radius: 0.75rem; margin-bottom: 1rem;
+		background: var(--color-surface-100); border-radius: 0.75rem;
 		border: 1px solid rgba(255,255,255,.04); flex-wrap: wrap;
 		backdrop-filter: blur(12px);
-		position: sticky; top: 0; z-index: 100;
+		box-shadow: 0 2px 8px rgba(0,0,0,.15);
 	}
 	.toolbar-group { display: flex; align-items: center; gap: 0.375rem; }
 	.tool-btn {
@@ -392,7 +400,7 @@
 
 	/* Extended Settings */
 	.reader-settings {
-		margin: 0 auto 2rem; padding: 0.75rem 1rem;
+		margin: 0; padding: 0.75rem 1rem; margin-top: 0.5rem;
 		display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;
 	}
 	.reader-settings label {
