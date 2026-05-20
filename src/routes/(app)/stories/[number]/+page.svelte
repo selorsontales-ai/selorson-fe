@@ -467,7 +467,11 @@
 	}
 
 	@media (max-width: 600px) {
-		.reading-toolbar { gap: 0.5rem; padding: 0.5rem; }
+		.reading-toolbar { gap: 0.5rem; padding: 0.5rem; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+		.reading-toolbar::-webkit-scrollbar { display: none; }
+		.theme-btn { width: 24px; height: 24px; font-size: 0.5rem; }
+		.tool-btn { width: 28px; height: 28px; font-size: 0.65rem; }
+		.font-select { font-size: 0.65rem; padding: 0.25rem 0.375rem; }
 		.reader-settings { flex-direction: column; gap: 0.5rem; }
 		.chapter-nav { flex-direction: column; gap: 0.75rem; }
 		.chapter-nav-top { flex-direction: column; gap: 0.5rem; align-items: stretch; text-align: center; }
