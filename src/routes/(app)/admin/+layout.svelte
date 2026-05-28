@@ -99,6 +99,14 @@
 				{ href: "/admin/support", icon: "📊", label: "Giám Sát CSKH" },
 			],
 		},
+		{
+			title: "Công Cụ AI",
+			items: [
+				{ href: "/admin/llm-gateway", icon: "🤖", label: "Cổng AI" },
+				{ href: "/admin/claude-chat", icon: "💬", label: "Claude Chat" },
+				{ href: "/admin/co-writer", icon: "✍️", label: "Trợ Lý Sáng Tác" },
+			],
+		},
 	];
 </script>
 
