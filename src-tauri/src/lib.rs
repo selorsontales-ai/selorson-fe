@@ -1,0 +1,26 @@
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+  // Spawn the Rust Axum backend on a separate thread
+  std::thread::spawn(|| {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+      // Force Co-Writer to be enabled in Desktop app
+      std::env::set_var("ENABLE_CO_WRITER", "true");
+      selorson_backend::start_server().await;
+    });
+  });
+
+  tauri::Builder::default()
+    .setup(|app| {
+      if cfg!(debug_assertions) {
+        app.handle().plugin(
+          tauri_plugin_log::Builder::default()
+            .level(log::LevelFilter::Info)
+            .build(),
+        )?;
+      }
+      Ok(())
+    })
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application");
+}

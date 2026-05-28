@@ -2,6 +2,7 @@ import adapterStatic from '@sveltejs/adapter-static';
 import adapterCloudflare from '@sveltejs/adapter-cloudflare';
 
 const isMobile = process.env.BUILD_TARGET === 'mobile';
+const isDesktop = process.env.BUILD_TARGET === 'desktop';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
@@ -10,7 +11,7 @@ const config = {
 		runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 	},
 	kit: {
-		adapter: isMobile
+		adapter: (isMobile || isDesktop)
 			? adapterStatic({
 					pages: 'build',
 					assets: 'build',
