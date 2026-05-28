@@ -2,6 +2,9 @@
 pub fn run() {
   // Spawn the Rust Axum backend on a separate thread
   std::thread::spawn(|| {
+    // Load local env file explicitly for the desktop app (used for training)
+    let _ = dotenvy::from_path("E:\\Selorson\\backend-v3\\.env");
+
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
       // Force Co-Writer to be enabled in Desktop app
