@@ -1,0 +1,5 @@
+co-writer-data/
+*.db
+*.db-shm
+*.db-wal
+target/
