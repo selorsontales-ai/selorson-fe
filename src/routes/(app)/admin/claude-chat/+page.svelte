@@ -1,6 +1,7 @@
 <!-- Admin Claude Chat — Claude account pool management ported from NeuroForge -->
 <script lang="ts">
-	import { adminGet, adminPost, adminPut, adminDelete, toast_success, toast_error } from '$lib/stores/admin.svelte';
+	import { adminGet, adminPut, adminDelete, toast_success, toast_error } from '$lib/stores/admin.svelte';
+	import { isDesktop, isWeb } from '$lib/platform';
 	import { onMount } from 'svelte';
 
 	interface ClaudeAccount {
@@ -133,17 +134,26 @@
 
 	async function openClaudeWindow(acc?: ClaudeAccount) {
 		if (!acc) {
-			window.open('https://claude.ai', 'claude_window', 'width=1200,height=800,menubar=no,toolbar=no,location=no');
+			window.open('https://claude.ai', '_blank');
 			return;
 		}
-		try {
-			toast_success(`Đang mở ${acc.label}...`);
-			const res = await adminPost(`/admin/claude/accounts/${acc.id}/launch`);
-			if (!res.success) {
-				toast_error(res.message || 'Lỗi mở trình duyệt');
+
+		if (isDesktop) {
+			// Desktop (Tauri): open an isolated native window with custom title & separate cookie profile
+			try {
+				toast_success(`Đang mở ${acc.label}...`);
+				const { invoke } = await import('@tauri-apps/api/core');
+				await invoke('open_claude_window', { accountId: acc.id, accountName: acc.label });
+			} catch (err: any) {
+				toast_error(err?.message || 'Lỗi mở cửa sổ Claude');
 			}
-		} catch (e: any) {
-			toast_error(e.message || 'Lỗi mở trình duyệt');
+		} else if (isWeb) {
+			// Web: simply open Claude in a new browser tab
+			window.open('https://claude.ai', '_blank');
+			toast_success(`Mở Claude.ai cho ${acc.label} — hãy đăng nhập đúng tài khoản`);
+		} else {
+			// Mobile: feature not applicable
+			toast_error('Tính năng mở phiên Claude riêng chỉ hỗ trợ trên bản Desktop');
 		}
 	}
 
