@@ -1,6 +1,6 @@
 <!-- Admin Claude Chat — Claude account pool management ported from NeuroForge -->
 <script lang="ts">
-	import { adminGet, adminPut, adminDelete, toast_success, toast_error } from '$lib/stores/admin.svelte';
+	import { adminGet, adminPost, adminPut, adminDelete, toast_success, toast_error } from '$lib/stores/admin.svelte';
 	import { isDesktop, isWeb } from '$lib/platform';
 	import { onMount } from 'svelte';
 
@@ -196,7 +196,7 @@
 			<p class="page-subtitle">Quản lý pool tài khoản Claude — xoay vòng khi bị limit</p>
 		</div>
 		<div class="header-actions">
-			<button class="btn btn-outline" onclick={openClaudeWindow}>🌐 Mở Claude.ai</button>
+			<button class="btn btn-outline" onclick={() => openClaudeWindow()}>🌐 Mở Claude.ai</button>
 			<button class="btn btn-primary" onclick={() => showAddModal = true}>+ Thêm Tài Khoản</button>
 		</div>
 	</div>

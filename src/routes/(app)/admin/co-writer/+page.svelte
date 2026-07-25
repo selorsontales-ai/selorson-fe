@@ -7,7 +7,8 @@
 		adminPut,
 		adminDelete,
 		toast_success,
-		toast_error
+		toast_error,
+		showToast
 	} from '$lib/stores/admin.svelte';
 
 	// ═══════════════════ STATE ═══════════════════
@@ -30,6 +31,37 @@
 	let isGenerating = $state(false);
 	let isBrainstorming = $state(false);
 
+	// Retrieval trace — nguồn AI đã đọc (tree picks + vector hits)
+	let treePicks = $state<any[]>([]);
+	let ragChunks = $state<any[]>([]);
+	let excludedNodeIds = $state<Set<number>>(new Set());
+	let excludedChunkIds = $state<Set<number>>(new Set());
+
+	// Knowledge tree browser
+	let treeDocs = $state<any[]>([]);
+	let treeLoaded = $state(false);
+	let isLoadingTree = $state(false);
+
+	// Scan progress (background indexing)
+	let scanProgress = $state<any>(null);
+
+	// Generations history
+	let generations = $state<any[]>([]);
+	let historyLoaded = $state(false);
+	let isSavingAnalyze = $state(false);
+
+	// AI settings (provider/model/max_tokens/worker_model)
+	let settings = $state<any>({ gen_provider: '', gen_model: '', gen_max_tokens: '', worker_model: '', default_worker_model: '' });
+	let modelProviders = $state<any[]>([]);
+	let isSavingSettings = $state(false);
+
+	// World Bible extras
+	let entitySearch = $state('');
+	let expandedEntityIds = $state<Set<string>>(new Set());
+
+	// Manual log form open-state (for "edit chapter log" jumps)
+	let manualLogOpen = $state(false);
+
 	// World Bible
 	let entities = $state<any[]>([]);
 	let entityFilter = $state('');
@@ -44,6 +76,14 @@
 		collision_priority: 1,
 		description: '',
 	});
+
+	const filteredEntities = $derived(entities.filter((e) => {
+		const q = entitySearch.trim().toLowerCase();
+		if (!q) return true;
+		return e.name?.toLowerCase().includes(q)
+			|| e.id?.toLowerCase().includes(q)
+			|| (Array.isArray(e.aliases) && e.aliases.some((a: string) => a.toLowerCase().includes(q)));
+	}));
 
 	// Chronicle
 	let chapterLogs = $state<any[]>([]);
@@ -98,6 +138,7 @@
 		loadChapterLogs();
 		loadDocuments();
 		loadScanSources();
+		loadSettings();
 	});
 
 	// ═══════════════════ API CALLS ═══════════════════
@@ -126,14 +167,20 @@
 	// Workshop
 	async function doBrainstorm() {
 		if (!brainstormGoal.trim()) return toast_error('Nhập định hướng chương');
+		if (!targetChapter || targetChapter < 1) return toast_error('Nhập số chương hợp lệ');
+		if (writingBeats.trim() && !confirm('Dàn ý (beats) đang có nội dung — brainstorm mới sẽ GHI ĐÈ lên. Tiếp tục?')) return;
 		isBrainstorming = true;
 		const res = await adminPost<any>('/admin/writer/brainstorm', {
 			goal: brainstormGoal,
 			target_chapter: targetChapter,
+			excluded_node_ids: [...excludedNodeIds],
+			excluded_chunk_ids: [...excludedChunkIds],
 		});
 		isBrainstorming = false;
 		if (res.success && res.data) {
 			writingBeats = res.data.beats;
+			treePicks = res.data.trace?.tree_picks || [];
+			ragChunks = res.data.trace?.vector_hits || [];
 			toast_success('AI đã tạo dàn ý thành công!');
 		} else {
 			toast_error(res.message || 'Brainstorm thất bại');
@@ -142,6 +189,7 @@
 
 	async function doGenerate() {
 		if (!writingBeats.trim()) return toast_error('Cần có dàn ý (beats)');
+		if (!targetChapter || targetChapter < 1) return toast_error('Nhập số chương hợp lệ');
 		isGenerating = true;
 		const res = await adminPost<any>('/admin/writer/generate', {
 			target_chapter: targetChapter,
@@ -150,20 +198,52 @@
 			mmr_lambda: mmrLambda,
 			temporal_lambda: temporalLambda,
 			prompt_only: promptOnly,
+			excluded_node_ids: [...excludedNodeIds],
+			excluded_chunk_ids: [...excludedChunkIds],
 		});
 		isGenerating = false;
 		if (res.success && res.data) {
 			superPrompt = res.data.prompt || '';
 			promptStats = res.data.stats || null;
 			generatedText = res.data.generated_text || '';
+			treePicks = res.data.tree_picks || [];
+			ragChunks = res.data.rag_chunks || [];
 			toast_success(promptOnly ? 'Prompt đã tổng hợp!' : 'AI đã viết xong!');
 		} else {
 			// Even on error, we might have partial data (prompt built but LLM failed)
 			if (res.data) {
 				superPrompt = res.data.prompt || '';
 				promptStats = res.data.stats || null;
+				treePicks = res.data.tree_picks || [];
+				ragChunks = res.data.rag_chunks || [];
 			}
 			toast_error(res.message || 'Generate thất bại');
+		}
+	}
+
+	function toggleExcludedNode(id: number) {
+		const s = new Set(excludedNodeIds);
+		if (s.has(id)) s.delete(id);
+		else s.add(id);
+		excludedNodeIds = s;
+	}
+
+	function toggleExcludedChunk(id: number) {
+		const s = new Set(excludedChunkIds);
+		if (s.has(id)) s.delete(id);
+		else s.add(id);
+		excludedChunkIds = s;
+	}
+
+	async function loadTree() {
+		isLoadingTree = true;
+		const res = await adminGet<any[]>('/admin/writer/tree');
+		isLoadingTree = false;
+		if (res.success && res.data) {
+			treeDocs = res.data;
+			treeLoaded = true;
+		} else {
+			toast_error(res.message || 'Không tải được cây tri thức');
 		}
 	}
 
@@ -236,6 +316,7 @@
 	// Chronicle
 	async function doAutoAnalyze() {
 		if (!autoLogContent.trim()) return toast_error('Dán nội dung chương');
+		if (!autoLogChapter || autoLogChapter < 1) return toast_error('Nhập số chương hợp lệ');
 		isAutoAnalyzing = true;
 		const res = await adminPost<any>('/admin/writer/chapter-logs/auto', {
 			chapter_number: autoLogChapter,
@@ -270,13 +351,150 @@
 		isScanning = true;
 		scanResult = null;
 		const res = await adminPost<any>('/admin/writer/index/scan');
+		if (!res.success) {
+			isScanning = false;
+			return toast_error(res.message || 'Scan thất bại');
+		}
+		pollScanProgress();
+	}
+
+	async function doRebuildIndex() {
+		if (!confirm('Re-index TOÀN BỘ: xóa index hiện tại và embed lại từ đầu (tốn thời gian + quota API). Tiếp tục?')) return;
+		isScanning = true;
+		scanResult = null;
+		const res = await adminPost<any>('/admin/writer/index/rebuild');
+		if (!res.success) {
+			isScanning = false;
+			return toast_error(res.message || 'Re-index thất bại');
+		}
+		pollScanProgress();
+	}
+
+	async function pollScanProgress() {
+		const res = await adminGet<any>('/admin/writer/index/progress');
+		if (!res.success || !res.data) {
+			isScanning = false;
+			scanProgress = null;
+			return;
+		}
+		scanProgress = res.data;
+		if (res.data.running) {
+			setTimeout(pollScanProgress, 1000);
+			return;
+		}
 		isScanning = false;
-		if (res.success && res.data) {
-			scanResult = res.data;
-			toast_success(`Scan hoàn tất: ${res.data.files_new} mới, ${res.data.files_updated} cập nhật`);
+		scanProgress = null;
+		if (res.data.error) {
+			toast_error(res.data.error);
+		} else if (res.data.result) {
+			scanResult = res.data.result;
+			toast_success(`Scan hoàn tất: ${res.data.result.files_new} mới, ${res.data.result.files_updated} cập nhật`);
 			loadDocuments();
 			loadStatus();
-		} else toast_error(res.message || 'Scan thất bại');
+			treeLoaded = false;
+			treeDocs = [];
+		}
+	}
+
+	// ═══════════════════ GENERATIONS HISTORY ═══════════════════
+
+	async function loadGenerations() {
+		const res = await adminGet<any[]>('/admin/writer/generations');
+		if (res.success && res.data) {
+			generations = res.data;
+			historyLoaded = true;
+		}
+	}
+
+	async function loadGenerationInto(id: number) {
+		const res = await adminGet<any>(`/admin/writer/generations/${id}`);
+		if (res.success && res.data) {
+			const g = res.data;
+			targetChapter = g.target_chapter || targetChapter;
+			if (g.kind === 'brainstorm') {
+				brainstormGoal = g.beats || brainstormGoal;
+				writingBeats = g.output || '';
+			} else {
+				writingBeats = g.beats || '';
+				superPrompt = g.prompt || '';
+				generatedText = g.output || '';
+			}
+			toast_success('Đã nạp lại từ lịch sử');
+		} else toast_error(res.message || 'Lỗi');
+	}
+
+	async function removeGeneration(id: number) {
+		if (!confirm('Xóa mục lịch sử này?')) return;
+		const res = await adminDelete(`/admin/writer/generations/${id}`);
+		if (res.success) loadGenerations();
+		else toast_error(res.message || 'Lỗi');
+	}
+
+	async function saveAndAnalyze() {
+		if (!generatedText.trim()) return;
+		isSavingAnalyze = true;
+		const res = await adminPost<any>('/admin/writer/chapter-logs/auto', {
+			chapter_number: targetChapter,
+			content: generatedText,
+		});
+		isSavingAnalyze = false;
+		if (res.success) {
+			toast_success(`Đã lưu & phân tích chương ${targetChapter} vào Biên Niên Sử!`);
+			loadChapterLogs();
+			loadStatus();
+		} else toast_error(res.message || 'Lỗi');
+	}
+
+	// ═══════════════════ AI SETTINGS ═══════════════════
+
+	async function loadSettings() {
+		const [s, m] = await Promise.all([
+			adminGet<any>('/admin/writer/settings'),
+			adminGet<any[]>('/admin/writer/models'),
+		]);
+		if (s.success && s.data) settings = { ...settings, ...s.data };
+		if (m.success && m.data) modelProviders = m.data;
+	}
+
+	async function saveSettings() {
+		isSavingSettings = true;
+		const res = await adminPut('/admin/writer/settings', {
+			gen_provider: settings.gen_provider ?? '',
+			gen_model: settings.gen_model ?? '',
+			gen_max_tokens: settings.gen_max_tokens ? parseInt(String(settings.gen_max_tokens)) : undefined,
+			worker_model: settings.worker_model ?? '',
+		});
+		isSavingSettings = false;
+		if (res.success) toast_success('Đã lưu cài đặt AI');
+		else toast_error(res.message || 'Lỗi');
+	}
+
+	// ═══════════════════ CHAPTER LOG EDIT/DELETE ═══════════════════
+
+	function editChapterLog(log: any) {
+		manualLogChapter = log.chapter_number;
+		manualLogSummary = log.summary || '';
+		manualLogEvents = Array.isArray(log.key_events) ? log.key_events.join('\n') : '';
+		manualLogSeeds = Array.isArray(log.plot_seeds) ? log.plot_seeds.join('\n') : '';
+		manualLogOpen = true;
+		toast_success(`Đã nạp chương ${log.chapter_number} vào form "Lưu Nhật Ký Thủ Công" — sửa xong bấm Lưu`);
+	}
+
+	async function removeChapterLog(n: number) {
+		if (!confirm(`Xóa nhật ký chương ${n}?`)) return;
+		const res = await adminDelete(`/admin/writer/chapter-logs/${n}`);
+		if (res.success) {
+			toast_success('Đã xóa nhật ký');
+			loadChapterLogs();
+			loadStatus();
+		} else toast_error(res.message || 'Lỗi');
+	}
+
+	function toggleEntityExpand(id: string) {
+		const s = new Set(expandedEntityIds);
+		if (s.has(id)) s.delete(id);
+		else s.add(id);
+		expandedEntityIds = s;
 	}
 
 	// Scan Sources
@@ -356,9 +574,15 @@
 			isDetecting = false;
 			if (res.success && res.data) {
 				detectedEntities = res.data;
-				detectSelectedIds = new Set(res.data.filter((e: any) => e.is_new).map((_: any, i: number) => i));
+				// Index theo mảng GỐC — filter trước rồi map index sẽ tick nhầm phần tử
+				detectSelectedIds = new Set(
+					res.data.map((e: any, i: number) => (e.is_new ? i : -1)).filter((i: number) => i >= 0)
+				);
 				showDetectModal = true;
 				toast_success(`AI phát hiện ${res.data.length} entities`);
+				if ((res as any).truncated) {
+					showToast('File dài — AI chỉ phân tích ~8KB đầu tiên', 'info');
+				}
 			} else toast_error(res.message || 'Phát hiện thất bại');
 		};
 		reader.readAsText(file);
@@ -451,6 +675,21 @@
 				<div class="stat-chip">🧩 {status.total_chunks} chunks</div>
 				<div class="stat-chip">🌍 {status.total_entities} entities</div>
 				<div class="stat-chip">📜 {status.total_chapter_logs} chương</div>
+				{#if status.data_dir}
+					<div class="stat-chip" title="Thư mục dữ liệu backend đang dùng — nếu sai, đặt CO_WRITER_DATA_DIR trong .env backend">
+						📁 {status.data_dir}
+					</div>
+				{/if}
+				{#if status.embedding_model}
+					<div class="stat-chip" title="Model embedding đã chốt cho toàn kho">
+						🧬 {status.embedding_model}@{status.embedding_dim}
+					</div>
+				{/if}
+				{#if status.foreign_embeddings > 0}
+					<div class="stat-chip stat-warn" title="Có chunk được embed bằng model cũ — bấm Re-index Toàn Bộ ở tab Biên Niên Sử">
+						⚠️ {status.foreign_embeddings} chunk model cũ
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</div>
@@ -508,25 +747,115 @@
 							</div>
 							<div class="form-grid-2">
 								<div class="slider-row">
-									<label>MMR λ (đa dạng): {mmrLambda.toFixed(2)}</label>
+									<label>Ưu tiên liên quan (giảm để nguồn đa dạng hơn): {mmrLambda.toFixed(2)}</label>
 									<input type="range" min="0" max="1" step="0.05" bind:value={mmrLambda} />
 								</div>
 								<div class="slider-row">
-									<label>Temporal λ: {temporalLambda.toFixed(4)}</label>
-									<input type="range" min="0.001" max="0.02" step="0.001" bind:value={temporalLambda} />
+									<label>Ưu tiên chương gần (0 = tắt): {temporalLambda.toFixed(3)}</label>
+									<input type="range" min="0" max="0.02" step="0.001" bind:value={temporalLambda} />
 								</div>
 							</div>
 							<label class="checkbox-row">
 								<input type="checkbox" bind:checked={promptOnly} />
 								Chỉ xuất prompt (không gọi AI viết)
 							</label>
+
+							<!-- AI model settings -->
+							<div class="ai-settings">
+								<h4 class="sources-sub">🤖 Model AI</h4>
+								<div class="form-grid-2">
+									<div class="form-row">
+										<label>Nhà cung cấp viết chương</label>
+										<select bind:value={settings.gen_provider}>
+											<option value="">Tự động (theo thứ tự)</option>
+											{#each modelProviders as p}
+												<option value={p.id}>{p.name} — {p.key_count} key</option>
+											{/each}
+										</select>
+									</div>
+									<div class="form-row">
+										<label>Model (trống = mặc định)</label>
+										<input type="text" bind:value={settings.gen_model}
+											placeholder={modelProviders.find((p) => p.id === settings.gen_provider)?.default_model || 'mặc định của provider'} />
+									</div>
+								</div>
+								<div class="form-grid-2">
+									<div class="form-row">
+										<label>Max tokens viết chương</label>
+										<input type="number" bind:value={settings.gen_max_tokens} placeholder="16384" min="1024" step="1024" />
+									</div>
+									<div class="form-row">
+										<label>Model phụ (tóm tắt / chọn nguồn)</label>
+										<input type="text" bind:value={settings.worker_model}
+											placeholder={settings.default_worker_model || 'gemini-2.5-flash'} />
+									</div>
+								</div>
+								<button class="btn" onclick={saveSettings} disabled={isSavingSettings}>
+									{isSavingSettings ? '⏳ Đang lưu...' : '💾 Lưu cài đặt AI'}
+								</button>
+							</div>
 						</div>
 					</details>
 				</div>
 
 				<button class="btn btn-accent btn-lg" onclick={doGenerate} disabled={isGenerating}>
-					{isGenerating ? '⏳ Đang tổng hợp...' : '✨ Tổng Hợp Super Prompt'}
+					{isGenerating
+						? (promptOnly ? '⏳ Đang tổng hợp prompt...' : '⏳ AI đang viết chương...')
+						: (promptOnly ? '📋 Tổng Hợp Prompt (không gọi AI)' : '✍️ AI Viết Chương')}
 				</button>
+
+				<!-- Sources Panel — nguồn AI đã đọc (brainstorm + generate) -->
+				{#if treePicks.length > 0 || ragChunks.length > 0}
+					<div class="card">
+						<h3 class="card-title">📚 Nguồn AI Đã Đọc</h3>
+						<p class="text-muted sources-hint">
+							Bỏ chọn nguồn không phù hợp rồi chạy lại — AI sẽ bỏ qua nguồn đó ở lần sau.
+						</p>
+						{#if treePicks.length > 0}
+							<h4 class="sources-sub">🌲 Chọn theo suy luận trên mục lục</h4>
+							{#each treePicks as pick}
+								<label class="source-pick" class:excluded={excludedNodeIds.has(pick.node_id)}>
+									<input type="checkbox"
+										checked={!excludedNodeIds.has(pick.node_id)}
+										onchange={() => toggleExcludedNode(pick.node_id)} />
+									<div class="source-pick-info">
+										<div class="source-pick-title">
+											<strong>{pick.title}</strong>
+											<span class="source-pick-file">{pick.source_file}</span>
+											<span class="source-pick-badge">~{pick.used_tokens} tokens</span>
+										</div>
+										{#if pick.reason}
+											<p class="source-pick-reason">💭 {pick.reason}</p>
+										{/if}
+									</div>
+								</label>
+							{/each}
+						{/if}
+						{#if ragChunks.length > 0}
+							<h4 class="sources-sub">🎯 Chọn theo độ tương đồng (vector)</h4>
+							{#each ragChunks as chunk}
+								<label class="source-pick" class:excluded={excludedChunkIds.has(chunk.chunk_id)}>
+									<input type="checkbox"
+										checked={!excludedChunkIds.has(chunk.chunk_id)}
+										onchange={() => toggleExcludedChunk(chunk.chunk_id)} />
+									<div class="source-pick-info">
+										<div class="source-pick-title">
+											<strong>{chunk.source_file}</strong>
+											{#if chunk.heading}<span class="source-pick-file">{chunk.heading}</span>{/if}
+											<span class="source-pick-badge">{Math.round((chunk.raw_similarity || 0) * 100)}% khớp</span>
+										</div>
+									</div>
+								</label>
+							{/each}
+						{/if}
+						{#if excludedNodeIds.size > 0 || excludedChunkIds.size > 0}
+							<button class="btn btn-sm" style="margin-top: 0.5rem;"
+								onclick={() => { excludedNodeIds = new Set(); excludedChunkIds = new Set(); }}>
+								↺ Bỏ loại trừ ({excludedNodeIds.size + excludedChunkIds.size})
+							</button>
+						{/if}
+					</div>
+				{/if}
 
 				<!-- Output Section -->
 				{#if promptStats || superPrompt || generatedText}
@@ -564,9 +893,14 @@
 							<div class="card">
 								<h3 class="card-title">📖 Kết Quả AI</h3>
 								<div class="output-text">{generatedText}</div>
-								<button class="btn btn-sm" onclick={() => navigator.clipboard.writeText(generatedText)}>
-									📋 Copy
-								</button>
+								<div class="btn-row">
+									<button class="btn btn-sm" onclick={() => navigator.clipboard.writeText(generatedText)}>
+										📋 Copy
+									</button>
+									<button class="btn btn-sm btn-primary" onclick={saveAndAnalyze} disabled={isSavingAnalyze}>
+										{isSavingAnalyze ? '⏳ Đang phân tích...' : `💾 Lưu & Phân Tích Chương ${targetChapter}`}
+									</button>
+								</div>
 							</div>
 						{/if}
 
@@ -584,6 +918,39 @@
 						{/if}
 					</div>
 				{/if}
+
+				<!-- Generation History -->
+				<div class="card card-compact">
+					<details ontoggle={(e) => {
+						if ((e.currentTarget as HTMLDetailsElement).open && !historyLoaded) loadGenerations();
+					}}>
+						<summary class="card-title clickable">🕘 Lịch Sử Sáng Tác</summary>
+						<div class="history-list">
+							{#if historyLoaded && generations.length === 0}
+								<p class="text-muted">Chưa có lịch sử — mỗi lần Brainstorm / AI Viết sẽ tự lưu vào đây.</p>
+							{/if}
+							{#each generations as gen}
+								<div class="history-item">
+									<div class="history-info">
+										<div class="history-title">
+											{gen.kind === 'brainstorm' ? '🧠' : '✍️'}
+											<strong>Chương {gen.target_chapter}</strong>
+											<span class="source-pick-file">{gen.model}</span>
+											<span class="source-pick-badge">{gen.created_at?.split('.')[0]?.replace('T', ' ') || ''}</span>
+										</div>
+										{#if gen.preview}
+											<p class="history-preview">{gen.preview}</p>
+										{/if}
+									</div>
+									<div class="history-actions">
+										<button class="btn btn-sm" onclick={() => loadGenerationInto(gen.id)}>↩ Nạp lại</button>
+										<button class="btn-icon btn-danger-icon" onclick={() => removeGeneration(gen.id)} title="Xóa">🗑️</button>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</details>
+				</div>
 			</div>
 
 		<!-- ═══════════ TAB 2: WORLD BIBLE ═══════════ -->
@@ -602,6 +969,7 @@
 						{/each}
 					</div>
 					<div class="wb-actions">
+						<input type="text" class="entity-search" placeholder="🔍 Tìm tên / bí danh / ID..." bind:value={entitySearch} />
 						<button class="btn" onclick={() => entityDetectFileInput.click()} disabled={isDetecting}>
 							{isDetecting ? '⏳ Đang phát hiện...' : '🔍 Import & Phát Hiện Entity'}
 						</button>
@@ -611,7 +979,7 @@
 
 				<!-- Entity Table -->
 				<div class="entity-grid">
-					{#each entities as entity}
+					{#each filteredEntities as entity}
 						<div class="entity-card">
 							<div class="entity-card-header">
 								<span class="entity-icon">{getEntityIcon(entity.entity_type)}</span>
@@ -627,7 +995,16 @@
 								</p>
 							{/if}
 							{#if entity.description}
-								<p class="entity-desc">{entity.description.substring(0, 120)}{entity.description.length > 120 ? '...' : ''}</p>
+								{#if expandedEntityIds.has(entity.id) || entity.description.length <= 120}
+									<p class="entity-desc">{entity.description}</p>
+								{:else}
+									<p class="entity-desc">{entity.description.substring(0, 120)}...</p>
+								{/if}
+								{#if entity.description.length > 120}
+									<button class="entity-desc-toggle" onclick={() => toggleEntityExpand(entity.id)}>
+										{expandedEntityIds.has(entity.id) ? '▲ Thu gọn' : '▼ Xem đầy đủ'}
+									</button>
+								{/if}
 							{/if}
 							<div class="entity-actions">
 								<button class="btn btn-sm" onclick={() => openEditEntity(entity)}>✏️</button>
@@ -669,7 +1046,7 @@
 
 				<!-- Manual Log -->
 				<div class="card card-compact">
-					<details>
+					<details bind:open={manualLogOpen}>
 						<summary class="card-title clickable">📝 Lưu Nhật Ký Thủ Công</summary>
 						<div class="manual-form">
 							<div class="form-row">
@@ -682,11 +1059,11 @@
 							</div>
 							<div class="form-row">
 								<label>Sự kiện chính (mỗi dòng 1 sự kiện)</label>
-								<textarea bind:value={manualLogEvents} rows="3" placeholder="Sự kiện 1\nSự kiện 2"></textarea>
+								<textarea bind:value={manualLogEvents} rows="3" placeholder="Sự kiện 1&#10;Sự kiện 2"></textarea>
 							</div>
 							<div class="form-row">
 								<label>Mầm cốt truyện (mỗi dòng 1 mầm)</label>
-								<textarea bind:value={manualLogSeeds} rows="3" placeholder="Phục bút 1\nPhục bút 2"></textarea>
+								<textarea bind:value={manualLogSeeds} rows="3" placeholder="Phục bút 1&#10;Phục bút 2"></textarea>
 							</div>
 							<button class="btn btn-primary" onclick={saveManualLog}>💾 Lưu</button>
 						</div>
@@ -702,7 +1079,13 @@
 								<div class="timeline-item">
 									<div class="timeline-marker">CH{log.chapter_number}</div>
 									<div class="timeline-content">
-										<p class="timeline-summary">{log.summary}</p>
+										<div class="timeline-head">
+											<p class="timeline-summary">{log.summary}</p>
+											<div class="timeline-actions">
+												<button class="btn-icon" onclick={() => editChapterLog(log)} title="Sửa">✏️</button>
+												<button class="btn-icon btn-danger-icon" onclick={() => removeChapterLog(log.chapter_number)} title="Xóa">🗑️</button>
+											</div>
+										</div>
 										{#if log.key_events?.length > 0}
 											<div class="timeline-events">
 												{#each log.key_events as evt}
@@ -814,6 +1197,10 @@
 						<button class="btn btn-primary" onclick={doScanIndex} disabled={isScanning}>
 							{isScanning ? '⏳ Đang quét...' : '🔄 Scan & Index Tất Cả'}
 						</button>
+						<button class="btn" onclick={doRebuildIndex} disabled={isScanning}
+							title="Xóa toàn bộ index và embed lại từ đầu (khi đổi model embedding)">
+							🧨 Re-index Toàn Bộ
+						</button>
 						{#if scanResult}
 							<div class="scan-result">
 								<span class="scan-badge new">+{scanResult.files_new} mới</span>
@@ -826,6 +1213,18 @@
 							</div>
 						{/if}
 					</div>
+					{#if isScanning && scanProgress}
+						<div class="scan-progress">
+							<div class="progress-bar">
+								<div class="progress-fill" style="width: {scanProgress.files_total ? (scanProgress.files_done / scanProgress.files_total) * 100 : 0}%"></div>
+							</div>
+							<span class="scan-progress-text">
+								{scanProgress.stage} · {scanProgress.files_done}/{scanProgress.files_total} file
+								{#if scanProgress.current_file}· <code>{scanProgress.current_file}</code>{/if}
+								· 🧩 {scanProgress.chunks_created} chunks · 📝 {scanProgress.summaries_created} tóm tắt
+							</span>
+						</div>
+					{/if}
 					{#if scanResult?.errors?.length > 0}
 						<details class="error-details">
 							<summary>⚠️ Chi tiết lỗi ({scanResult.errors.length})</summary>
@@ -870,6 +1269,49 @@
 					{:else}
 						<p class="text-muted" style="margin-top: 1rem;">Chưa có tài liệu nào được index. Thêm thư mục rồi bấm <strong>Scan & Index</strong>.</p>
 					{/if}
+				</div>
+
+				<!-- Knowledge Tree -->
+				<div class="card">
+					<details ontoggle={(e) => {
+						if ((e.currentTarget as HTMLDetailsElement).open && !treeLoaded && !isLoadingTree) loadTree();
+					}}>
+						<summary class="card-title clickable">🌲 Cây Tri Thức — mục lục AI đọc khi suy luận</summary>
+						<div class="tree-browser">
+							{#if isLoadingTree}
+								<p class="text-muted">⏳ Đang tải cây tri thức...</p>
+							{:else if treeLoaded && treeDocs.length === 0}
+								<p class="text-muted">Chưa có tài liệu nào. Scan & Index trước đã.</p>
+							{:else}
+								<div class="tree-toolbar">
+									<button class="btn btn-sm" onclick={loadTree}>↻ Tải lại</button>
+								</div>
+								{#each treeDocs as doc}
+									<details class="tree-doc">
+										<summary>
+											📄 <strong>{doc.filename}</strong>
+											<span class="category-badge">{doc.category}</span>
+											<span class="source-pick-badge">{doc.nodes?.length || 0} mục</span>
+										</summary>
+										{#if doc.description}
+											<p class="tree-doc-desc">{doc.description}</p>
+										{/if}
+										{#each doc.nodes || [] as node}
+											<div class="tree-node" style="padding-left: {Math.min(node.level, 4) * 1}rem;">
+												<div class="tree-node-title">
+													<strong>{node.title}</strong>
+													<span class="source-pick-badge">~{node.token_count} tokens</span>
+												</div>
+												{#if node.summary}
+													<p class="tree-node-summary">{node.summary}</p>
+												{/if}
+											</div>
+										{/each}
+									</details>
+								{/each}
+							{/if}
+						</div>
+					</details>
 				</div>
 			</div>
 		{/if}
@@ -1384,6 +1826,112 @@
 		color: var(--color-text-primary);
 	}
 	.browse-item:hover { background: var(--color-surface-200); border-color: var(--color-brand-500); }
+
+	/* ═══════════ PHASE E: SETTINGS / HISTORY / PROGRESS ═══════════ */
+	.stat-chip.stat-warn { background: rgba(239,68,68,0.15); color: #f87171; }
+
+	.ai-settings {
+		margin-top: 0.75rem; padding-top: 0.75rem;
+		border-top: 1px dashed var(--color-surface-300);
+	}
+
+	.history-list { padding-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
+	.history-item {
+		display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem;
+		padding: 0.625rem 0.75rem; background: var(--color-surface-200);
+		border-radius: var(--radius-md);
+	}
+	.history-info { flex: 1; min-width: 0; }
+	.history-title {
+		display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+		font-size: 0.8125rem;
+	}
+	.history-preview {
+		margin: 0.25rem 0 0; font-size: 0.75rem; color: var(--color-text-muted);
+		line-height: 1.4;
+		display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+	.history-actions { display: flex; align-items: center; gap: 0.375rem; flex-shrink: 0; }
+
+	.scan-progress { margin: 0.5rem 0 1rem; }
+	.scan-progress .progress-bar { height: 8px; margin-bottom: 0.375rem; }
+	.scan-progress-text { font-size: 0.75rem; color: var(--color-text-muted); }
+	.scan-progress-text code { font-size: 0.6875rem; word-break: break-all; }
+
+	.timeline-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
+	.timeline-head .timeline-summary { flex: 1; }
+	.timeline-actions { display: flex; gap: 0.25rem; flex-shrink: 0; opacity: 0.7; }
+
+	.entity-search {
+		padding: 0.5rem 0.75rem; border-radius: var(--radius-md);
+		border: 1px solid var(--color-surface-300); background: var(--color-surface-200);
+		color: var(--color-text-primary); font-size: 0.8125rem; min-width: 200px;
+	}
+	.entity-search:focus { outline: none; border-color: var(--color-brand-500); }
+	.entity-desc-toggle {
+		background: none; border: none; cursor: pointer; padding: 0;
+		font-size: 0.6875rem; color: var(--color-brand-400); font-weight: 600;
+		margin-bottom: 0.75rem;
+	}
+	.entity-desc-toggle:hover { text-decoration: underline; }
+
+	/* ═══════════ SOURCES PANEL & KNOWLEDGE TREE ═══════════ */
+	.sources-hint { margin: 0 0 0.75rem; font-size: 0.8rem; }
+	.sources-sub {
+		margin: 0.75rem 0 0.375rem; font-size: 0.8125rem; font-weight: 700;
+		color: var(--color-text-muted);
+	}
+	.source-pick {
+		display: flex; gap: 0.625rem; align-items: flex-start;
+		padding: 0.5rem 0.75rem; margin-bottom: 0.375rem;
+		background: var(--color-surface-200); border-radius: var(--radius-md);
+		cursor: pointer; transition: opacity 0.2s;
+	}
+	.source-pick input { margin-top: 0.2rem; accent-color: var(--color-brand-500); flex-shrink: 0; }
+	.source-pick.excluded { opacity: 0.45; }
+	.source-pick.excluded .source-pick-title strong { text-decoration: line-through; }
+	.source-pick-info { flex: 1; min-width: 0; }
+	.source-pick-title {
+		display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+		font-size: 0.8125rem;
+	}
+	.source-pick-file { font-size: 0.6875rem; color: var(--color-text-muted); font-family: monospace; }
+	.source-pick-badge {
+		font-size: 0.625rem; padding: 0.125rem 0.5rem; border-radius: 999px;
+		background: rgba(99,102,241,0.15); color: #818cf8; font-weight: 700;
+		white-space: nowrap;
+	}
+	.source-pick-reason {
+		margin: 0.25rem 0 0; font-size: 0.75rem; color: var(--color-text-secondary);
+		line-height: 1.4; font-style: italic;
+	}
+
+	.tree-browser { padding-top: 0.75rem; }
+	.tree-toolbar { margin-bottom: 0.75rem; }
+	.tree-doc {
+		margin-bottom: 0.5rem; padding: 0.5rem 0.75rem;
+		background: var(--color-surface-200); border-radius: var(--radius-md);
+	}
+	.tree-doc summary {
+		cursor: pointer; font-size: 0.8125rem;
+		display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+	}
+	.tree-doc-desc {
+		margin: 0.5rem 0; font-size: 0.75rem; color: var(--color-text-secondary);
+		font-style: italic; line-height: 1.4;
+	}
+	.tree-node { margin: 0.5rem 0; }
+	.tree-node-title {
+		display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+		font-size: 0.8125rem;
+	}
+	.tree-node-summary {
+		margin: 0.125rem 0 0; font-size: 0.75rem; color: var(--color-text-muted);
+		line-height: 1.45;
+		display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+		overflow: hidden;
+	}
 
 	/* Light Theme */
 	:global(html[data-theme='light']) .card { background: #fff; border-color: #e5e7eb; }

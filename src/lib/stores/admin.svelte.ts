@@ -28,25 +28,57 @@ export function toast_error(msg: string) { showToast(msg, 'error'); }
 export function getToasts(): ToastItem[] { return toasts; }
 
 // ---- Admin API Helpers ----
+// api() throws khi HTTP lỗi hoặc success:false — các trang admin lại kiểm tra
+// res.success thay vì try/catch, nên helpers phải nuốt exception và trả về
+// ApiResponse dạng lỗi để spinner không bị kẹt và toast lỗi hiển thị đúng.
+
+function toErrorResponse<T>(err: unknown): ApiResponse<T> {
+	const e = err as { success?: boolean; message?: string; data?: T };
+	return {
+		success: false,
+		data: (e?.data as T) ?? (undefined as T),
+		message: e?.message || 'Không kết nối được máy chủ',
+	};
+}
 
 export async function adminGet<T>(endpoint: string): Promise<ApiResponse<T>> {
-	return api<T>(endpoint);
+	try {
+		return await api<T>(endpoint);
+	} catch (err) {
+		return toErrorResponse<T>(err);
+	}
 }
 
 export async function adminPost<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
-	return api<T>(endpoint, { method: 'POST', body });
+	try {
+		return await api<T>(endpoint, { method: 'POST', body });
+	} catch (err) {
+		return toErrorResponse<T>(err);
+	}
 }
 
 export async function adminPut<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
-	return api<T>(endpoint, { method: 'PUT', body });
+	try {
+		return await api<T>(endpoint, { method: 'PUT', body });
+	} catch (err) {
+		return toErrorResponse<T>(err);
+	}
 }
 
 export async function adminDelete<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
-	return api<T>(endpoint, { method: 'DELETE', body });
+	try {
+		return await api<T>(endpoint, { method: 'DELETE', body });
+	} catch (err) {
+		return toErrorResponse<T>(err);
+	}
 }
 
 export async function adminUpload<T>(endpoint: string, formData: FormData): Promise<ApiResponse<T>> {
-	return apiUpload<T>(endpoint, formData);
+	try {
+		return await apiUpload<T>(endpoint, formData);
+	} catch (err) {
+		return toErrorResponse<T>(err);
+	}
 }
 
 // ---- Formatting Helpers ----
