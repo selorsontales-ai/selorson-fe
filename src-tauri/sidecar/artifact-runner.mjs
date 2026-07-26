@@ -171,19 +171,32 @@ async function bridgeOperation(frame, operation, payload = null) {
   );
 }
 
-async function findBridgeFrame(page, timeoutMs, sleep) {
+async function findBridgeFrameOnce(page) {
+  const frames = page.frames();
+  const mainFrame = page.mainFrame();
+  const orderedFrames = [...frames.filter((frame) => frame !== mainFrame), mainFrame];
+  for (const frame of orderedFrames) {
+    try {
+      const descriptor = await bridgeOperation(frame, 'describe');
+      if (descriptor?.available) return { page, frame, descriptor };
+    } catch {
+      // Cross-origin and transient frame errors are expected while Claude renders.
+    }
+  }
+  return null;
+}
+
+/**
+ * Search every candidate tab, not just the first Claude one. A profile with
+ * several Claude tabs open would otherwise be driven through whichever tab
+ * happened to come first.
+ */
+async function findBridgeOnPages(pages, timeoutMs, sleep) {
   const deadline = Date.now() + timeoutMs;
   do {
-    const frames = page.frames();
-    const mainFrame = page.mainFrame();
-    const orderedFrames = [...frames.filter((frame) => frame !== mainFrame), mainFrame];
-    for (const frame of orderedFrames) {
-      try {
-        const descriptor = await bridgeOperation(frame, 'describe');
-        if (descriptor?.available) return { frame, descriptor };
-      } catch {
-        // Cross-origin and transient frame errors are expected while Claude renders.
-      }
+    for (const page of pages) {
+      const found = await findBridgeFrameOnce(page);
+      if (found) return found;
     }
     if (Date.now() < deadline) await sleep(Math.min(100, timeoutMs));
   } while (Date.now() < deadline);
@@ -332,24 +345,27 @@ function rateLimited(bridge, limit, source) {
   };
 }
 
-async function frameWithSelector(page, selector) {
-  for (const frame of page.frames()) {
-    try {
-      if ((await frame.locator(selector).count()) > 0) return frame;
-    } catch {
-      // Ignore detached frames and try the next bounded candidate.
+async function frameWithSelector(pages, selector) {
+  for (const page of pages) {
+    for (const frame of page.frames()) {
+      try {
+        if ((await frame.locator(selector).count()) > 0) return { page, frame };
+      } catch {
+        // Ignore detached frames and try the next bounded candidate.
+      }
     }
   }
   return null;
 }
 
-async function runDomFallback(page, request, runtime, emit) {
+async function runDomFallback(candidates, request, runtime, emit) {
   const fallback = request.input.domFallback ?? {};
   const runSelector = validateSelector(fallback.runSelector, '[data-selorson-run]');
   const resultSelector = validateSelector(fallback.resultSelector, '[data-selorson-result]');
   const stateSelector = validateSelector(fallback.stateSelector, '[data-selorson-state]');
-  const frame = await frameWithSelector(page, runSelector);
-  if (!frame) throw new Error('Artifact bridge unavailable and DOM fallback run control was not found');
+  const located = await frameWithSelector(candidates, runSelector);
+  if (!located) throw new Error('Artifact bridge unavailable and DOM fallback run control was not found');
+  const { page, frame } = located;
 
   await emit({
     protocolVersion: SIDECAR_PROTOCOL_VERSION,
@@ -400,10 +416,11 @@ async function runDomFallback(page, request, runtime, emit) {
   throw new Error(`DOM fallback did not finish within ${runtime.runTimeoutMs} milliseconds`);
 }
 
-function selectClaudePage(browser) {
+function claudePageCandidates(browser) {
   const pages = browser.contexts().flatMap((context) => context.pages());
   if (pages.length === 0) throw new Error('CDP browser has no pages');
-  return pages.find((page) => page.url().includes('claude.ai')) ?? pages[0];
+  const claudePages = pages.filter((page) => page.url().includes('claude.ai'));
+  return claudePages.length > 0 ? claudePages : [pages[0]];
 }
 
 export async function executeArtifactRequest(
@@ -448,14 +465,20 @@ export async function executeArtifactRequest(
     payload: {}
   });
   const browser = await connectOverCDP(request.cdpEndpoint);
-  const page = selectClaudePage(browser);
+  const candidates = claudePageCandidates(browser);
+
+  // One cheap pass first, so the limit is read from the tab that actually
+  // carries the Artifact. Waiting out the full bridge timeout before noticing
+  // a limit would cost that timeout on every rotation.
+  const located = await findBridgeOnPages(candidates, 0, runtime.sleep);
+  const page = located?.page ?? candidates[0];
 
   // An account that is already out of messages shows a blocking modal, so the
   // limit is read before anything tries to drive the Artifact.
   const limitOnOpen = await detectAccountLimit(page, runtime.now());
   const completed = limitOnOpen.limited
     ? rateLimited('none', limitOnOpen, 'page_on_open')
-    : await runRequest(page, request, runtime, emit);
+    : await runRequest(candidates, located, request, runtime, emit);
 
   const terminal =
     completed.outcome === 'rate_limited'
@@ -483,9 +506,10 @@ export async function executeArtifactRequest(
   return terminal;
 }
 
-async function runRequest(page, request, runtime, emit) {
-  const bridge = await findBridgeFrame(page, runtime.bridgeTimeoutMs, runtime.sleep);
+async function runRequest(candidates, located, request, runtime, emit) {
+  const bridge =
+    located ?? (await findBridgeOnPages(candidates, runtime.bridgeTimeoutMs, runtime.sleep));
   return bridge
-    ? runBridge(page, bridge.frame, request, bridge.descriptor, runtime, emit)
-    : runDomFallback(page, request, runtime, emit);
+    ? runBridge(bridge.page, bridge.frame, request, bridge.descriptor, runtime, emit)
+    : runDomFallback(candidates, request, runtime, emit);
 }

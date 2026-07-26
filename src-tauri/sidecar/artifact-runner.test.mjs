@@ -78,10 +78,11 @@ function mockRequest(overrides = {}) {
 }
 
 async function runAgainst(page, request, messages) {
+  const pages = Array.isArray(page) ? page : [page];
   return executeArtifactRequest(request, {
     connectOverCDP: async (endpoint) => {
       assert.equal(endpoint, request.cdpEndpoint);
-      return { contexts: () => [{ pages: () => [page] }] };
+      return { contexts: () => [{ pages: () => pages }] };
     },
     emit: async (message) => messages.push(message),
     sleep: async () => {},
@@ -226,6 +227,30 @@ test('a malformed checkpoint is rejected before the browser is touched', () => {
     () => validateSidecarRequest(mockRequest({ checkpoint: ['not', 'an', 'object'] })),
     /checkpoint must be a JSON object/
   );
+});
+
+test('the tab carrying the Artifact is driven, not the first Claude tab', async () => {
+  const artifactFrame = new MockArtifactFrame();
+  const decoyPage = mockPage(null, 'An older Claude conversation with no Artifact.');
+  const artifactPage = mockPage(artifactFrame);
+  const messages = [];
+
+  const terminal = await runAgainst([decoyPage, artifactPage], mockRequest(), messages);
+
+  assert.equal(artifactFrame.action, 'plan');
+  assert.deepEqual(terminal.output.result, { blueprint: 'mock-blueprint' });
+});
+
+test('a limit banner is read from the Artifact tab, not from a stale one', async () => {
+  // The decoy still shows an old limit notice; the live Artifact tab does not.
+  const decoyPage = mockPage(null, 'You are out of free messages until 3:00 PM.');
+  const artifactPage = mockPage(new MockArtifactFrame());
+  const messages = [];
+
+  const terminal = await runAgainst([decoyPage, artifactPage], mockRequest(), messages);
+
+  assert.equal(terminal.kind, 'result');
+  assert.equal(messages.filter((message) => message.kind === 'rate_limited').length, 0);
 });
 
 test('reset clocks resolve to the next occurrence of that time', () => {

@@ -14,7 +14,7 @@ use std::{
     io,
     process::{ExitStatus, Stdio},
     sync::{Arc, Mutex as StdMutex, MutexGuard as StdMutexGuard},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
@@ -34,6 +34,10 @@ const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// process is alive. Without this, recovery could reclaim a running job and the
 /// owner-checked operations after the run would be rejected.
 const LEASE_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(20);
+/// Outer bound on one sidecar run. The sidecar enforces its own deadlines, so
+/// reaching this means the process itself wedged; without it the renewed lease
+/// would keep a dead job alive indefinitely.
+const MAX_PROCESS_RUNTIME: Duration = Duration::from_secs(2 * 60 * 60);
 
 #[derive(Clone)]
 struct RunnerBridgeClient {
@@ -629,10 +633,23 @@ impl RunnerSupervisor {
         let stdout_task = tokio::spawn(read_limited(stdout, MAX_PROCESS_STDOUT_BYTES, "stdout"));
         let stderr_task = tokio::spawn(read_limited(stderr, MAX_PROCESS_STDERR_BYTES, "stderr"));
         let lease_task = self.spawn_lease_heartbeat(job_id);
+        let deadline = Instant::now() + MAX_PROCESS_RUNTIME;
         let status = loop {
             match shared_child.try_wait() {
                 Ok(Some(status)) => break status,
-                Ok(None) => sleep(PROCESS_POLL_INTERVAL).await,
+                Ok(None) => {
+                    if Instant::now() >= deadline {
+                        lease_task.abort();
+                        let mut process = shared_child.clone();
+                        let _ = process.terminate();
+                        let _ = self.clear_process(job_id).await;
+                        return Err(format!(
+                            "Runner process exceeded {} seconds and was stopped",
+                            MAX_PROCESS_RUNTIME.as_secs()
+                        ));
+                    }
+                    sleep(PROCESS_POLL_INTERVAL).await;
+                }
                 Err(error) => {
                     lease_task.abort();
                     let _ = self.clear_process(job_id).await;
