@@ -18,6 +18,14 @@
 		showToast
 	} from '$lib/stores/admin.svelte';
 
+	type CoWriterProject = {
+		id: string;
+		name: string;
+		active?: boolean;
+		created_at?: string;
+		updated_at?: string;
+	};
+
 	// ═══════════════════ STATE ═══════════════════
 	let activeTab = $state<'workshop' | 'worldbible' | 'chronicle'>('workshop');
 
@@ -25,6 +33,10 @@
 	let status = $state<any>(null);
 	let runtimeCapabilities = $state<RuntimeCapabilities | null>(null);
 	let runtimeLoadError = $state('');
+
+	let projects = $state<CoWriterProject[]>([]);
+	let activeProjectId = $state('');
+	let isSwitchingProject = $state(false);
 
 	// Workshop
 	let brainstormGoal = $state('');
@@ -155,17 +167,8 @@
 				return;
 			}
 
-			await Promise.all([
-				loadStatus(),
-				loadEntities(),
-				loadChapterLogs(),
-				loadDocuments(),
-				loadSettings(),
-			]);
-
-			if (capabilities.local_source_scan) {
-				await loadScanSources();
-			}
+			await loadProjects();
+			await reloadActiveProjectData();
 		} catch (error) {
 			const message =
 				typeof (error as { message?: unknown })?.message === 'string'
@@ -223,6 +226,116 @@
 	async function loadStatus() {
 		const res = await adminGet<any>('/admin/writer/status');
 		if (res.success) status = res.data;
+	}
+
+	async function loadProjects() {
+		const res = await adminGet<{
+			projects: CoWriterProject[];
+			active_project: CoWriterProject;
+		}>('/admin/writer/projects');
+		if (res.success && res.data) {
+			projects = res.data.projects || [];
+			activeProjectId = res.data.active_project?.id || '';
+		} else {
+			toast_error(res.message || 'Không tải được danh sách dự án Co-Writer');
+		}
+	}
+
+	async function reloadActiveProjectData() {
+		await Promise.all([
+			loadStatus(),
+			loadEntities(),
+			loadChapterLogs(),
+			loadDocuments(),
+			loadSettings(),
+		]);
+
+		if (allowsCapability(runtimeCapabilities, 'local_source_scan')) {
+			await loadScanSources();
+		}
+	}
+
+	function projectOperationRunning() {
+		return isScanning
+			|| isGenerating
+			|| isBrainstorming
+			|| isAutoAnalyzing
+			|| isSavingAnalyze
+			|| isSavingSettings;
+	}
+
+	function clearProjectWorkspace() {
+		status = null;
+		entities = [];
+		chapterLogs = [];
+		documents = [];
+		scanSources = [];
+		treeDocs = [];
+		treeLoaded = false;
+		generations = [];
+		historyLoaded = false;
+		expandedEntityIds = new Set();
+		excludedNodeIds = new Set();
+		excludedChunkIds = new Set();
+		treePicks = [];
+		ragChunks = [];
+		brainstormGoal = '';
+		writingBeats = '';
+		customSummary = '';
+		superPrompt = '';
+		promptStats = null;
+		generatedText = '';
+		scanResult = null;
+		settings = {
+			gen_provider: '',
+			gen_model: '',
+			gen_max_tokens: '',
+			worker_model: '',
+			default_worker_model: '',
+		};
+	}
+
+	async function activateProject(projectId: string) {
+		if (!projectId || projectId === activeProjectId) return;
+		if (projectOperationRunning()) {
+			toast_error('Hãy chờ tác vụ Co-Writer hiện tại hoàn tất trước khi đổi dự án');
+			await loadProjects();
+			return;
+		}
+
+		isSwitchingProject = true;
+		const res = await adminPut<CoWriterProject>(
+			'/admin/writer/projects/active',
+			{ project_id: projectId },
+			'co_writer_read',
+		);
+		if (res.success && res.data) {
+			clearProjectWorkspace();
+			activeProjectId = res.data.id;
+			await reloadActiveProjectData();
+			await loadProjects();
+			toast_success(`Đã chuyển sang dự án “${res.data.name}”`);
+		} else {
+			toast_error(res.message || 'Không thể đổi dự án Co-Writer');
+			await loadProjects();
+		}
+		isSwitchingProject = false;
+	}
+
+	async function switchActiveProject(event: Event) {
+		await activateProject((event.currentTarget as HTMLSelectElement).value);
+	}
+
+	async function createProject() {
+		const name = window.prompt('Tên dự án truyện mới:')?.trim();
+		if (!name) return;
+		const res = await adminPost<CoWriterProject>('/admin/writer/projects', { name });
+		if (!res.success || !res.data) {
+			toast_error(res.message || 'Không thể tạo dự án Co-Writer');
+			return;
+		}
+		await loadProjects();
+		await activateProject(res.data.id);
 	}
 
 	async function loadEntities() {
@@ -760,6 +873,31 @@
 				</p>
 			{:else if runtimeLoadError}
 				<p class="cw-subtitle">Runtime unavailable: {runtimeLoadError}</p>
+			{/if}
+			{#if projects.length > 0}
+				<div class="project-switcher">
+					<label for="co-writer-project">Dự án</label>
+					<select
+						id="co-writer-project"
+						value={activeProjectId}
+						onchange={switchActiveProject}
+						disabled={isSwitchingProject || projectOperationRunning()}
+					>
+						{#each projects as project}
+							<option value={project.id}>{project.name}</option>
+						{/each}
+					</select>
+					{#if allowsCapability(runtimeCapabilities, 'co_writer_write')}
+						<button
+							class="btn btn-secondary btn-sm"
+							onclick={createProject}
+							disabled={isSwitchingProject || projectOperationRunning()}
+						>
+							+ Dự án mới
+						</button>
+					{/if}
+					{#if isSwitchingProject}<span>Đang chuyển…</span>{/if}
+				</div>
 			{/if}
 		</div>
 		{#if status}
@@ -1597,6 +1735,17 @@
 	}
 	.cw-title h1 { margin: 0; font-size: 1.75rem; }
 	.cw-subtitle { margin: 0.25rem 0 0; color: var(--color-text-muted); font-size: 0.875rem; }
+	.project-switcher {
+		display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+		margin-top: 0.75rem; font-size: 0.8125rem; color: var(--color-text-muted);
+	}
+	.project-switcher label { font-weight: 600; }
+	.project-switcher select {
+		min-width: 220px; padding: 0.45rem 0.65rem; border-radius: var(--radius-md);
+		border: 1px solid var(--color-surface-300); background: var(--color-surface-200);
+		color: var(--color-text-primary);
+	}
+	.project-switcher select:disabled { opacity: 0.65; cursor: not-allowed; }
 	.cw-stats { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 	.stat-chip {
 		padding: 0.375rem 0.75rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600;
