@@ -1,5 +1,7 @@
+mod claude_webview;
 mod commands;
 
+use claude_webview::ClaudeWindowManager;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 
@@ -64,6 +66,7 @@ fn spawn_embedded_backend(app_data_dir: PathBuf) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(ClaudeWindowManager::default())
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()?;
             spawn_embedded_backend(app_data_dir);
@@ -79,7 +82,10 @@ pub fn run() {
             */
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![commands::open_claude_window])
+        .invoke_handler(tauri::generate_handler![
+            commands::open_claude_window,
+            commands::claude_window_health
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
