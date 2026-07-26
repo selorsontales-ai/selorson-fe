@@ -18,6 +18,10 @@ struct SidecarRequest<'a> {
     tool_version: &'a str,
     cdp_endpoint: String,
     input: &'a Value,
+    /// Progress carried over from an earlier attempt. Present means the
+    /// Artifact continues that work instead of drafting the chapter again.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    checkpoint: Option<&'a Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -32,12 +36,30 @@ struct SidecarMessage {
     error: Option<String>,
 }
 
+/// What the sidecar reported. A rate limit is the only outcome that may lead to
+/// another account; everything else is either a result or a failure.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", tag = "outcome")]
+pub enum SidecarOutcome {
+    Completed(RunnerJob),
+    RateLimited(RateLimitSignal),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RateLimitSignal {
+    pub account_id: i64,
+    pub reset_at: Option<String>,
+    pub reset_time: Option<String>,
+    pub source: String,
+}
+
 pub async fn run(
     supervisor: &RunnerSupervisor,
     job_id: &str,
     account_id: i64,
     cdp_port: u16,
-) -> Result<RunnerJob, String> {
+) -> Result<SidecarOutcome, String> {
     let result = run_inner(supervisor, job_id, account_id, cdp_port).await;
     if let Err(error) = result.as_ref() {
         mark_failed(supervisor, job_id, error).await;
@@ -50,7 +72,7 @@ async fn run_inner(
     job_id: &str,
     account_id: i64,
     cdp_port: u16,
-) -> Result<RunnerJob, String> {
+) -> Result<SidecarOutcome, String> {
     let job = supervisor.job(job_id).await?;
     if job.state != RunnerJobState::Leased.as_str() {
         return Err(format!(
@@ -62,6 +84,7 @@ async fn run_inner(
     if !input.is_object() {
         return Err(format!("Runner job {job_id} input must be a JSON object"));
     }
+    let checkpoint = parse_checkpoint(job_id, job.checkpoint_json.as_deref())?;
 
     supervisor
         .transition(
@@ -98,6 +121,7 @@ async fn run_inner(
         tool_version: &job.tool_version,
         cdp_endpoint: format!("http://127.0.0.1:{cdp_port}"),
         input: &input,
+        checkpoint: checkpoint.as_ref(),
     };
     let mut request_bytes = serde_json::to_vec(&request)
         .map_err(|error| format!("Failed to serialize sidecar request: {error}"))?;
@@ -108,16 +132,34 @@ async fn run_inner(
     let process = supervisor
         .run_process(job_id, &mut command, &request_bytes)
         .await?;
-    apply_sidecar_output(supervisor, job_id, process).await
+    apply_sidecar_output(supervisor, job_id, account_id, process).await
+}
+
+/// A checkpoint that cannot be parsed must not be silently dropped: continuing
+/// without it would restart the chapter and produce a second draft.
+fn parse_checkpoint(job_id: &str, checkpoint_json: Option<&str>) -> Result<Option<Value>, String> {
+    let Some(raw) = checkpoint_json else {
+        return Ok(None);
+    };
+    let checkpoint: Value = serde_json::from_str(raw)
+        .map_err(|error| format!("Runner job {job_id} checkpoint is invalid JSON: {error}"))?;
+    if !checkpoint.is_object() {
+        return Err(format!(
+            "Runner job {job_id} checkpoint must be a JSON object"
+        ));
+    }
+    Ok(Some(checkpoint))
 }
 
 async fn apply_sidecar_output(
     supervisor: &RunnerSupervisor,
     job_id: &str,
+    account_id: i64,
     process: ManagedProcessOutput,
-) -> Result<RunnerJob, String> {
+) -> Result<SidecarOutcome, String> {
     let messages = parse_sidecar_messages(&process.stdout, job_id)?;
     let mut terminal_output = None;
+    let mut rate_limit = None;
     let mut sidecar_error = None;
 
     for message in messages {
@@ -150,6 +192,17 @@ async fn apply_sidecar_output(
                         .ok_or_else(|| "Sidecar result is missing output".to_string())?,
                 );
             }
+            "rate_limited" => {
+                if rate_limit.is_some() {
+                    return Err("Sidecar emitted more than one rate limit".to_string());
+                }
+                rate_limit = Some(rate_limit_signal(
+                    account_id,
+                    message
+                        .payload
+                        .ok_or_else(|| "Sidecar rate limit is missing payload".to_string())?,
+                )?);
+            }
             "error" => {
                 sidecar_error = Some(
                     message
@@ -167,6 +220,12 @@ async fn apply_sidecar_output(
             bounded_error(&error)
         ));
     }
+    if let Some(signal) = rate_limit {
+        if terminal_output.is_some() {
+            return Err("Sidecar reported both a result and a rate limit".to_string());
+        }
+        return Ok(SidecarOutcome::RateLimited(signal));
+    }
     if !process.success {
         let detail = process.stderr.lines().next().unwrap_or("no stderr detail");
         return Err(format!(
@@ -176,7 +235,27 @@ async fn apply_sidecar_output(
     }
     let output =
         terminal_output.ok_or_else(|| "Sidecar exited without a terminal result".to_string())?;
-    supervisor.complete(job_id, output).await
+    supervisor
+        .complete(job_id, output)
+        .await
+        .map(SidecarOutcome::Completed)
+}
+
+/// The account is the one this supervisor leased, never a value the sidecar
+/// chose: a transport worker must not be able to park a different account.
+fn rate_limit_signal(account_id: i64, payload: Value) -> Result<RateLimitSignal, String> {
+    let string_field = |key: &str| {
+        payload
+            .get(key)
+            .and_then(Value::as_str)
+            .map(|value| value.chars().take(MAX_ERROR_CHARS).collect::<String>())
+    };
+    Ok(RateLimitSignal {
+        account_id,
+        reset_at: string_field("resetAt"),
+        reset_time: string_field("resetTime"),
+        source: string_field("source").unwrap_or_else(|| "unspecified".to_string()),
+    })
 }
 
 fn parse_sidecar_messages(
@@ -242,8 +321,59 @@ fn bounded_error(error: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_sidecar_messages, SIDECAR_ENTRYPOINT};
+    use super::{parse_checkpoint, parse_sidecar_messages, rate_limit_signal, SIDECAR_ENTRYPOINT};
+    use serde_json::json;
     use std::path::Path;
+
+    #[test]
+    fn rate_limit_signals_carry_the_leased_account_not_the_reported_one() {
+        let signal = rate_limit_signal(
+            7,
+            json!({
+                "accountId": 99,
+                "resetAt": "2026-07-26T15:00:00+07:00",
+                "resetTime": "3:00 PM",
+                "source": "bridge"
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(signal.account_id, 7);
+        assert_eq!(
+            signal.reset_at.as_deref(),
+            Some("2026-07-26T15:00:00+07:00")
+        );
+        assert_eq!(signal.source, "bridge");
+    }
+
+    #[test]
+    fn a_rate_limit_without_a_reset_time_is_still_a_rate_limit() {
+        let signal = rate_limit_signal(3, json!({ "source": "page_on_open" })).unwrap();
+
+        assert_eq!(signal.account_id, 3);
+        assert_eq!(signal.reset_at, None);
+        assert_eq!(signal.reset_time, None);
+    }
+
+    #[test]
+    fn an_unparsable_checkpoint_stops_the_attempt_instead_of_restarting_it() {
+        assert!(parse_checkpoint("job-a", None).unwrap().is_none());
+        assert!(parse_checkpoint("job-a", Some(r#"{"cursor":4}"#))
+            .unwrap()
+            .is_some());
+        assert!(parse_checkpoint("job-a", Some("not json")).is_err());
+        assert!(parse_checkpoint("job-a", Some("[1,2]")).is_err());
+    }
+
+    #[test]
+    fn a_rate_limit_message_is_parsed_as_its_own_terminal_kind() {
+        let stdout = r#"{"protocolVersion":1,"jobId":"job-a","kind":"rate_limited","payload":{"source":"bridge"}}"#;
+
+        let messages = parse_sidecar_messages(stdout, "job-a").unwrap();
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].kind, "rate_limited");
+    }
 
     #[test]
     fn repo_owned_sidecar_entrypoint_exists() {

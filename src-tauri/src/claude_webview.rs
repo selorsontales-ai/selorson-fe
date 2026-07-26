@@ -288,6 +288,30 @@ impl ClaudeWindowManager {
             cdp_healthy,
         })
     }
+
+    /// Close one account's window and release its CDP port. A rate-limited
+    /// account keeps showing its blocking modal, so the session is torn down
+    /// rather than left behind for the next job to trip over.
+    pub async fn close(&self, app: tauri::AppHandle, account_id: i64) -> Result<(), String> {
+        validate_account_id(account_id)?;
+
+        let label = claude_window_label(account_id);
+        let mut registry = self.registry.lock().await;
+        if let Some(window) = app.get_webview_window(&label) {
+            window.close().map_err(|error| error.to_string())?;
+            if !wait_until_window_closed(&app, &label).await {
+                return Err(format!("Claude window {label} did not close"));
+            }
+        }
+        registry.discard(account_id);
+        Ok(())
+    }
+}
+
+impl ClaudeWindowInfo {
+    pub(crate) fn cdp_port(&self) -> u16 {
+        self.cdp_port
+    }
 }
 
 impl ManagedClaudeSession {

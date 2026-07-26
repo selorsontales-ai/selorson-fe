@@ -1,7 +1,11 @@
-use crate::artifact_sidecar;
+use crate::account_rotation;
+use crate::artifact_sidecar::{self, SidecarOutcome};
 use crate::claude_webview::{ClaudeWindowHealth, ClaudeWindowInfo, ClaudeWindowManager};
 use crate::runner_supervisor::{RunnerJobSnapshot, RunnerSupervisor};
-use selorson_backend::services::co_writer::workflow::{RunnerJob, RunnerJobEvent, RunnerJobState};
+use selorson_backend::services::{
+    claude_accounts::RunnerAccount,
+    co_writer::workflow::{RunnerJob, RunnerJobEvent, RunnerJobState},
+};
 use serde_json::Value;
 
 #[tauri::command]
@@ -30,6 +34,8 @@ pub async fn runner_lease_next(
     supervisor.lease_next().await
 }
 
+/// Run one job on one caller-chosen account. Rotation is deliberately absent:
+/// a rate limit is returned to the caller instead of moving the job elsewhere.
 #[tauri::command]
 pub async fn runner_start_sidecar(
     app: tauri::AppHandle,
@@ -37,13 +43,47 @@ pub async fn runner_start_sidecar(
     supervisor: tauri::State<'_, RunnerSupervisor>,
     job_id: String,
     account_id: i64,
-) -> Result<RunnerJob, String> {
+) -> Result<SidecarOutcome, String> {
     let _browser_guard = supervisor.acquire_browser().await;
     let health = manager.health(app, account_id).await?;
     let cdp_port = health.healthy_cdp_port().ok_or_else(|| {
         format!("Claude account {account_id} does not have a healthy WebView2 CDP session")
     })?;
     artifact_sidecar::run(supervisor.inner(), &job_id, account_id, cdp_port).await
+}
+
+/// Run one job to a terminal state, selecting accounts and rotating on
+/// confirmed rate limits.
+#[tauri::command]
+pub async fn runner_run_job(
+    app: tauri::AppHandle,
+    manager: tauri::State<'_, ClaudeWindowManager>,
+    supervisor: tauri::State<'_, RunnerSupervisor>,
+    job_id: String,
+) -> Result<RunnerJob, String> {
+    account_rotation::run_job(app, manager.inner(), supervisor.inner(), &job_id).await
+}
+
+#[tauri::command]
+pub async fn runner_accounts(
+    supervisor: tauri::State<'_, RunnerSupervisor>,
+) -> Result<Vec<RunnerAccount>, String> {
+    supervisor.accounts().await
+}
+
+#[tauri::command]
+pub async fn runner_resume_job(
+    supervisor: tauri::State<'_, RunnerSupervisor>,
+    job_id: String,
+) -> Result<RunnerJob, String> {
+    supervisor.resume(&job_id).await
+}
+
+#[tauri::command]
+pub async fn runner_recover_jobs(
+    supervisor: tauri::State<'_, RunnerSupervisor>,
+) -> Result<usize, String> {
+    supervisor.recover().await
 }
 
 #[tauri::command]

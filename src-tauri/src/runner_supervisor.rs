@@ -2,7 +2,10 @@ use rand::{rngs::OsRng, RngCore};
 use reqwest::{Client, Method, Url};
 use selorson_backend::{
     desktop_bridge::{DESKTOP_BRIDGE_TOKEN_ENV, DESKTOP_BRIDGE_TOKEN_HEADER},
-    services::co_writer::workflow::{RunnerJob, RunnerJobEvent, RunnerJobState},
+    services::{
+        claude_accounts::RunnerAccount,
+        co_writer::workflow::{RunnerJob, RunnerJobEvent, RunnerJobState},
+    },
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -27,6 +30,10 @@ const MAX_PROCESS_INPUT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PROCESS_STDOUT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_PROCESS_STDERR_BYTES: usize = 256 * 1024;
 const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(20);
+/// A real Artifact run outlives the lease, so it is renewed while the sidecar
+/// process is alive. Without this, recovery could reclaim a running job and the
+/// owner-checked operations after the run would be rejected.
+const LEASE_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(20);
 
 #[derive(Clone)]
 struct RunnerBridgeClient {
@@ -86,6 +93,18 @@ struct CompletePayload<'a> {
     output: &'a Value,
 }
 
+#[derive(Serialize)]
+struct RateLimitPayload<'a> {
+    lease_owner: &'a str,
+    job_id: &'a str,
+    reset_at: Option<&'a str>,
+}
+
+#[derive(Deserialize)]
+struct RecoveredBody {
+    recovered: usize,
+}
+
 impl RunnerBridgeClient {
     fn new(base_url: &str) -> Result<Self, String> {
         let base_url = Url::parse(base_url)
@@ -118,9 +137,56 @@ impl RunnerBridgeClient {
         .await
     }
 
+    async fn lease_job(&self, job_id: &str, lease_seconds: i64) -> Result<RunnerJob, String> {
+        self.request(
+            Method::POST,
+            &["jobs", job_id, "lease"],
+            Some(&LeasePayload {
+                lease_owner: &self.lease_owner,
+                lease_seconds,
+            }),
+        )
+        .await
+    }
+
     async fn get_job(&self, job_id: &str) -> Result<RunnerJob, String> {
         self.request::<RunnerJob, ()>(Method::GET, &["jobs", job_id], None)
             .await
+    }
+
+    async fn accounts(&self) -> Result<Vec<RunnerAccount>, String> {
+        self.request::<Vec<RunnerAccount>, ()>(Method::GET, &["accounts"], None)
+            .await
+    }
+
+    async fn rate_limit_account(
+        &self,
+        account_id: i64,
+        job_id: &str,
+        reset_at: Option<&str>,
+    ) -> Result<RunnerAccount, String> {
+        let account = account_id.to_string();
+        self.request(
+            Method::POST,
+            &["accounts", &account, "rate-limit"],
+            Some(&RateLimitPayload {
+                lease_owner: &self.lease_owner,
+                job_id,
+                reset_at,
+            }),
+        )
+        .await
+    }
+
+    async fn resume(&self, job_id: &str) -> Result<RunnerJob, String> {
+        self.request::<RunnerJob, ()>(Method::POST, &["jobs", job_id, "resume"], None)
+            .await
+    }
+
+    async fn recover(&self) -> Result<usize, String> {
+        self.request::<RecoveredBody, ()>(Method::POST, &["jobs", "recover"], None)
+            .await
+            .map(|body| body.recovered)
     }
 
     async fn heartbeat(&self, job_id: &str, lease_seconds: i64) -> Result<RunnerJob, String> {
@@ -387,9 +453,50 @@ impl RunnerSupervisor {
         Ok(job)
     }
 
+    /// Lease one exact job. Rotation and restart resume continue the job they
+    /// were already driving, never whichever job heads the queue.
+    pub async fn lease_job(&self, job_id: &str) -> Result<RunnerJob, String> {
+        let job = self.bridge.lease_job(job_id, DEFAULT_LEASE_SECONDS).await?;
+        self.register_job(&job).await?;
+        Ok(job)
+    }
+
     pub async fn job(&self, job_id: &str) -> Result<RunnerJob, String> {
         self.require_job(job_id).await?;
         self.bridge.get_job(job_id).await
+    }
+
+    /// Accounts the backend considers openable right now.
+    pub async fn accounts(&self) -> Result<Vec<RunnerAccount>, String> {
+        self.bridge.accounts().await
+    }
+
+    /// Park an account until its reset time. Only reachable while this
+    /// supervisor holds the lease on the job that observed the limit.
+    pub async fn rate_limit_account(
+        &self,
+        account_id: i64,
+        job_id: &str,
+        reset_at: Option<&str>,
+    ) -> Result<RunnerAccount, String> {
+        self.require_job(job_id).await?;
+        self.bridge
+            .rate_limit_account(account_id, job_id, reset_at)
+            .await
+    }
+
+    /// Return a checkpointed, rate-limited, or exhausted job to the queue with
+    /// its checkpoint intact.
+    pub async fn resume(&self, job_id: &str) -> Result<RunnerJob, String> {
+        let job = self.bridge.resume(job_id).await?;
+        self.register_job(&job).await?;
+        self.update_state(job_id, &job.state).await?;
+        Ok(job)
+    }
+
+    /// Recover jobs whose lease died with a previous desktop session.
+    pub async fn recover(&self) -> Result<usize, String> {
+        self.bridge.recover().await
     }
 
     pub async fn heartbeat(&self, job_id: &str) -> Result<RunnerJob, String> {
@@ -521,16 +628,19 @@ impl RunnerSupervisor {
 
         let stdout_task = tokio::spawn(read_limited(stdout, MAX_PROCESS_STDOUT_BYTES, "stdout"));
         let stderr_task = tokio::spawn(read_limited(stderr, MAX_PROCESS_STDERR_BYTES, "stderr"));
+        let lease_task = self.spawn_lease_heartbeat(job_id);
         let status = loop {
             match shared_child.try_wait() {
                 Ok(Some(status)) => break status,
                 Ok(None) => sleep(PROCESS_POLL_INTERVAL).await,
                 Err(error) => {
+                    lease_task.abort();
                     let _ = self.clear_process(job_id).await;
                     return Err(format!("Failed to poll runner process: {error}"));
                 }
             }
         };
+        lease_task.abort();
         let stdout_result = stdout_task
             .await
             .map_err(|error| format!("Runner stdout task failed: {error}"))?;
@@ -549,6 +659,22 @@ impl RunnerSupervisor {
                 .map_err(|_| "Runner process stdout was not valid UTF-8".to_string())?,
             stderr: String::from_utf8(stderr)
                 .map_err(|_| "Runner process stderr was not valid UTF-8".to_string())?,
+        })
+    }
+
+    /// Renew this job's lease until the caller aborts the task. It stops on the
+    /// first rejection, which is what happens once the job leaves the leased
+    /// states, so a finished job is never kept artificially alive.
+    fn spawn_lease_heartbeat(&self, job_id: &str) -> tokio::task::JoinHandle<()> {
+        let supervisor = self.clone();
+        let job_id = job_id.to_string();
+        tokio::spawn(async move {
+            loop {
+                sleep(LEASE_HEARTBEAT_INTERVAL).await;
+                if supervisor.heartbeat(&job_id).await.is_err() {
+                    return;
+                }
+            }
         })
     }
 

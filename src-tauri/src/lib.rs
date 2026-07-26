@@ -1,3 +1,4 @@
+mod account_rotation;
 mod artifact_sidecar;
 mod claude_webview;
 mod commands;
@@ -5,11 +6,18 @@ pub mod runner_supervisor;
 
 use claude_webview::ClaudeWindowManager;
 use runner_supervisor::RunnerSupervisor;
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 use tauri::Manager;
 
 const DESKTOP_ENV_FILE: &str = "backend.env";
 const DEFAULT_BACKEND_PORT: &str = "8001";
+/// The embedded backend starts alongside the shell, so recovery waits for it
+/// instead of failing on the first attempt.
+const RECOVERY_ATTEMPTS: usize = 30;
+const RECOVERY_RETRY_INTERVAL: Duration = Duration::from_secs(2);
 
 fn desktop_env_candidates(app_data_dir: &Path, dev_manifest_dir: Option<&Path>) -> Vec<PathBuf> {
     let mut candidates = vec![app_data_dir.join(DESKTOP_ENV_FILE)];
@@ -72,6 +80,27 @@ fn spawn_embedded_backend() {
     });
 }
 
+/// Return jobs whose lease died with the previous desktop session to a
+/// resumable state, so a restart continues checkpointed work instead of
+/// stranding it.
+fn spawn_startup_recovery(supervisor: RunnerSupervisor) {
+    tauri::async_runtime::spawn(async move {
+        for _ in 0..RECOVERY_ATTEMPTS {
+            tokio::time::sleep(RECOVERY_RETRY_INTERVAL).await;
+            match supervisor.recover().await {
+                Ok(0) => return,
+                Ok(recovered) => {
+                    eprintln!("Recovered {recovered} runner job(s) from the previous session");
+                    return;
+                }
+                // The embedded backend is not listening yet.
+                Err(_) => continue,
+            }
+        }
+        eprintln!("Runner job recovery skipped: the embedded backend did not answer");
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -86,8 +115,9 @@ pub fn run() {
             let runner_supervisor =
                 RunnerSupervisor::new(&backend_origin).map_err(std::io::Error::other)?;
             runner_supervisor.install_backend_token();
-            app.manage(runner_supervisor);
+            app.manage(runner_supervisor.clone());
             spawn_embedded_backend();
+            spawn_startup_recovery(runner_supervisor);
 
             /*
             if cfg!(debug_assertions) {
@@ -105,6 +135,10 @@ pub fn run() {
             commands::claude_window_health,
             commands::runner_lease_next,
             commands::runner_start_sidecar,
+            commands::runner_run_job,
+            commands::runner_accounts,
+            commands::runner_resume_job,
+            commands::runner_recover_jobs,
             commands::runner_heartbeat,
             commands::runner_transition,
             commands::runner_record_event,
