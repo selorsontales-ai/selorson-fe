@@ -1,11 +1,14 @@
 mod claude_webview;
 mod commands;
+pub mod runner_supervisor;
 
 use claude_webview::ClaudeWindowManager;
+use runner_supervisor::RunnerSupervisor;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 
 const DESKTOP_ENV_FILE: &str = "backend.env";
+const DEFAULT_BACKEND_PORT: &str = "8001";
 
 fn desktop_env_candidates(app_data_dir: &Path, dev_manifest_dir: Option<&Path>) -> Vec<PathBuf> {
     let mut candidates = vec![app_data_dir.join(DESKTOP_ENV_FILE)];
@@ -46,10 +49,15 @@ fn load_desktop_environment(app_data_dir: &Path) {
     );
 }
 
-fn spawn_embedded_backend(app_data_dir: PathBuf) {
-    std::thread::spawn(move || {
-        load_desktop_environment(&app_data_dir);
+fn desktop_backend_origin(port: &str) -> Result<String, String> {
+    let port = port
+        .parse::<u16>()
+        .map_err(|_| "Desktop backend PORT must be an unsigned 16-bit integer".to_string())?;
+    Ok(format!("http://127.0.0.1:{port}"))
+}
 
+fn spawn_embedded_backend() {
+    std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             // Desktop capabilities are resolved centrally by the embedded backend.
@@ -69,7 +77,16 @@ pub fn run() {
         .manage(ClaudeWindowManager::default())
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()?;
-            spawn_embedded_backend(app_data_dir);
+            load_desktop_environment(&app_data_dir);
+            let backend_origin = desktop_backend_origin(
+                &std::env::var("PORT").unwrap_or_else(|_| DEFAULT_BACKEND_PORT.to_string()),
+            )
+            .map_err(std::io::Error::other)?;
+            let runner_supervisor =
+                RunnerSupervisor::new(&backend_origin).map_err(std::io::Error::other)?;
+            runner_supervisor.install_backend_token();
+            app.manage(runner_supervisor);
+            spawn_embedded_backend();
 
             /*
             if cfg!(debug_assertions) {
@@ -84,7 +101,15 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::open_claude_window,
-            commands::claude_window_health
+            commands::claude_window_health,
+            commands::runner_lease_next,
+            commands::runner_heartbeat,
+            commands::runner_transition,
+            commands::runner_record_event,
+            commands::runner_checkpoint,
+            commands::runner_complete,
+            commands::runner_cancel,
+            commands::runner_job_snapshot
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -92,7 +117,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{desktop_env_candidates, DESKTOP_ENV_FILE};
+    use super::{desktop_backend_origin, desktop_env_candidates, DESKTOP_ENV_FILE};
     use std::path::Path;
 
     #[test]
@@ -118,5 +143,14 @@ mod tests {
                 manifest_dir.join("../../backend-v3/.env"),
             ]
         );
+    }
+
+    #[test]
+    fn desktop_backend_bridge_is_loopback_only() {
+        assert_eq!(
+            desktop_backend_origin("8001").unwrap(),
+            "http://127.0.0.1:8001"
+        );
+        assert!(desktop_backend_origin("not-a-port").is_err());
     }
 }
