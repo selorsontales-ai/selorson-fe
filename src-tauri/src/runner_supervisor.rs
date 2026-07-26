@@ -6,15 +6,27 @@ use selorson_backend::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, io, sync::Arc};
+use std::{
+    collections::HashMap,
+    io,
+    process::{ExitStatus, Stdio},
+    sync::{Arc, Mutex as StdMutex, MutexGuard as StdMutexGuard},
+    time::Duration,
+};
 use tokio::{
-    process::Child,
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
+    process::{Child, Command},
     sync::{Mutex, OwnedMutexGuard},
+    time::sleep,
 };
 
 const TOKEN_BYTES: usize = 32;
 const OWNER_BYTES: usize = 16;
 const DEFAULT_LEASE_SECONDS: i64 = 60;
+const MAX_PROCESS_INPUT_BYTES: usize = 8 * 1024 * 1024;
+const MAX_PROCESS_STDOUT_BYTES: usize = 4 * 1024 * 1024;
+const MAX_PROCESS_STDERR_BYTES: usize = 256 * 1024;
+const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 #[derive(Clone)]
 struct RunnerBridgeClient {
@@ -104,6 +116,11 @@ impl RunnerBridgeClient {
             }),
         )
         .await
+    }
+
+    async fn get_job(&self, job_id: &str) -> Result<RunnerJob, String> {
+        self.request::<RunnerJob, ()>(Method::GET, &["jobs", job_id], None)
+            .await
     }
 
     async fn heartbeat(&self, job_id: &str, lease_seconds: i64) -> Result<RunnerJob, String> {
@@ -257,6 +274,39 @@ trait ManagedProcess: Send {
     fn terminate(&mut self) -> io::Result<()>;
 }
 
+#[derive(Clone)]
+struct SharedChild {
+    child: Arc<StdMutex<Child>>,
+}
+
+impl SharedChild {
+    fn new(child: Child) -> Self {
+        Self {
+            child: Arc::new(StdMutex::new(child)),
+        }
+    }
+
+    fn lock(&self) -> io::Result<StdMutexGuard<'_, Child>> {
+        self.child
+            .lock()
+            .map_err(|_| io::Error::other("Runner child process lock is poisoned"))
+    }
+
+    fn try_wait(&self) -> io::Result<Option<ExitStatus>> {
+        self.lock()?.try_wait()
+    }
+}
+
+impl ManagedProcess for SharedChild {
+    fn id(&self) -> Option<u32> {
+        self.lock().ok().and_then(|child| child.id())
+    }
+
+    fn terminate(&mut self) -> io::Result<()> {
+        self.lock()?.start_kill()
+    }
+}
+
 impl ManagedProcess for Child {
     fn id(&self) -> Option<u32> {
         Child::id(self)
@@ -265,6 +315,12 @@ impl ManagedProcess for Child {
     fn terminate(&mut self) -> io::Result<()> {
         self.start_kill()
     }
+}
+
+pub(crate) struct ManagedProcessOutput {
+    pub success: bool,
+    pub stdout: String,
+    pub stderr: String,
 }
 
 struct RunnerExecution {
@@ -291,6 +347,12 @@ pub struct RunnerJobSnapshot {
     checkpoint: Option<Value>,
     result: Option<Value>,
     process_id: Option<u32>,
+}
+
+impl RunnerJobSnapshot {
+    pub(crate) fn state(&self) -> &str {
+        &self.state
+    }
 }
 
 #[derive(Clone)]
@@ -323,6 +385,11 @@ impl RunnerSupervisor {
             self.register_job(job).await?;
         }
         Ok(job)
+    }
+
+    pub async fn job(&self, job_id: &str) -> Result<RunnerJob, String> {
+        self.require_job(job_id).await?;
+        self.bridge.get_job(job_id).await
     }
 
     pub async fn heartbeat(&self, job_id: &str) -> Result<RunnerJob, String> {
@@ -404,6 +471,85 @@ impl RunnerSupervisor {
 
     pub async fn attach_process(&self, job_id: &str, process: Child) -> Result<(), String> {
         self.attach_managed_process(job_id, Box::new(process)).await
+    }
+
+    pub(crate) async fn run_process(
+        &self,
+        job_id: &str,
+        command: &mut Command,
+        input: &[u8],
+    ) -> Result<ManagedProcessOutput, String> {
+        self.require_job(job_id).await?;
+        if input.len() > MAX_PROCESS_INPUT_BYTES {
+            return Err("Runner process input exceeds 8 MiB".to_string());
+        }
+
+        let mut child = command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| format!("Failed to start runner process: {error}"))?;
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| "Runner process stdin was not piped".to_string())?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| "Runner process stdout was not piped".to_string())?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| "Runner process stderr was not piped".to_string())?;
+        let shared_child = SharedChild::new(child);
+        self.attach_managed_process(job_id, Box::new(shared_child.clone()))
+            .await?;
+
+        if let Err(error) = stdin.write_all(input).await {
+            let mut process = shared_child.clone();
+            let _ = process.terminate();
+            let _ = self.clear_process(job_id).await;
+            return Err(format!("Failed to write runner process input: {error}"));
+        }
+        if let Err(error) = stdin.shutdown().await {
+            let mut process = shared_child.clone();
+            let _ = process.terminate();
+            let _ = self.clear_process(job_id).await;
+            return Err(format!("Failed to close runner process input: {error}"));
+        }
+
+        let stdout_task = tokio::spawn(read_limited(stdout, MAX_PROCESS_STDOUT_BYTES, "stdout"));
+        let stderr_task = tokio::spawn(read_limited(stderr, MAX_PROCESS_STDERR_BYTES, "stderr"));
+        let status = loop {
+            match shared_child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) => sleep(PROCESS_POLL_INTERVAL).await,
+                Err(error) => {
+                    let _ = self.clear_process(job_id).await;
+                    return Err(format!("Failed to poll runner process: {error}"));
+                }
+            }
+        };
+        let stdout_result = stdout_task
+            .await
+            .map_err(|error| format!("Runner stdout task failed: {error}"))?;
+        let stderr_result = stderr_task
+            .await
+            .map_err(|error| format!("Runner stderr task failed: {error}"))?;
+        self.clear_process(job_id).await?;
+        let stdout =
+            stdout_result.map_err(|error| format!("Failed to read runner stdout: {error}"))?;
+        let stderr =
+            stderr_result.map_err(|error| format!("Failed to read runner stderr: {error}"))?;
+
+        Ok(ManagedProcessOutput {
+            success: status.success(),
+            stdout: String::from_utf8(stdout)
+                .map_err(|_| "Runner process stdout was not valid UTF-8".to_string())?,
+            stderr: String::from_utf8(stderr)
+                .map_err(|_| "Runner process stderr was not valid UTF-8".to_string())?,
+        })
     }
 
     async fn register_job(&self, job: &RunnerJob) -> Result<(), String> {
@@ -504,6 +650,15 @@ impl RunnerSupervisor {
         Ok(())
     }
 
+    async fn clear_process(&self, job_id: &str) -> Result<(), String> {
+        let mut jobs = self.jobs.lock().await;
+        let execution = jobs
+            .get_mut(job_id)
+            .ok_or_else(|| format!("Runner job {job_id} is not registered in this supervisor"))?;
+        execution.process = None;
+        Ok(())
+    }
+
     async fn cancel_local(&self, job_id: &str) -> Result<(), String> {
         let mut jobs = self.jobs.lock().await;
         let execution = jobs
@@ -521,6 +676,33 @@ impl RunnerSupervisor {
         });
         Ok(())
     }
+}
+
+async fn read_limited<R>(mut reader: R, limit: usize, stream_name: &str) -> io::Result<Vec<u8>>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut bytes = Vec::new();
+    let mut buffer = [0_u8; 8192];
+    let mut exceeded = false;
+    loop {
+        let read = reader.read(&mut buffer).await?;
+        if read == 0 {
+            break;
+        }
+        if bytes.len() + read <= limit {
+            bytes.extend_from_slice(&buffer[..read]);
+        } else {
+            exceeded = true;
+        }
+    }
+    if exceeded {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Runner {stream_name} exceeded {limit} bytes"),
+        ));
+    }
+    Ok(bytes)
 }
 
 fn snapshot(job_id: &str, execution: &RunnerExecution) -> RunnerJobSnapshot {

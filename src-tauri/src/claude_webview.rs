@@ -170,6 +170,14 @@ pub struct ClaudeWindowHealth {
     cdp_healthy: bool,
 }
 
+impl ClaudeWindowHealth {
+    pub(crate) fn healthy_cdp_port(&self) -> Option<u16> {
+        (self.window_exists && self.cdp_healthy)
+            .then_some(self.cdp_port)
+            .flatten()
+    }
+}
+
 impl ClaudeWindowManager {
     pub async fn open(
         &self,

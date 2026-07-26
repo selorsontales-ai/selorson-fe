@@ -1,3 +1,4 @@
+use crate::artifact_sidecar;
 use crate::claude_webview::{ClaudeWindowHealth, ClaudeWindowInfo, ClaudeWindowManager};
 use crate::runner_supervisor::{RunnerJobSnapshot, RunnerSupervisor};
 use selorson_backend::services::co_writer::workflow::{RunnerJob, RunnerJobEvent, RunnerJobState};
@@ -27,6 +28,22 @@ pub async fn runner_lease_next(
     supervisor: tauri::State<'_, RunnerSupervisor>,
 ) -> Result<Option<RunnerJob>, String> {
     supervisor.lease_next().await
+}
+
+#[tauri::command]
+pub async fn runner_start_sidecar(
+    app: tauri::AppHandle,
+    manager: tauri::State<'_, ClaudeWindowManager>,
+    supervisor: tauri::State<'_, RunnerSupervisor>,
+    job_id: String,
+    account_id: i64,
+) -> Result<RunnerJob, String> {
+    let _browser_guard = supervisor.acquire_browser().await;
+    let health = manager.health(app, account_id).await?;
+    let cdp_port = health.healthy_cdp_port().ok_or_else(|| {
+        format!("Claude account {account_id} does not have a healthy WebView2 CDP session")
+    })?;
+    artifact_sidecar::run(supervisor.inner(), &job_id, account_id, cdp_port).await
 }
 
 #[tauri::command]

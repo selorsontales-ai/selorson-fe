@@ -1,3 +1,4 @@
+mod artifact_sidecar;
 mod claude_webview;
 mod commands;
 pub mod runner_supervisor;
@@ -103,6 +104,7 @@ pub fn run() {
             commands::open_claude_window,
             commands::claude_window_health,
             commands::runner_lease_next,
+            commands::runner_start_sidecar,
             commands::runner_heartbeat,
             commands::runner_transition,
             commands::runner_record_event,
