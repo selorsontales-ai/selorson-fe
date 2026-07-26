@@ -3,3 +3,6 @@
 /target/
 /gen/schemas
 /co-writer-data/
+
+# Node runtime staged for bundling by scripts/prepare-sidecar-runtime.mjs
+/sidecar-runtime/

@@ -2,6 +2,7 @@ use crate::account_rotation;
 use crate::artifact_sidecar::{self, SidecarOutcome};
 use crate::claude_webview::{ClaudeWindowHealth, ClaudeWindowInfo, ClaudeWindowManager};
 use crate::runner_supervisor::{RunnerJobSnapshot, RunnerSupervisor};
+use crate::sidecar_runtime::SidecarRuntime;
 use selorson_backend::services::{
     claude_accounts::RunnerAccount,
     co_writer::workflow::{RunnerJob, RunnerJobEvent, RunnerJobState},
@@ -45,11 +46,12 @@ pub async fn runner_start_sidecar(
     account_id: i64,
 ) -> Result<SidecarOutcome, String> {
     let _browser_guard = supervisor.acquire_browser().await;
+    let runtime = SidecarRuntime::for_app(&app)?;
     let health = manager.health(app, account_id).await?;
     let cdp_port = health.healthy_cdp_port().ok_or_else(|| {
         format!("Claude account {account_id} does not have a healthy WebView2 CDP session")
     })?;
-    artifact_sidecar::run(supervisor.inner(), &job_id, account_id, cdp_port).await
+    artifact_sidecar::run(supervisor.inner(), &runtime, &job_id, account_id, cdp_port).await
 }
 
 /// Run one job to a terminal state, selecting accounts and rotating on

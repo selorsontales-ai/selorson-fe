@@ -1,12 +1,11 @@
 use crate::runner_supervisor::{ManagedProcessOutput, RunnerSupervisor};
+use crate::sidecar_runtime::SidecarRuntime;
 use selorson_backend::services::co_writer::workflow::{RunnerJob, RunnerJobState};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::process::Command;
 
 const SIDECAR_PROTOCOL_VERSION: u32 = 1;
-const SIDECAR_ENTRYPOINT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/sidecar/runner.mjs");
-const NODE_EXECUTABLE: &str = "node";
 const MAX_ERROR_CHARS: usize = 1_000;
 
 #[derive(Serialize)]
@@ -56,11 +55,12 @@ pub struct RateLimitSignal {
 
 pub async fn run(
     supervisor: &RunnerSupervisor,
+    runtime: &SidecarRuntime,
     job_id: &str,
     account_id: i64,
     cdp_port: u16,
 ) -> Result<SidecarOutcome, String> {
-    let result = run_inner(supervisor, job_id, account_id, cdp_port).await;
+    let result = run_inner(supervisor, runtime, job_id, account_id, cdp_port).await;
     if let Err(error) = result.as_ref() {
         mark_failed(supervisor, job_id, error).await;
     }
@@ -69,6 +69,7 @@ pub async fn run(
 
 async fn run_inner(
     supervisor: &RunnerSupervisor,
+    runtime: &SidecarRuntime,
     job_id: &str,
     account_id: i64,
     cdp_port: u16,
@@ -127,8 +128,8 @@ async fn run_inner(
         .map_err(|error| format!("Failed to serialize sidecar request: {error}"))?;
     request_bytes.push(b'\n');
 
-    let mut command = Command::new(NODE_EXECUTABLE);
-    command.arg(SIDECAR_ENTRYPOINT);
+    let mut command = Command::new(runtime.node());
+    command.arg(runtime.entrypoint());
     let process = supervisor
         .run_process(job_id, &mut command, &request_bytes)
         .await?;
@@ -321,9 +322,8 @@ fn bounded_error(error: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_checkpoint, parse_sidecar_messages, rate_limit_signal, SIDECAR_ENTRYPOINT};
+    use super::{parse_checkpoint, parse_sidecar_messages, rate_limit_signal};
     use serde_json::json;
-    use std::path::Path;
 
     #[test]
     fn rate_limit_signals_carry_the_leased_account_not_the_reported_one() {
@@ -373,11 +373,6 @@ mod tests {
 
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].kind, "rate_limited");
-    }
-
-    #[test]
-    fn repo_owned_sidecar_entrypoint_exists() {
-        assert!(Path::new(SIDECAR_ENTRYPOINT).is_file());
     }
 
     #[test]

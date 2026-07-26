@@ -8,6 +8,7 @@
 use crate::artifact_sidecar::{self, RateLimitSignal, SidecarOutcome};
 use crate::claude_webview::ClaudeWindowManager;
 use crate::runner_supervisor::RunnerSupervisor;
+use crate::sidecar_runtime::SidecarRuntime;
 use selorson_backend::services::{
     claude_accounts::RunnerAccount,
     co_writer::workflow::{RunnerJob, RunnerJobState},
@@ -25,6 +26,9 @@ pub async fn run_job(
     job_id: &str,
 ) -> Result<RunnerJob, String> {
     let _browser_guard = supervisor.acquire_browser().await;
+    // Resolved before any account is opened: a bundle without its Node runtime
+    // must fail immediately instead of after burning a window.
+    let runtime = SidecarRuntime::for_app(&app)?;
     let mut tried: HashSet<i64> = HashSet::new();
 
     loop {
@@ -57,7 +61,9 @@ pub async fn run_job(
         let window = manager
             .open(app.clone(), account.id, account.label.clone())
             .await?;
-        match artifact_sidecar::run(supervisor, job_id, account.id, window.cdp_port()).await? {
+        match artifact_sidecar::run(supervisor, &runtime, job_id, account.id, window.cdp_port())
+            .await?
+        {
             SidecarOutcome::Completed(job) => return Ok(job),
             SidecarOutcome::RateLimited(signal) => {
                 rotate(supervisor, manager, &app, job_id, &signal).await?;

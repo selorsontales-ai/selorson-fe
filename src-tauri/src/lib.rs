@@ -3,6 +3,7 @@ mod artifact_sidecar;
 mod claude_webview;
 mod commands;
 pub mod runner_supervisor;
+mod sidecar_runtime;
 
 use claude_webview::ClaudeWindowManager;
 use runner_supervisor::RunnerSupervisor;
