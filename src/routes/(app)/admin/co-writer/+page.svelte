@@ -1,11 +1,18 @@
 <!-- Co-Writer — AI Story Writing Assistant -->
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import type { ApiResponse } from '$lib/api';
+	import {
+		allowsCapability,
+		fetchRuntimeCapabilities,
+		type RuntimeCapabilities,
+		type RuntimeCapabilityKey
+	} from '$lib/runtime';
 	import {
 		adminGet,
-		adminPost,
-		adminPut,
-		adminDelete,
+		adminPost as rawAdminPost,
+		adminPut as rawAdminPut,
+		adminDelete as rawAdminDelete,
 		toast_success,
 		toast_error,
 		showToast
@@ -16,6 +23,8 @@
 
 	// Status
 	let status = $state<any>(null);
+	let runtimeCapabilities = $state<RuntimeCapabilities | null>(null);
+	let runtimeLoadError = $state('');
 
 	// Workshop
 	let brainstormGoal = $state('');
@@ -133,13 +142,81 @@
 	];
 
 	onMount(() => {
-		loadStatus();
-		loadEntities();
-		loadChapterLogs();
-		loadDocuments();
-		loadScanSources();
-		loadSettings();
+		void initializeCoWriter();
 	});
+
+	async function initializeCoWriter() {
+		try {
+			const capabilities = await fetchRuntimeCapabilities();
+			runtimeCapabilities = capabilities;
+
+			if (!capabilities.co_writer_read) {
+				runtimeLoadError = `Target ${capabilities.target} không cho phép đọc Co-Writer.`;
+				return;
+			}
+
+			await Promise.all([
+				loadStatus(),
+				loadEntities(),
+				loadChapterLogs(),
+				loadDocuments(),
+				loadSettings(),
+			]);
+
+			if (capabilities.local_source_scan) {
+				await loadScanSources();
+			}
+		} catch (error) {
+			const message =
+				typeof (error as { message?: unknown })?.message === 'string'
+					? String((error as { message: string }).message)
+					: 'Không đọc được RuntimeCapabilities.';
+			runtimeLoadError = message;
+			toast_error(message);
+		}
+	}
+
+	function deniedCapability<T>(capability: RuntimeCapabilityKey): ApiResponse<T> {
+		const target = runtimeCapabilities?.target ?? 'unknown';
+		return {
+			success: false,
+			data: null as T,
+			message: `Runtime target ${target} không cho phép ${capability}.`,
+		};
+	}
+
+	async function adminPost<T = unknown>(
+		endpoint: string,
+		body?: unknown,
+		capability: RuntimeCapabilityKey = 'co_writer_write'
+	): Promise<ApiResponse<T>> {
+		if (!allowsCapability(runtimeCapabilities, capability)) {
+			return deniedCapability<T>(capability);
+		}
+		return rawAdminPost<T>(endpoint, body);
+	}
+
+	async function adminPut<T = unknown>(
+		endpoint: string,
+		body?: unknown,
+		capability: RuntimeCapabilityKey = 'co_writer_write'
+	): Promise<ApiResponse<T>> {
+		if (!allowsCapability(runtimeCapabilities, capability)) {
+			return deniedCapability<T>(capability);
+		}
+		return rawAdminPut<T>(endpoint, body);
+	}
+
+	async function adminDelete<T = unknown>(
+		endpoint: string,
+		body?: unknown,
+		capability: RuntimeCapabilityKey = 'co_writer_write'
+	): Promise<ApiResponse<T>> {
+		if (!allowsCapability(runtimeCapabilities, capability)) {
+			return deniedCapability<T>(capability);
+		}
+		return rawAdminDelete<T>(endpoint, body);
+	}
 
 	// ═══════════════════ API CALLS ═══════════════════
 
@@ -350,7 +427,7 @@
 	async function doScanIndex() {
 		isScanning = true;
 		scanResult = null;
-		const res = await adminPost<any>('/admin/writer/index/scan');
+		const res = await adminPost<any>('/admin/writer/index/scan', undefined, 'local_source_scan');
 		if (!res.success) {
 			isScanning = false;
 			return toast_error(res.message || 'Scan thất bại');
@@ -362,7 +439,7 @@
 		if (!confirm('Re-index TOÀN BỘ: xóa index hiện tại và embed lại từ đầu (tốn thời gian + quota API). Tiếp tục?')) return;
 		isScanning = true;
 		scanResult = null;
-		const res = await adminPost<any>('/admin/writer/index/rebuild');
+		const res = await adminPost<any>('/admin/writer/index/rebuild', undefined, 'embedding_rebuild');
 		if (!res.success) {
 			isScanning = false;
 			return toast_error(res.message || 'Re-index thất bại');
@@ -499,6 +576,7 @@
 
 	// Scan Sources
 	async function loadScanSources() {
+		if (!allowsCapability(runtimeCapabilities, 'local_source_scan')) return;
 		const res = await adminGet<any[]>('/admin/writer/index/sources');
 		if (res.success && res.data) scanSources = res.data;
 	}
@@ -510,7 +588,7 @@
 			folder_path: newSourcePath,
 			category: newSourceCategory,
 			recursive: newSourceRecursive,
-		});
+		}, 'local_source_scan');
 		if (res.success) {
 			toast_success('Đã thêm nguồn quét');
 			newSourceLabel = '';
@@ -523,14 +601,14 @@
 	}
 
 	async function toggleSource(id: number, enabled: boolean) {
-		const res = await adminPut(`/admin/writer/index/sources/${id}/toggle`, { enabled });
+		const res = await adminPut(`/admin/writer/index/sources/${id}/toggle`, { enabled }, 'local_source_scan');
 		if (res.success) loadScanSources();
 		else toast_error(res.message || 'Lỗi');
 	}
 
 	async function removeSource(id: number, label: string) {
 		if (!confirm(`Xóa nguồn quét "${label}"?`)) return;
-		const res = await adminDelete(`/admin/writer/index/sources/${id}`);
+		const res = await adminDelete(`/admin/writer/index/sources/${id}`, undefined, 'local_source_scan');
 		if (res.success) {
 			toast_success('Đã xóa nguồn quét');
 			loadScanSources();
@@ -623,6 +701,10 @@
 	// ═══════════════════ FOLDER BROWSER ═══════════════════
 
 	async function openFolderBrowser() {
+		if (!allowsCapability(runtimeCapabilities, 'local_source_scan')) {
+			toast_error(deniedCapability<never>('local_source_scan').message || 'Không được phép duyệt thư mục.');
+			return;
+		}
 		showFolderBrowser = true;
 		browseCurrentPath = '';
 		// Load drives
@@ -637,6 +719,10 @@
 	}
 
 	async function browseTo(path: string) {
+		if (!allowsCapability(runtimeCapabilities, 'local_source_scan')) {
+			toast_error(deniedCapability<never>('local_source_scan').message || 'Không được phép duyệt thư mục.');
+			return;
+		}
 		isBrowsing = true;
 		const res = await adminGet<any>(`/admin/writer/browse?path=${encodeURIComponent(path)}`);
 		isBrowsing = false;
@@ -668,6 +754,13 @@
 		<div class="cw-title">
 			<h1>✍️ Trợ Lý Sáng Tác</h1>
 			<p class="cw-subtitle">AI Co-Writer — Hệ thống hỗ trợ viết truyện</p>
+			{#if runtimeCapabilities}
+				<p class="cw-subtitle">
+					Runtime: {runtimeCapabilities.target} · {runtimeCapabilities.co_writer_write ? 'read/write' : 'read-only'}
+				</p>
+			{:else if runtimeLoadError}
+				<p class="cw-subtitle">Runtime unavailable: {runtimeLoadError}</p>
+			{/if}
 		</div>
 		{#if status}
 			<div class="cw-stats">

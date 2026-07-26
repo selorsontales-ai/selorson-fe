@@ -9,6 +9,8 @@ pub fn run() {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
+      // Desktop capabilities are resolved centrally by the embedded backend.
+      std::env::set_var("SELORSON_RUNTIME_TARGET", "desktop");
       // Force Co-Writer to be enabled in Desktop app
       std::env::set_var("ENABLE_CO_WRITER", "true");
       // Keep login session alive for 30 days (desktop-only, not for production)
