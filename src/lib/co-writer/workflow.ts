@@ -328,6 +328,25 @@ export function applyDelta(
 	});
 }
 
+export interface RebuildReport {
+	active: number;
+	stale_commit: number;
+	superseded: number;
+	rejected: number;
+}
+
+/**
+ * Tính lại phóng chiếu nào đang hoạt động (CW-440).
+ *
+ * Áp delta đã tự làm việc này. Route riêng dành cho lúc tác giả vừa sửa
+ * một chương: bản sửa làm phóng chiếu của bản cũ hết hiệu lực, còn các
+ * chương sau đó không đổi nội dung thì không cần rút trích lại — chỉ cần
+ * đếm lại xem ai đang giữ mỗi đối tượng.
+ */
+export function rebuildProjections(): Promise<ApiResponse<RebuildReport>> {
+	return adminPost('/admin/writer/projections/rebuild');
+}
+
 /** Ghi lại vì sao rút trích không ra được delta, để run chạy lại được sau. */
 export function failProjectionRun(
 	runId: string,

@@ -19,6 +19,7 @@
 		applyDelta,
 		listProjectionRuns,
 		listProjections,
+		rebuildProjections,
 		parseStored,
 		STAGE_LABEL,
 		STAGE_ORDER,
@@ -353,6 +354,21 @@
 			`Đã áp: ${report.applied} phóng chiếu, ${report.conflicts} mâu thuẫn, ${report.superseded} bản cũ bị thay`
 		);
 		deltaText = '';
+		await loadProjections();
+	}
+
+	async function runRebuild() {
+		busy = 'rebuild';
+		const res = await rebuildProjections();
+		busy = '';
+		if (!res.success) {
+			toast_error(res.message || 'Không dựng lại được bản đồ');
+			return;
+		}
+		const report = res.data;
+		toast_success(
+			`Bản đồ: ${report.active} đang hoạt động · ${report.stale_commit} thuộc bản chương cũ · ${report.superseded} bị chương sau thay`
+		);
 		await loadProjections();
 	}
 
@@ -726,6 +742,10 @@
 					<button class="btn btn-primary" onclick={saveDelta} disabled={!writable || busy === 'delta'}>
 						{busy === 'delta' ? '⏳ Đang áp...' : 'Áp delta'}
 					</button>
+					<button class="btn" onclick={runRebuild} disabled={!writable || busy === 'rebuild'}>
+						{busy === 'rebuild' ? '⏳ Đang dựng...' : '↻ Dựng lại bản đồ'}
+					</button>
+					<span class="text-muted">Bấm sau khi sửa một chương đã nhập canon.</span>
 				</div>
 
 				{#if projections.length}
