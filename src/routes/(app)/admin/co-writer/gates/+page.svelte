@@ -16,6 +16,9 @@
 		getWriterPack,
 		importBlueprint,
 		importDraft,
+		applyDelta,
+		listProjectionRuns,
+		listProjections,
 		parseStored,
 		STAGE_LABEL,
 		STAGE_ORDER,
@@ -25,7 +28,9 @@
 		type ChapterStage,
 		type ChapterWorkflow,
 		type ContextBlock,
-		type ResearchPack
+		type ProjectionRun,
+		type ResearchPack,
+		type StoryProjection
 	} from '$lib/co-writer/workflow';
 
 	// ═══════════════ TRẠNG THÁI ═══════════════
@@ -60,6 +65,12 @@
 	let canonText = $state('');
 	let expandedBlocks = $state<Set<number>>(new Set());
 
+	// Phóng chiếu (CW-430)
+	let runs = $state<ProjectionRun[]>([]);
+	let projections = $state<StoryProjection[]>([]);
+	let deltaText = $state('');
+	let selectedRun = $state('');
+
 	let writable = $derived(allowsCapability(capabilities, 'co_writer_write'));
 	let stage = $derived<ChapterStage | null>(workflow?.stage ?? null);
 	let researchPack = $derived(parseStored<ResearchPack>(workflow?.research_pack_json ?? null));
@@ -91,6 +102,19 @@
 		workflow = res.data.workflow;
 		canonCommits = res.data.canon_commits ?? [];
 		syncFormFromWorkflow();
+		await loadProjections();
+	}
+
+	async function loadProjections() {
+		const [runList, projectionList] = await Promise.all([
+			listProjectionRuns(chapter),
+			listProjections(true)
+		]);
+		runs = runList.success ? runList.data.runs : [];
+		projections = projectionList.success ? projectionList.data.projections : [];
+		// Run chưa xong đầu tiên là cái tác giả sẽ áp delta vào; chọn sẵn để
+		// họ không phải dán id bằng tay.
+		selectedRun = runs.find((run) => run.status !== 'succeeded')?.id ?? runs[0]?.id ?? '';
 	}
 
 	/**
@@ -303,6 +327,33 @@
 			);
 		}
 		await load();
+	}
+
+	// ═══════════════ PHÓNG CHIẾU ═══════════════
+
+	async function saveDelta() {
+		if (!selectedRun) {
+			toast_error('Chưa có projection run nào để áp.');
+			return;
+		}
+		const envelope = parseStored<unknown>(deltaText);
+		if (!envelope) {
+			toast_error('Dán JSON ChapterCommitDeltaV1 hợp lệ (xuất từ hành động Phân tích canon).');
+			return;
+		}
+		busy = 'delta';
+		const res = await applyDelta(selectedRun, envelope);
+		busy = '';
+		if (!res.success) {
+			toast_error(res.message || 'Delta bị từ chối');
+			return;
+		}
+		const report = res.data;
+		toast_success(
+			`Đã áp: ${report.applied} phóng chiếu, ${report.conflicts} mâu thuẫn, ${report.superseded} bản cũ bị thay`
+		);
+		deltaText = '';
+		await loadProjections();
 	}
 
 	// ═══════════════ XUẤT GÓI CHO ARTIFACT ═══════════════
@@ -643,6 +694,63 @@
 				{/if}
 			{/if}
 		</section>
+
+		<!-- ═══════════ PHÓNG CHIẾU ═══════════ -->
+		{#if runs.length}
+			<section class="card">
+				<h3 class="card-title">⑤ Bản đồ truyện</h3>
+				<p class="text-muted">
+					Nhận canon xếp hàng một run cho mỗi chương từ chương đó trở đi. Chạy hành động
+					<strong>Phân tích canon</strong> trong Kiến Trúc Sư Cốt Truyện rồi dán delta nó xuất ra.
+				</p>
+
+				<ul class="runs">
+					{#each runs as run}
+						<li class:active={selectedRun === run.id}>
+							<input type="radio" name="run" value={run.id} bind:group={selectedRun} disabled={run.status === 'stale'} />
+							<code>ch {run.source_chapter_number}</code>
+							<span class="status status-{run.status}">{run.status}</span>
+							<span class="text-muted">{run.extractor_version}</span>
+							{#if run.error}<span class="danger">{run.error}</span>{/if}
+						</li>
+					{/each}
+				</ul>
+
+				<div class="form-row">
+					<label for="delta">Commit delta JSON</label>
+					<textarea id="delta" rows="4" bind:value={deltaText} placeholder="Dán ChapterCommitDeltaV1 vào đây"></textarea>
+				</div>
+				<div class="btn-row">
+					<input type="file" accept=".json" id="delta-file" hidden onchange={(e) => readFile(e, (text) => (deltaText = text))} />
+					<button class="btn" onclick={() => document.getElementById('delta-file')?.click()}>📂 Chọn file</button>
+					<button class="btn btn-primary" onclick={saveDelta} disabled={!writable || busy === 'delta'}>
+						{busy === 'delta' ? '⏳ Đang áp...' : 'Áp delta'}
+					</button>
+				</div>
+
+				{#if projections.length}
+					<div class="trace">
+						<span>{projections.length} phóng chiếu đang hoạt động</span>
+						{#each [...new Set(projections.map((p) => p.projection_type))] as type}
+							<span>{type}: {projections.filter((p) => p.projection_type === type).length}</span>
+						{/each}
+					</div>
+					<ul class="projections">
+						{#each projections as projection}
+							<li class:conflict={projection.apply_status === 'conflict'}>
+								<code>ch {projection.source_chapter_number}</code>
+								<span class="ptype">{projection.projection_type}</span>
+								<strong>{projection.subject_key}</strong>
+								<span class="text-muted">{projection.confidence.toFixed(2)}</span>
+								{#if projection.apply_status !== 'applied'}
+									<span class="danger">{projection.apply_status}</span>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+		{/if}
 	{:else if !loading}
 		<div class="empty-state">
 			<div class="empty-icon">🚦</div>
@@ -741,6 +849,25 @@
 
 	.scenes { font-size: 0.8125rem; line-height: 1.6; padding-left: 1.25rem; margin: 0; }
 	.scenes ul { margin: 0.25rem 0 0.5rem; color: var(--color-text-muted); }
+
+	.runs, .projections {
+		list-style: none; padding: 0; margin: 0;
+		display: flex; flex-direction: column; gap: 0.25rem;
+	}
+	.runs li, .projections li {
+		display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+		font-size: 0.75rem; padding: 0.375rem 0.5rem; border-radius: var(--radius-md);
+	}
+	.runs li.active { background: var(--color-surface-200); }
+	.projections li.conflict { background: rgba(239, 68, 68, 0.1); }
+	.status { font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+	.status-succeeded { color: #22c55e; }
+	.status-failed { color: #ef4444; }
+	.status-stale { color: var(--color-text-muted); text-decoration: line-through; }
+	.ptype {
+		background: var(--color-surface-300); border-radius: 999px;
+		padding: 0.0625rem 0.5rem; font-size: 0.6875rem;
+	}
 
 	.commits { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.375rem; }
 	.commits li { display: flex; gap: 0.625rem; align-items: center; font-size: 0.75rem; flex-wrap: wrap; }

@@ -233,6 +233,109 @@ export function acceptCanon(
 	});
 }
 
+// ═══════════════════════════════════════════════
+//  Phóng chiếu truyện — replay từ canon (CW-430)
+// ═══════════════════════════════════════════════
+// Nhận canon xếp hàng một run cho mỗi chương từ chương đó trở đi. Mỗi run
+// chờ một `ChapterCommitDeltaV1` — thứ hành động `analyze` của Kiến Trúc
+// Sư Cốt Truyện sinh ra.
+
+export type ProjectionType =
+	| 'summary'
+	| 'scene'
+	| 'event'
+	| 'entity_state'
+	| 'relationship'
+	| 'character_knowledge'
+	| 'timeline'
+	| 'open_loop';
+
+export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'stale';
+
+export interface ProjectionRun {
+	project_id: string;
+	id: string;
+	source_commit_id: string;
+	basis_commit_id: string;
+	source_chapter_number: number;
+	replay_from_chapter: number;
+	input_hash: string;
+	extractor_version: string;
+	status: RunStatus;
+	output_hash: string | null;
+	error: string | null;
+	created_at: string;
+	started_at: string | null;
+	finished_at: string | null;
+}
+
+export interface StoryProjection {
+	project_id: string;
+	id: string;
+	run_id: string;
+	source_commit_id: string;
+	source_chapter_number: number;
+	projection_type: ProjectionType;
+	subject_key: string;
+	payload_json: string;
+	evidence_start: number;
+	evidence_end: number;
+	evidence_hash: string;
+	extractor_version: string;
+	confidence: number;
+	apply_status: 'applied' | 'conflict' | 'rejected';
+	active: boolean;
+	invalidated_at: string | null;
+	created_at: string;
+}
+
+export interface DeltaApplyReport {
+	run_id: string;
+	chapter_number: number;
+	applied: number;
+	conflicts: number;
+	rejected: number;
+	superseded: number;
+	warnings: string[];
+}
+
+export function listProjectionRuns(
+	chapter?: number
+): Promise<ApiResponse<{ runs: ProjectionRun[] }>> {
+	const query = chapter === undefined ? '' : `?chapter=${chapter}`;
+	return adminGet(`/admin/writer/projection-runs${query}`);
+}
+
+export function listProjections(
+	activeOnly = true
+): Promise<ApiResponse<{ projections: StoryProjection[] }>> {
+	return adminGet(`/admin/writer/projections?active_only=${activeOnly}`);
+}
+
+/**
+ * Áp một commit delta.
+ *
+ * Delta phải khai đúng commit và đúng hash nội dung của commit đó. Delta
+ * rút từ bản chương cũ bị từ chối trước khi run đổi trạng thái — mọi span
+ * bằng chứng trong nó đều trỏ sai đoạn.
+ */
+export function applyDelta(
+	runId: string,
+	envelope: unknown
+): Promise<ApiResponse<DeltaApplyReport>> {
+	return adminPost(`/admin/writer/projection-runs/${encodeURIComponent(runId)}/delta`, {
+		envelope
+	});
+}
+
+/** Ghi lại vì sao rút trích không ra được delta, để run chạy lại được sau. */
+export function failProjectionRun(
+	runId: string,
+	error: string
+): Promise<ApiResponse<{ run: ProjectionRun }>> {
+	return adminPost(`/admin/writer/projection-runs/${encodeURIComponent(runId)}/fail`, { error });
+}
+
 /** Đọc một cột JSON của workflow mà không làm sập trang khi nó hỏng. */
 export function parseStored<T>(json: string | null): T | null {
 	if (!json) return null;
