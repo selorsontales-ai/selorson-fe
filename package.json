@@ -15,6 +15,8 @@
 		"sidecar:install": "npm ci --prefix src-tauri/sidecar",
 		"sidecar:runtime": "node src-tauri/scripts/prepare-sidecar-runtime.mjs",
 		"sidecar:test": "npm test --prefix src-tauri/sidecar",
+		"artifacts:build": "node artifacts/build.mjs",
+		"artifacts:test": "npm test --prefix artifacts",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
