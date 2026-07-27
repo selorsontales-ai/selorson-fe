@@ -94,3 +94,28 @@ export function pushCmsDraft(
 ): Promise<ApiResponse<DraftPushResult>> {
 	return adminPost(`${base}/${chapter}/draft`, { confirm_unpublish: confirmUnpublish });
 }
+
+// ═══════════════════════════════════════════════
+//  Xuất bản — hành động riêng (CW-520)
+// ═══════════════════════════════════════════════
+// Nhận canon ghi canon. Đẩy ghi bản nháp. Không việc nào đưa chữ ra trước
+// mắt người đọc; chỉ hai hàm dưới đây làm việc đó, và chỉ deploy có quyền
+// `cms_publish`. Tác giả xuất bản từ trang quản trị của website đang chạy.
+
+export type PublishAction = 'published' | 'unpublished' | 'unchanged';
+
+export interface PublishResult {
+	action: PublishAction;
+	chapter_id: number;
+	chapter_number: number;
+	status: string;
+}
+
+/** Không đọc canon: đây là phép đổi trạng thái của hàng CMS. */
+export function publishChapter(chapter: number): Promise<ApiResponse<PublishResult>> {
+	return adminPost(`${base}/${chapter}/publish`);
+}
+
+export function unpublishChapter(chapter: number): Promise<ApiResponse<PublishResult>> {
+	return adminPost(`${base}/${chapter}/unpublish`);
+}

@@ -35,7 +35,9 @@
 	} from '$lib/co-writer/workflow';
 	import {
 		previewCmsDraft,
+		publishChapter,
 		pushCmsDraft,
+		unpublishChapter,
 		type DraftPreview
 	} from '$lib/co-writer/cms';
 
@@ -83,6 +85,7 @@
 
 	let writable = $derived(allowsCapability(capabilities, 'co_writer_write'));
 	let canPushCms = $derived(allowsCapability(capabilities, 'cms_draft_push'));
+	let canPublish = $derived(allowsCapability(capabilities, 'cms_publish'));
 	let stage = $derived<ChapterStage | null>(workflow?.stage ?? null);
 	let researchPack = $derived(parseStored<ResearchPack>(workflow?.research_pack_json ?? null));
 	let blueprint = $derived(
@@ -413,6 +416,29 @@
 			unchanged: 'Bản nháp CMS đã khớp canon — không ghi gì'
 		};
 		toast_success(`${labels[res.data.action]} (chương #${res.data.chapter_id})`);
+		await loadCmsPreview();
+	}
+
+	/**
+	 * Xuất bản là hành động riêng (CW-520) và chỉ deploy có quyền.
+	 *
+	 * Máy soạn thảo chỉ tạo bản nháp; đưa chương ra trước người đọc là một
+	 * cú bấm khác, trên trang quản trị của website đang chạy.
+	 */
+	async function setPublished(publish: boolean) {
+		busy = publish ? 'publish' : 'unpublish';
+		const res = await (publish ? publishChapter(chapter) : unpublishChapter(chapter));
+		busy = '';
+		if (!res.success) {
+			toast_error(res.message || 'Không đổi được trạng thái xuất bản');
+			return;
+		}
+		const labels = {
+			published: 'Đã xuất bản — chương đang hiển thị trên website',
+			unpublished: 'Đã gỡ khỏi website — chương trở về bản nháp',
+			unchanged: 'Trạng thái đã đúng — không đổi gì'
+		};
+		toast_success(labels[res.data.action]);
 		await loadCmsPreview();
 	}
 
@@ -908,6 +934,40 @@
 						<span class="text-muted">Máy này không có quyền <code>cms_draft_push</code>.</span>
 					{/if}
 				</div>
+
+				{#if cmsPreview.existing}
+					<h4>Xuất bản</h4>
+					<p class="text-muted">
+						Hành động riêng, không đọc canon. Nhận canon và gửi bản nháp đều không đưa chương ra
+						trước người đọc — chỉ nút này làm việc đó.
+					</p>
+					<div class="btn-row">
+						<button
+							class="btn btn-accent"
+							onclick={() => setPublished(true)}
+							disabled={!canPublish ||
+								busy === 'publish' ||
+								cmsPreview.existing.status === 'published'}
+						>
+							{busy === 'publish' ? '⏳ Đang xuất bản...' : '🌐 Xuất bản lên website'}
+						</button>
+						<button
+							class="btn"
+							onclick={() => setPublished(false)}
+							disabled={!canPublish ||
+								busy === 'unpublish' ||
+								cmsPreview.existing.status !== 'published'}
+						>
+							{busy === 'unpublish' ? '⏳ Đang gỡ...' : 'Gỡ khỏi website'}
+						</button>
+						{#if !canPublish}
+							<span class="text-muted">
+								Máy này không có quyền <code>cms_publish</code>. Xuất bản từ trang quản trị của
+								website đang chạy.
+							</span>
+						{/if}
+					</div>
+				{/if}
 			</section>
 		{/if}
 	{:else if !loading}
