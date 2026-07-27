@@ -1,22 +1,16 @@
 <!-- Co-Writer — AI Story Writing Assistant -->
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { ApiResponse } from '$lib/api';
-	import {
-		allowsCapability,
-		fetchRuntimeCapabilities,
-		type RuntimeCapabilities,
-		type RuntimeCapabilityKey
-	} from '$lib/runtime';
-	import {
-		adminGet,
-		adminPost as rawAdminPost,
-		adminPut as rawAdminPut,
-		adminDelete as rawAdminDelete,
-		toast_success,
-		toast_error,
-		showToast
-	} from '$lib/stores/admin.svelte';
+	import { fetchRuntimeCapabilities } from '$lib/runtime';
+	import { adminGet, toast_error, toast_success } from '$lib/stores/admin.svelte';
+	import { CoWriterHttp, type CoWriterHooks } from '$lib/co-writer/admin-http.svelte';
+	import { WorkshopState } from '$lib/co-writer/workshop.svelte';
+	import { ENTITY_TYPES, WorldBibleState, entityIcon } from '$lib/co-writer/world-bible.svelte';
+	import { ChronicleState } from '$lib/co-writer/chronicle.svelte';
+
+	// Trang này chỉ còn giữ thứ cả ba tab dùng chung: dự án đang mở, số liệu
+	// ở đầu trang, và năng lực runtime. Logic của từng tab sống trong
+	// $lib/co-writer/*.svelte.ts — xem CW-450.
 
 	type CoWriterProject = {
 		id: string;
@@ -26,132 +20,25 @@
 		updated_at?: string;
 	};
 
-	// ═══════════════════ STATE ═══════════════════
 	let activeTab = $state<'workshop' | 'worldbible' | 'chronicle'>('workshop');
-
-	// Status
 	let status = $state<any>(null);
-	let runtimeCapabilities = $state<RuntimeCapabilities | null>(null);
 	let runtimeLoadError = $state('');
-
 	let projects = $state<CoWriterProject[]>([]);
 	let activeProjectId = $state('');
 	let isSwitchingProject = $state(false);
 
-	// Workshop
-	let brainstormGoal = $state('');
-	let targetChapter = $state(1);
-	let writingBeats = $state('');
-	let customSummary = $state('');
-	let mmrLambda = $state(0.5);
-	let temporalLambda = $state(0.005);
-	let promptOnly = $state(false);
-	let superPrompt = $state('');
-	let promptStats = $state<any>(null);
-	let generatedText = $state('');
-	let isGenerating = $state(false);
-	let isBrainstorming = $state(false);
-
-	// Retrieval trace — nguồn AI đã đọc (tree picks + vector hits)
-	let treePicks = $state<any[]>([]);
-	let ragChunks = $state<any[]>([]);
-	let excludedNodeIds = $state<Set<number>>(new Set());
-	let excludedChunkIds = $state<Set<number>>(new Set());
-
-	// Knowledge tree browser
-	let treeDocs = $state<any[]>([]);
-	let treeLoaded = $state(false);
-	let isLoadingTree = $state(false);
-
-	// Scan progress (background indexing)
-	let scanProgress = $state<any>(null);
-
-	// Generations history
-	let generations = $state<any[]>([]);
-	let historyLoaded = $state(false);
-	let isSavingAnalyze = $state(false);
-
-	// AI settings (provider/model/max_tokens/worker_model)
-	let settings = $state<any>({ gen_provider: '', gen_model: '', gen_max_tokens: '', worker_model: '', default_worker_model: '' });
-	let modelProviders = $state<any[]>([]);
-	let isSavingSettings = $state(false);
-
-	// World Bible extras
-	let entitySearch = $state('');
-	let expandedEntityIds = $state<Set<string>>(new Set());
-
-	// Manual log form open-state (for "edit chapter log" jumps)
-	let manualLogOpen = $state(false);
-
-	// World Bible
-	let entities = $state<any[]>([]);
-	let entityFilter = $state('');
-	let showEntityModal = $state(false);
-	let editingEntity = $state<any>(null);
-	let entityForm = $state({
-		entity_type: 'character',
-		name: '',
-		aliases: '',
-		role: '',
-		first_chapter: 1,
-		collision_priority: 1,
-		description: '',
-	});
-
-	const filteredEntities = $derived(entities.filter((e) => {
-		const q = entitySearch.trim().toLowerCase();
-		if (!q) return true;
-		return e.name?.toLowerCase().includes(q)
-			|| e.id?.toLowerCase().includes(q)
-			|| (Array.isArray(e.aliases) && e.aliases.some((a: string) => a.toLowerCase().includes(q)));
-	}));
-
-	// Chronicle
-	let chapterLogs = $state<any[]>([]);
-	let documents = $state<any[]>([]);
-	let autoLogContent = $state('');
-	let autoLogChapter = $state(1);
-	let isAutoAnalyzing = $state(false);
-	let isScanning = $state(false);
-	let scanResult = $state<any>(null);
+	// Hai ô chọn file ở lại trang vì chúng là DOM ref, không phải trạng thái.
 	let importFileInput: HTMLInputElement;
-
-	// Entity Detection
 	let entityDetectFileInput: HTMLInputElement;
-	let isDetecting = $state(false);
-	let detectedEntities = $state<any[]>([]);
-	let showDetectModal = $state(false);
-	let detectSelectedIds = $state<Set<number>>(new Set());
 
-	// Folder Browser
-	let showFolderBrowser = $state(false);
-	let browseCurrentPath = $state('');
-	let browseDirs = $state<string[]>([]);
-	let browseDrives = $state<string[]>([]);
-	let isBrowsing = $state(false);
-
-	// Scan Sources
-	let scanSources = $state<any[]>([]);
-	let showAddSource = $state(false);
-	let newSourceLabel = $state('');
-	let newSourcePath = $state('');
-	let newSourceCategory = $state('references');
-	let newSourceRecursive = $state(true);
-
-	// Manual chapter log
-	let manualLogChapter = $state(1);
-	let manualLogSummary = $state('');
-	let manualLogEvents = $state('');
-	let manualLogSeeds = $state('');
-
-	const ENTITY_TYPES = [
-		{ value: 'character', label: '👤 Nhân Vật', prefix: 'CHR' },
-		{ value: 'location', label: '📍 Địa Danh', prefix: 'LOC' },
-		{ value: 'legend', label: '📜 Truyền Thuyết', prefix: 'LGD' },
-		{ value: 'item', label: '⚔️ Vật Phẩm', prefix: 'ITM' },
-		{ value: 'event', label: '⚡ Sự Kiện', prefix: 'EVT' },
-		{ value: 'organization', label: '🏛️ Tổ Chức', prefix: 'ORG' },
-	];
+	const http = new CoWriterHttp();
+	const hooks: CoWriterHooks = {
+		refreshStatus: () => loadStatus(),
+		refreshChapterLogs: () => chronicle.loadChapterLogs()
+	};
+	const workshop = new WorkshopState(http, hooks);
+	const worldBible = new WorldBibleState(http, hooks);
+	const chronicle = new ChronicleState(http, hooks);
 
 	onMount(() => {
 		void initializeCoWriter();
@@ -160,7 +47,7 @@
 	async function initializeCoWriter() {
 		try {
 			const capabilities = await fetchRuntimeCapabilities();
-			runtimeCapabilities = capabilities;
+			http.capabilities = capabilities;
 
 			if (!capabilities.co_writer_read) {
 				runtimeLoadError = `Target ${capabilities.target} không cho phép đọc Co-Writer.`;
@@ -178,50 +65,6 @@
 			toast_error(message);
 		}
 	}
-
-	function deniedCapability<T>(capability: RuntimeCapabilityKey): ApiResponse<T> {
-		const target = runtimeCapabilities?.target ?? 'unknown';
-		return {
-			success: false,
-			data: null as T,
-			message: `Runtime target ${target} không cho phép ${capability}.`,
-		};
-	}
-
-	async function adminPost<T = unknown>(
-		endpoint: string,
-		body?: unknown,
-		capability: RuntimeCapabilityKey = 'co_writer_write'
-	): Promise<ApiResponse<T>> {
-		if (!allowsCapability(runtimeCapabilities, capability)) {
-			return deniedCapability<T>(capability);
-		}
-		return rawAdminPost<T>(endpoint, body);
-	}
-
-	async function adminPut<T = unknown>(
-		endpoint: string,
-		body?: unknown,
-		capability: RuntimeCapabilityKey = 'co_writer_write'
-	): Promise<ApiResponse<T>> {
-		if (!allowsCapability(runtimeCapabilities, capability)) {
-			return deniedCapability<T>(capability);
-		}
-		return rawAdminPut<T>(endpoint, body);
-	}
-
-	async function adminDelete<T = unknown>(
-		endpoint: string,
-		body?: unknown,
-		capability: RuntimeCapabilityKey = 'co_writer_write'
-	): Promise<ApiResponse<T>> {
-		if (!allowsCapability(runtimeCapabilities, capability)) {
-			return deniedCapability<T>(capability);
-		}
-		return rawAdminDelete<T>(endpoint, body);
-	}
-
-	// ═══════════════════ API CALLS ═══════════════════
 
 	async function loadStatus() {
 		const res = await adminGet<any>('/admin/writer/status');
@@ -242,57 +85,19 @@
 	}
 
 	async function reloadActiveProjectData() {
-		await Promise.all([
-			loadStatus(),
-			loadEntities(),
-			loadChapterLogs(),
-			loadDocuments(),
-			loadSettings(),
-		]);
-
-		if (allowsCapability(runtimeCapabilities, 'local_source_scan')) {
-			await loadScanSources();
-		}
+		await Promise.all([loadStatus(), workshop.load(), worldBible.load(), chronicle.load()]);
 	}
 
+	/** Đổi dự án giữa chừng một tác vụ sẽ trộn dữ liệu hai truyện vào nhau. */
 	function projectOperationRunning() {
-		return isScanning
-			|| isGenerating
-			|| isBrainstorming
-			|| isAutoAnalyzing
-			|| isSavingAnalyze
-			|| isSavingSettings;
+		return workshop.busy() || worldBible.busy() || chronicle.busy();
 	}
 
 	function clearProjectWorkspace() {
 		status = null;
-		entities = [];
-		chapterLogs = [];
-		documents = [];
-		scanSources = [];
-		treeDocs = [];
-		treeLoaded = false;
-		generations = [];
-		historyLoaded = false;
-		expandedEntityIds = new Set();
-		excludedNodeIds = new Set();
-		excludedChunkIds = new Set();
-		treePicks = [];
-		ragChunks = [];
-		brainstormGoal = '';
-		writingBeats = '';
-		customSummary = '';
-		superPrompt = '';
-		promptStats = null;
-		generatedText = '';
-		scanResult = null;
-		settings = {
-			gen_provider: '',
-			gen_model: '',
-			gen_max_tokens: '',
-			worker_model: '',
-			default_worker_model: '',
-		};
+		workshop.reset();
+		worldBible.reset();
+		chronicle.reset();
 	}
 
 	async function activateProject(projectId: string) {
@@ -304,10 +109,10 @@
 		}
 
 		isSwitchingProject = true;
-		const res = await adminPut<CoWriterProject>(
+		const res = await http.put<CoWriterProject>(
 			'/admin/writer/projects/active',
 			{ project_id: projectId },
-			'co_writer_read',
+			'co_writer_read'
 		);
 		if (res.success && res.data) {
 			clearProjectWorkspace();
@@ -329,531 +134,13 @@
 	async function createProject() {
 		const name = window.prompt('Tên dự án truyện mới:')?.trim();
 		if (!name) return;
-		const res = await adminPost<CoWriterProject>('/admin/writer/projects', { name });
+		const res = await http.post<CoWriterProject>('/admin/writer/projects', { name });
 		if (!res.success || !res.data) {
 			toast_error(res.message || 'Không thể tạo dự án Co-Writer');
 			return;
 		}
 		await loadProjects();
 		await activateProject(res.data.id);
-	}
-
-	async function loadEntities() {
-		const typeParam = entityFilter ? `?type=${entityFilter}` : '';
-		const res = await adminGet<any[]>(`/admin/writer/entities${typeParam}`);
-		if (res.success && res.data) entities = res.data;
-	}
-
-	async function loadChapterLogs() {
-		const res = await adminGet<any[]>('/admin/writer/chapter-logs');
-		if (res.success && res.data) chapterLogs = res.data;
-	}
-
-	async function loadDocuments() {
-		const res = await adminGet<any[]>('/admin/writer/index/documents');
-		if (res.success && res.data) documents = res.data;
-	}
-
-	// Workshop
-	async function doBrainstorm() {
-		if (!brainstormGoal.trim()) return toast_error('Nhập định hướng chương');
-		if (!targetChapter || targetChapter < 1) return toast_error('Nhập số chương hợp lệ');
-		if (writingBeats.trim() && !confirm('Dàn ý (beats) đang có nội dung — brainstorm mới sẽ GHI ĐÈ lên. Tiếp tục?')) return;
-		isBrainstorming = true;
-		const res = await adminPost<any>('/admin/writer/brainstorm', {
-			goal: brainstormGoal,
-			target_chapter: targetChapter,
-			excluded_node_ids: [...excludedNodeIds],
-			excluded_chunk_ids: [...excludedChunkIds],
-		});
-		isBrainstorming = false;
-		if (res.success && res.data) {
-			writingBeats = res.data.beats;
-			treePicks = res.data.trace?.tree_picks || [];
-			ragChunks = res.data.trace?.vector_hits || [];
-			toast_success('AI đã tạo dàn ý thành công!');
-		} else {
-			toast_error(res.message || 'Brainstorm thất bại');
-		}
-	}
-
-	async function doGenerate() {
-		if (!writingBeats.trim()) return toast_error('Cần có dàn ý (beats)');
-		if (!targetChapter || targetChapter < 1) return toast_error('Nhập số chương hợp lệ');
-		isGenerating = true;
-		const res = await adminPost<any>('/admin/writer/generate', {
-			target_chapter: targetChapter,
-			writing_beats: writingBeats,
-			custom_summary: customSummary || undefined,
-			mmr_lambda: mmrLambda,
-			temporal_lambda: temporalLambda,
-			prompt_only: promptOnly,
-			excluded_node_ids: [...excludedNodeIds],
-			excluded_chunk_ids: [...excludedChunkIds],
-		});
-		isGenerating = false;
-		if (res.success && res.data) {
-			superPrompt = res.data.prompt || '';
-			promptStats = res.data.stats || null;
-			generatedText = res.data.generated_text || '';
-			treePicks = res.data.tree_picks || [];
-			ragChunks = res.data.rag_chunks || [];
-			toast_success(promptOnly ? 'Prompt đã tổng hợp!' : 'AI đã viết xong!');
-		} else {
-			// Even on error, we might have partial data (prompt built but LLM failed)
-			if (res.data) {
-				superPrompt = res.data.prompt || '';
-				promptStats = res.data.stats || null;
-				treePicks = res.data.tree_picks || [];
-				ragChunks = res.data.rag_chunks || [];
-			}
-			toast_error(res.message || 'Generate thất bại');
-		}
-	}
-
-	function toggleExcludedNode(id: number) {
-		const s = new Set(excludedNodeIds);
-		if (s.has(id)) s.delete(id);
-		else s.add(id);
-		excludedNodeIds = s;
-	}
-
-	function toggleExcludedChunk(id: number) {
-		const s = new Set(excludedChunkIds);
-		if (s.has(id)) s.delete(id);
-		else s.add(id);
-		excludedChunkIds = s;
-	}
-
-	async function loadTree() {
-		isLoadingTree = true;
-		const res = await adminGet<any[]>('/admin/writer/tree');
-		isLoadingTree = false;
-		if (res.success && res.data) {
-			treeDocs = res.data;
-			treeLoaded = true;
-		} else {
-			toast_error(res.message || 'Không tải được cây tri thức');
-		}
-	}
-
-	// World Bible
-	async function saveEntity() {
-		const aliasArr = entityForm.aliases.split(',').map(s => s.trim()).filter(Boolean);
-		const payload = {
-			...entityForm,
-			aliases: aliasArr,
-			first_chapter: entityForm.first_chapter,
-			collision_priority: entityForm.collision_priority,
-		};
-
-		if (editingEntity) {
-			const res = await adminPut(`/admin/writer/entities/${editingEntity.id}`, payload);
-			if (res.success) {
-				toast_success('Đã cập nhật entity');
-				showEntityModal = false;
-				loadEntities();
-			} else toast_error(res.message || 'Lỗi');
-		} else {
-			const res = await adminPost<any>('/admin/writer/entities', payload);
-			if (res.success) {
-				toast_success(`Đã tạo ${res.data?.id}`);
-				showEntityModal = false;
-				loadEntities();
-				loadStatus();
-			} else toast_error(res.message || 'Lỗi');
-		}
-	}
-
-	function openCreateEntity() {
-		editingEntity = null;
-		entityForm = {
-			entity_type: 'character',
-			name: '',
-			aliases: '',
-			role: '',
-			first_chapter: 1,
-			collision_priority: 1,
-			description: '',
-		};
-		showEntityModal = true;
-	}
-
-	function openEditEntity(e: any) {
-		editingEntity = e;
-		entityForm = {
-			entity_type: e.entity_type,
-			name: e.name,
-			aliases: Array.isArray(e.aliases) ? e.aliases.join(', ') : '',
-			role: e.role || '',
-			first_chapter: e.first_chapter || 1,
-			collision_priority: e.collision_priority || 1,
-			description: e.description || '',
-		};
-		showEntityModal = true;
-	}
-
-	async function removeEntity(id: string) {
-		if (!confirm(`Xóa entity ${id}?`)) return;
-		const res = await adminDelete(`/admin/writer/entities/${id}`);
-		if (res.success) {
-			toast_success('Đã xóa');
-			loadEntities();
-			loadStatus();
-		} else toast_error(res.message || 'Lỗi');
-	}
-
-	// Chronicle
-	async function doAutoAnalyze() {
-		if (!autoLogContent.trim()) return toast_error('Dán nội dung chương');
-		if (!autoLogChapter || autoLogChapter < 1) return toast_error('Nhập số chương hợp lệ');
-		isAutoAnalyzing = true;
-		const res = await adminPost<any>('/admin/writer/chapter-logs/auto', {
-			chapter_number: autoLogChapter,
-			content: autoLogContent,
-		});
-		isAutoAnalyzing = false;
-		if (res.success && res.data) {
-			toast_success('AI đã phân tích chương thành công!');
-			autoLogContent = '';
-			loadChapterLogs();
-			loadStatus();
-		} else toast_error(res.message || 'Phân tích thất bại');
-	}
-
-	async function saveManualLog() {
-		const res = await adminPost('/admin/writer/chapter-logs/manual', {
-			chapter_number: manualLogChapter,
-			summary: manualLogSummary,
-			key_events: manualLogEvents.split('\n').filter(Boolean),
-			plot_seeds: manualLogSeeds.split('\n').filter(Boolean),
-		});
-		if (res.success) {
-			toast_success('Đã lưu nhật ký');
-			manualLogSummary = '';
-			manualLogEvents = '';
-			manualLogSeeds = '';
-			loadChapterLogs();
-		} else toast_error(res.message || 'Lỗi');
-	}
-
-	async function doScanIndex() {
-		isScanning = true;
-		scanResult = null;
-		const res = await adminPost<any>('/admin/writer/index/scan', undefined, 'local_source_scan');
-		if (!res.success) {
-			isScanning = false;
-			return toast_error(res.message || 'Scan thất bại');
-		}
-		pollScanProgress();
-	}
-
-	async function doRebuildIndex() {
-		if (!confirm('Re-index TOÀN BỘ: xóa index hiện tại và embed lại từ đầu (tốn thời gian + quota API). Tiếp tục?')) return;
-		isScanning = true;
-		scanResult = null;
-		const res = await adminPost<any>('/admin/writer/index/rebuild', undefined, 'embedding_rebuild');
-		if (!res.success) {
-			isScanning = false;
-			return toast_error(res.message || 'Re-index thất bại');
-		}
-		pollScanProgress();
-	}
-
-	async function pollScanProgress() {
-		const res = await adminGet<any>('/admin/writer/index/progress');
-		if (!res.success || !res.data) {
-			isScanning = false;
-			scanProgress = null;
-			return;
-		}
-		scanProgress = res.data;
-		if (res.data.running) {
-			setTimeout(pollScanProgress, 1000);
-			return;
-		}
-		isScanning = false;
-		scanProgress = null;
-		if (res.data.error) {
-			toast_error(res.data.error);
-		} else if (res.data.result) {
-			scanResult = res.data.result;
-			toast_success(`Scan hoàn tất: ${res.data.result.files_new} mới, ${res.data.result.files_updated} cập nhật`);
-			loadDocuments();
-			loadStatus();
-			treeLoaded = false;
-			treeDocs = [];
-		}
-	}
-
-	// ═══════════════════ GENERATIONS HISTORY ═══════════════════
-
-	async function loadGenerations() {
-		const res = await adminGet<any[]>('/admin/writer/generations');
-		if (res.success && res.data) {
-			generations = res.data;
-			historyLoaded = true;
-		}
-	}
-
-	async function loadGenerationInto(id: number) {
-		const res = await adminGet<any>(`/admin/writer/generations/${id}`);
-		if (res.success && res.data) {
-			const g = res.data;
-			targetChapter = g.target_chapter || targetChapter;
-			if (g.kind === 'brainstorm') {
-				brainstormGoal = g.beats || brainstormGoal;
-				writingBeats = g.output || '';
-			} else {
-				writingBeats = g.beats || '';
-				superPrompt = g.prompt || '';
-				generatedText = g.output || '';
-			}
-			toast_success('Đã nạp lại từ lịch sử');
-		} else toast_error(res.message || 'Lỗi');
-	}
-
-	async function removeGeneration(id: number) {
-		if (!confirm('Xóa mục lịch sử này?')) return;
-		const res = await adminDelete(`/admin/writer/generations/${id}`);
-		if (res.success) loadGenerations();
-		else toast_error(res.message || 'Lỗi');
-	}
-
-	async function saveAndAnalyze() {
-		if (!generatedText.trim()) return;
-		isSavingAnalyze = true;
-		const res = await adminPost<any>('/admin/writer/chapter-logs/auto', {
-			chapter_number: targetChapter,
-			content: generatedText,
-		});
-		isSavingAnalyze = false;
-		if (res.success) {
-			toast_success(`Đã lưu & phân tích chương ${targetChapter} vào Biên Niên Sử!`);
-			loadChapterLogs();
-			loadStatus();
-		} else toast_error(res.message || 'Lỗi');
-	}
-
-	// ═══════════════════ AI SETTINGS ═══════════════════
-
-	async function loadSettings() {
-		const [s, m] = await Promise.all([
-			adminGet<any>('/admin/writer/settings'),
-			adminGet<any[]>('/admin/writer/models'),
-		]);
-		if (s.success && s.data) settings = { ...settings, ...s.data };
-		if (m.success && m.data) modelProviders = m.data;
-	}
-
-	async function saveSettings() {
-		isSavingSettings = true;
-		const res = await adminPut('/admin/writer/settings', {
-			gen_provider: settings.gen_provider ?? '',
-			gen_model: settings.gen_model ?? '',
-			gen_max_tokens: settings.gen_max_tokens ? parseInt(String(settings.gen_max_tokens)) : undefined,
-			worker_model: settings.worker_model ?? '',
-		});
-		isSavingSettings = false;
-		if (res.success) toast_success('Đã lưu cài đặt AI');
-		else toast_error(res.message || 'Lỗi');
-	}
-
-	// ═══════════════════ CHAPTER LOG EDIT/DELETE ═══════════════════
-
-	function editChapterLog(log: any) {
-		manualLogChapter = log.chapter_number;
-		manualLogSummary = log.summary || '';
-		manualLogEvents = Array.isArray(log.key_events) ? log.key_events.join('\n') : '';
-		manualLogSeeds = Array.isArray(log.plot_seeds) ? log.plot_seeds.join('\n') : '';
-		manualLogOpen = true;
-		toast_success(`Đã nạp chương ${log.chapter_number} vào form "Lưu Nhật Ký Thủ Công" — sửa xong bấm Lưu`);
-	}
-
-	async function removeChapterLog(n: number) {
-		if (!confirm(`Xóa nhật ký chương ${n}?`)) return;
-		const res = await adminDelete(`/admin/writer/chapter-logs/${n}`);
-		if (res.success) {
-			toast_success('Đã xóa nhật ký');
-			loadChapterLogs();
-			loadStatus();
-		} else toast_error(res.message || 'Lỗi');
-	}
-
-	function toggleEntityExpand(id: string) {
-		const s = new Set(expandedEntityIds);
-		if (s.has(id)) s.delete(id);
-		else s.add(id);
-		expandedEntityIds = s;
-	}
-
-	// Scan Sources
-	async function loadScanSources() {
-		if (!allowsCapability(runtimeCapabilities, 'local_source_scan')) return;
-		const res = await adminGet<any[]>('/admin/writer/index/sources');
-		if (res.success && res.data) scanSources = res.data;
-	}
-
-	async function addScanSource() {
-		if (!newSourceLabel.trim() || !newSourcePath.trim()) return toast_error('Nhập tên và đường dẫn');
-		const res = await adminPost<any>('/admin/writer/index/sources', {
-			label: newSourceLabel,
-			folder_path: newSourcePath,
-			category: newSourceCategory,
-			recursive: newSourceRecursive,
-		}, 'local_source_scan');
-		if (res.success) {
-			toast_success('Đã thêm nguồn quét');
-			newSourceLabel = '';
-			newSourcePath = '';
-			newSourceCategory = 'references';
-			newSourceRecursive = true;
-			showAddSource = false;
-			loadScanSources();
-		} else toast_error(res.message || 'Lỗi');
-	}
-
-	async function toggleSource(id: number, enabled: boolean) {
-		const res = await adminPut(`/admin/writer/index/sources/${id}/toggle`, { enabled }, 'local_source_scan');
-		if (res.success) loadScanSources();
-		else toast_error(res.message || 'Lỗi');
-	}
-
-	async function removeSource(id: number, label: string) {
-		if (!confirm(`Xóa nguồn quét "${label}"?`)) return;
-		const res = await adminDelete(`/admin/writer/index/sources/${id}`, undefined, 'local_source_scan');
-		if (res.success) {
-			toast_success('Đã xóa nguồn quét');
-			loadScanSources();
-		} else toast_error(res.message || 'Lỗi');
-	}
-
-	// ═══════════════════ FILE IMPORT ═══════════════════
-
-	function handleChapterFileImport(event: Event) {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (!file) return;
-
-		// Auto-detect chapter number from filename
-		const nameMatch = file.name.match(/(chuong|chapter|ch)[_\-\s]*(\d+)/i);
-		if (nameMatch) {
-			autoLogChapter = parseInt(nameMatch[2]);
-		}
-
-		const reader = new FileReader();
-		reader.onload = (e) => {
-			autoLogContent = e.target?.result as string || '';
-			toast_success(`Đã nạp "${file.name}" (${(autoLogContent.length / 1024).toFixed(1)} KB)`);
-		};
-		reader.readAsText(file);
-		input.value = ''; // Reset for re-select
-	}
-
-	// ═══════════════════ ENTITY DETECTION ═══════════════════
-
-	function handleEntityDetectFile(event: Event) {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (!file) return;
-
-		const reader = new FileReader();
-		reader.onload = async (e) => {
-			const content = e.target?.result as string || '';
-			isDetecting = true;
-			const res = await adminPost<any>('/admin/writer/entities/detect', { content });
-			isDetecting = false;
-			if (res.success && res.data) {
-				detectedEntities = res.data;
-				// Index theo mảng GỐC — filter trước rồi map index sẽ tick nhầm phần tử
-				detectSelectedIds = new Set(
-					res.data.map((e: any, i: number) => (e.is_new ? i : -1)).filter((i: number) => i >= 0)
-				);
-				showDetectModal = true;
-				toast_success(`AI phát hiện ${res.data.length} entities`);
-				if ((res as any).truncated) {
-					showToast('File dài — AI chỉ phân tích ~8KB đầu tiên', 'info');
-				}
-			} else toast_error(res.message || 'Phát hiện thất bại');
-		};
-		reader.readAsText(file);
-		input.value = '';
-	}
-
-	function toggleDetectedEntity(idx: number) {
-		const newSet = new Set(detectSelectedIds);
-		if (newSet.has(idx)) newSet.delete(idx);
-		else newSet.add(idx);
-		detectSelectedIds = newSet;
-	}
-
-	async function approveDetectedEntities() {
-		let added = 0;
-		for (const idx of detectSelectedIds) {
-			const e = detectedEntities[idx];
-			if (!e || !e.is_new) continue;
-			const res = await adminPost<any>('/admin/writer/entities', {
-				entity_type: e.entity_type,
-				name: e.name,
-				aliases: e.aliases || [],
-				role: e.role || '',
-				description: e.description || '',
-				first_chapter: e.first_chapter || 1,
-				collision_priority: 1,
-			});
-			if (res.success) added++;
-		}
-		showDetectModal = false;
-		if (added > 0) {
-			toast_success(`Đã thêm ${added} entities mới!`);
-			loadEntities();
-			loadStatus();
-		}
-	}
-
-	// ═══════════════════ FOLDER BROWSER ═══════════════════
-
-	async function openFolderBrowser() {
-		if (!allowsCapability(runtimeCapabilities, 'local_source_scan')) {
-			toast_error(deniedCapability<never>('local_source_scan').message || 'Không được phép duyệt thư mục.');
-			return;
-		}
-		showFolderBrowser = true;
-		browseCurrentPath = '';
-		// Load drives
-		isBrowsing = true;
-		const res = await adminGet<any>('/admin/writer/browse?path=');
-		isBrowsing = false;
-		if (res.success && res.data) {
-			browseDirs = res.data.dirs || [];
-			browseDrives = res.data.drives || [];
-			browseCurrentPath = res.data.current || '';
-		}
-	}
-
-	async function browseTo(path: string) {
-		if (!allowsCapability(runtimeCapabilities, 'local_source_scan')) {
-			toast_error(deniedCapability<never>('local_source_scan').message || 'Không được phép duyệt thư mục.');
-			return;
-		}
-		isBrowsing = true;
-		const res = await adminGet<any>(`/admin/writer/browse?path=${encodeURIComponent(path)}`);
-		isBrowsing = false;
-		if (res.success && res.data) {
-			browseDirs = res.data.dirs || [];
-			browseCurrentPath = res.data.current || path;
-		}
-	}
-
-	function selectBrowsedFolder() {
-		if (browseCurrentPath) {
-			newSourcePath = browseCurrentPath;
-			showFolderBrowser = false;
-		}
-	}
-
-	function getEntityIcon(type: string) {
-		return ENTITY_TYPES.find(t => t.value === type)?.label?.split(' ')[0] || '📌';
 	}
 </script>
 
@@ -867,9 +154,9 @@
 		<div class="cw-title">
 			<h1>✍️ Trợ Lý Sáng Tác</h1>
 			<p class="cw-subtitle">AI Co-Writer — Hệ thống hỗ trợ viết truyện</p>
-			{#if runtimeCapabilities}
+			{#if http.capabilities}
 				<p class="cw-subtitle">
-					Runtime: {runtimeCapabilities.target} · {runtimeCapabilities.co_writer_write ? 'read/write' : 'read-only'}
+					Runtime: {http.capabilities.target} · {http.capabilities.co_writer_write ? 'read/write' : 'read-only'}
 				</p>
 			{:else if runtimeLoadError}
 				<p class="cw-subtitle">Runtime unavailable: {runtimeLoadError}</p>
@@ -887,7 +174,7 @@
 							<option value={project.id}>{project.name}</option>
 						{/each}
 					</select>
-					{#if allowsCapability(runtimeCapabilities, 'co_writer_write')}
+					{#if http.allows('co_writer_write')}
 						<button
 							class="btn btn-secondary btn-sm"
 							onclick={createProject}
@@ -949,22 +236,22 @@
 					<div class="form-grid-2">
 						<div class="form-row">
 							<label>Chương đang viết</label>
-							<input type="number" bind:value={targetChapter} min="1" class="input-sm" />
+							<input type="number" bind:value={workshop.targetChapter} min="1" class="input-sm" />
 						</div>
 					</div>
 					<div class="form-row">
 						<label>Định hướng chương mới</label>
-						<textarea bind:value={brainstormGoal} placeholder="Ví dụ: Okita gặp kẻ thù cũ tại lễ hội, cuộc đối đầu bất ngờ..." rows="3"></textarea>
+						<textarea bind:value={workshop.brainstormGoal} placeholder="Ví dụ: Okita gặp kẻ thù cũ tại lễ hội, cuộc đối đầu bất ngờ..." rows="3"></textarea>
 					</div>
-					<button class="btn btn-primary" onclick={doBrainstorm} disabled={isBrainstorming}>
-						{isBrainstorming ? '⏳ Đang suy nghĩ...' : '🧠 AI Brainstorm'}
+					<button class="btn btn-primary" onclick={workshop.doBrainstorm} disabled={workshop.isBrainstorming}>
+						{workshop.isBrainstorming ? '⏳ Đang suy nghĩ...' : '🧠 AI Brainstorm'}
 					</button>
 				</div>
 
 				<!-- Beats Editor — Full Width -->
 				<div class="card">
 					<h3 class="card-title">📝 Dàn Ý Chi Tiết (Beats)</h3>
-					<textarea bind:value={writingBeats} placeholder="AI sẽ điền hoặc bạn tự nhập dàn ý chi tiết cho chương..." rows="12" class="beats-editor"></textarea>
+					<textarea bind:value={workshop.writingBeats} placeholder="AI sẽ điền hoặc bạn tự nhập dàn ý chi tiết cho chương..." rows="12" class="beats-editor"></textarea>
 				</div>
 
 				<!-- Settings row -->
@@ -974,20 +261,20 @@
 						<div class="settings-grid" style="padding-top: 0.75rem;">
 							<div class="form-row">
 								<label>Tóm tắt bổ sung</label>
-								<textarea bind:value={customSummary} placeholder="Bổ sung ngữ cảnh nếu cần..." rows="2"></textarea>
+								<textarea bind:value={workshop.customSummary} placeholder="Bổ sung ngữ cảnh nếu cần..." rows="2"></textarea>
 							</div>
 							<div class="form-grid-2">
 								<div class="slider-row">
-									<label>Ưu tiên liên quan (giảm để nguồn đa dạng hơn): {mmrLambda.toFixed(2)}</label>
-									<input type="range" min="0" max="1" step="0.05" bind:value={mmrLambda} />
+									<label>Ưu tiên liên quan (giảm để nguồn đa dạng hơn): {workshop.mmrLambda.toFixed(2)}</label>
+									<input type="range" min="0" max="1" step="0.05" bind:value={workshop.mmrLambda} />
 								</div>
 								<div class="slider-row">
-									<label>Ưu tiên chương gần (0 = tắt): {temporalLambda.toFixed(3)}</label>
-									<input type="range" min="0" max="0.02" step="0.001" bind:value={temporalLambda} />
+									<label>Ưu tiên chương gần (0 = tắt): {workshop.temporalLambda.toFixed(3)}</label>
+									<input type="range" min="0" max="0.02" step="0.001" bind:value={workshop.temporalLambda} />
 								</div>
 							</div>
 							<label class="checkbox-row">
-								<input type="checkbox" bind:checked={promptOnly} />
+								<input type="checkbox" bind:checked={workshop.promptOnly} />
 								Chỉ xuất prompt (không gọi AI viết)
 							</label>
 
@@ -997,58 +284,58 @@
 								<div class="form-grid-2">
 									<div class="form-row">
 										<label>Nhà cung cấp viết chương</label>
-										<select bind:value={settings.gen_provider}>
+										<select bind:value={workshop.settings.gen_provider}>
 											<option value="">Tự động (theo thứ tự)</option>
-											{#each modelProviders as p}
+											{#each workshop.modelProviders as p}
 												<option value={p.id}>{p.name} — {p.key_count} key</option>
 											{/each}
 										</select>
 									</div>
 									<div class="form-row">
 										<label>Model (trống = mặc định)</label>
-										<input type="text" bind:value={settings.gen_model}
-											placeholder={modelProviders.find((p) => p.id === settings.gen_provider)?.default_model || 'mặc định của provider'} />
+										<input type="text" bind:value={workshop.settings.gen_model}
+											placeholder={workshop.modelProviders.find((p) => p.id === workshop.settings.gen_provider)?.default_model || 'mặc định của provider'} />
 									</div>
 								</div>
 								<div class="form-grid-2">
 									<div class="form-row">
 										<label>Max tokens viết chương</label>
-										<input type="number" bind:value={settings.gen_max_tokens} placeholder="16384" min="1024" step="1024" />
+										<input type="number" bind:value={workshop.settings.gen_max_tokens} placeholder="16384" min="1024" step="1024" />
 									</div>
 									<div class="form-row">
 										<label>Model phụ (tóm tắt / chọn nguồn)</label>
-										<input type="text" bind:value={settings.worker_model}
-											placeholder={settings.default_worker_model || 'gemini-2.5-flash'} />
+										<input type="text" bind:value={workshop.settings.worker_model}
+											placeholder={workshop.settings.default_worker_model || 'gemini-2.5-flash'} />
 									</div>
 								</div>
-								<button class="btn" onclick={saveSettings} disabled={isSavingSettings}>
-									{isSavingSettings ? '⏳ Đang lưu...' : '💾 Lưu cài đặt AI'}
+								<button class="btn" onclick={workshop.saveSettings} disabled={workshop.isSavingSettings}>
+									{workshop.isSavingSettings ? '⏳ Đang lưu...' : '💾 Lưu cài đặt AI'}
 								</button>
 							</div>
 						</div>
 					</details>
 				</div>
 
-				<button class="btn btn-accent btn-lg" onclick={doGenerate} disabled={isGenerating}>
-					{isGenerating
-						? (promptOnly ? '⏳ Đang tổng hợp prompt...' : '⏳ AI đang viết chương...')
-						: (promptOnly ? '📋 Tổng Hợp Prompt (không gọi AI)' : '✍️ AI Viết Chương')}
+				<button class="btn btn-accent btn-lg" onclick={workshop.doGenerate} disabled={workshop.isGenerating}>
+					{workshop.isGenerating
+						? (workshop.promptOnly ? '⏳ Đang tổng hợp prompt...' : '⏳ AI đang viết chương...')
+						: (workshop.promptOnly ? '📋 Tổng Hợp Prompt (không gọi AI)' : '✍️ AI Viết Chương')}
 				</button>
 
 				<!-- Sources Panel — nguồn AI đã đọc (brainstorm + generate) -->
-				{#if treePicks.length > 0 || ragChunks.length > 0}
+				{#if workshop.treePicks.length > 0 || workshop.ragChunks.length > 0}
 					<div class="card">
 						<h3 class="card-title">📚 Nguồn AI Đã Đọc</h3>
 						<p class="text-muted sources-hint">
 							Bỏ chọn nguồn không phù hợp rồi chạy lại — AI sẽ bỏ qua nguồn đó ở lần sau.
 						</p>
-						{#if treePicks.length > 0}
+						{#if workshop.treePicks.length > 0}
 							<h4 class="sources-sub">🌲 Chọn theo suy luận trên mục lục</h4>
-							{#each treePicks as pick}
-								<label class="source-pick" class:excluded={excludedNodeIds.has(pick.node_id)}>
+							{#each workshop.treePicks as pick}
+								<label class="source-pick" class:excluded={workshop.excludedNodeIds.has(pick.node_id)}>
 									<input type="checkbox"
-										checked={!excludedNodeIds.has(pick.node_id)}
-										onchange={() => toggleExcludedNode(pick.node_id)} />
+										checked={!workshop.excludedNodeIds.has(pick.node_id)}
+										onchange={() => workshop.toggleExcludedNode(pick.node_id)} />
 									<div class="source-pick-info">
 										<div class="source-pick-title">
 											<strong>{pick.title}</strong>
@@ -1062,13 +349,13 @@
 								</label>
 							{/each}
 						{/if}
-						{#if ragChunks.length > 0}
+						{#if workshop.ragChunks.length > 0}
 							<h4 class="sources-sub">🎯 Chọn theo độ tương đồng (vector)</h4>
-							{#each ragChunks as chunk}
-								<label class="source-pick" class:excluded={excludedChunkIds.has(chunk.chunk_id)}>
+							{#each workshop.ragChunks as chunk}
+								<label class="source-pick" class:excluded={workshop.excludedChunkIds.has(chunk.chunk_id)}>
 									<input type="checkbox"
-										checked={!excludedChunkIds.has(chunk.chunk_id)}
-										onchange={() => toggleExcludedChunk(chunk.chunk_id)} />
+										checked={!workshop.excludedChunkIds.has(chunk.chunk_id)}
+										onchange={() => workshop.toggleExcludedChunk(chunk.chunk_id)} />
 									<div class="source-pick-info">
 										<div class="source-pick-title">
 											<strong>{chunk.source_file}</strong>
@@ -1079,70 +366,70 @@
 								</label>
 							{/each}
 						{/if}
-						{#if excludedNodeIds.size > 0 || excludedChunkIds.size > 0}
+						{#if workshop.excludedNodeIds.size > 0 || workshop.excludedChunkIds.size > 0}
 							<button class="btn btn-sm" style="margin-top: 0.5rem;"
-								onclick={() => { excludedNodeIds = new Set(); excludedChunkIds = new Set(); }}>
-								↺ Bỏ loại trừ ({excludedNodeIds.size + excludedChunkIds.size})
+								onclick={() => workshop.clearExclusions()}>
+								↺ Bỏ loại trừ ({workshop.excludedNodeIds.size + workshop.excludedChunkIds.size})
 							</button>
 						{/if}
 					</div>
 				{/if}
 
 				<!-- Output Section -->
-				{#if promptStats || superPrompt || generatedText}
+				{#if workshop.promptStats || workshop.superPrompt || workshop.generatedText}
 					<div class="workshop-output">
-						{#if promptStats}
+						{#if workshop.promptStats}
 							<div class="card">
 								<h3 class="card-title">📊 Token Budget</h3>
 								<div class="budget-bars">
 									<div class="budget-item">
-										<span>Lịch sử: {promptStats.history_tokens}/{promptStats.history_budget}</span>
+										<span>Lịch sử: {workshop.promptStats.history_tokens}/{workshop.promptStats.history_budget}</span>
 										<div class="progress-bar">
-											<div class="progress-fill" style="width: {Math.min(100, (promptStats.history_tokens / promptStats.history_budget) * 100)}%"></div>
+											<div class="progress-fill" style="width: {Math.min(100, (workshop.promptStats.history_tokens / workshop.promptStats.history_budget) * 100)}%"></div>
 										</div>
 									</div>
 									<div class="budget-item">
-										<span>Nhân vật: {promptStats.characters_tokens}/{promptStats.characters_budget}</span>
+										<span>Nhân vật: {workshop.promptStats.characters_tokens}/{workshop.promptStats.characters_budget}</span>
 										<div class="progress-bar">
-											<div class="progress-fill" style="width: {Math.min(100, (promptStats.characters_tokens / promptStats.characters_budget) * 100)}%"></div>
+											<div class="progress-fill" style="width: {Math.min(100, (workshop.promptStats.characters_tokens / workshop.promptStats.characters_budget) * 100)}%"></div>
 										</div>
 									</div>
 									<div class="budget-item">
-										<span>World Lore: {promptStats.world_lore_tokens}/{promptStats.world_lore_budget}</span>
+										<span>World Lore: {workshop.promptStats.world_lore_tokens}/{workshop.promptStats.world_lore_budget}</span>
 										<div class="progress-bar">
-											<div class="progress-fill" style="width: {Math.min(100, (promptStats.world_lore_tokens / promptStats.world_lore_budget) * 100)}%"></div>
+											<div class="progress-fill" style="width: {Math.min(100, (workshop.promptStats.world_lore_tokens / workshop.promptStats.world_lore_budget) * 100)}%"></div>
 										</div>
 									</div>
 									<div class="budget-total">
-										Tổng: <strong>{promptStats.total_tokens}</strong> tokens
+										Tổng: <strong>{workshop.promptStats.total_tokens}</strong> tokens
 									</div>
 								</div>
 							</div>
 						{/if}
 
-						{#if generatedText}
+						{#if workshop.generatedText}
 							<div class="card">
 								<h3 class="card-title">📖 Kết Quả AI</h3>
-								<div class="output-text">{generatedText}</div>
+								<div class="output-text">{workshop.generatedText}</div>
 								<div class="btn-row">
-									<button class="btn btn-sm" onclick={() => navigator.clipboard.writeText(generatedText)}>
+									<button class="btn btn-sm" onclick={() => navigator.clipboard.writeText(workshop.generatedText)}>
 										📋 Copy
 									</button>
-									<button class="btn btn-sm btn-primary" onclick={saveAndAnalyze} disabled={isSavingAnalyze}>
-										{isSavingAnalyze ? '⏳ Đang phân tích...' : `💾 Lưu & Phân Tích Chương ${targetChapter}`}
+									<button class="btn btn-sm btn-primary" onclick={workshop.saveAndAnalyze} disabled={workshop.isSavingAnalyze}>
+										{workshop.isSavingAnalyze ? '⏳ Đang phân tích...' : `💾 Lưu & Phân Tích Chương ${workshop.targetChapter}`}
 									</button>
 								</div>
 							</div>
 						{/if}
 
-						{#if superPrompt}
+						{#if workshop.superPrompt}
 							<div class="card">
 								<h3 class="card-title">📋 Super Prompt</h3>
 								<details>
-									<summary>Xem prompt đầy đủ ({superPrompt.length} ký tự)</summary>
-									<pre class="prompt-preview">{superPrompt}</pre>
+									<summary>Xem prompt đầy đủ ({workshop.superPrompt.length} ký tự)</summary>
+									<pre class="prompt-preview">{workshop.superPrompt}</pre>
 								</details>
-								<button class="btn btn-sm" onclick={() => navigator.clipboard.writeText(superPrompt)}>
+								<button class="btn btn-sm" onclick={() => navigator.clipboard.writeText(workshop.superPrompt)}>
 									📋 Copy Prompt
 								</button>
 							</div>
@@ -1153,14 +440,14 @@
 				<!-- Generation History -->
 				<div class="card card-compact">
 					<details ontoggle={(e) => {
-						if ((e.currentTarget as HTMLDetailsElement).open && !historyLoaded) loadGenerations();
+						if ((e.currentTarget as HTMLDetailsElement).open && !workshop.historyLoaded) workshop.loadGenerations();
 					}}>
 						<summary class="card-title clickable">🕘 Lịch Sử Sáng Tác</summary>
 						<div class="history-list">
-							{#if historyLoaded && generations.length === 0}
+							{#if workshop.historyLoaded && workshop.generations.length === 0}
 								<p class="text-muted">Chưa có lịch sử — mỗi lần Brainstorm / AI Viết sẽ tự lưu vào đây.</p>
 							{/if}
-							{#each generations as gen}
+							{#each workshop.generations as gen}
 								<div class="history-item">
 									<div class="history-info">
 										<div class="history-title">
@@ -1174,8 +461,8 @@
 										{/if}
 									</div>
 									<div class="history-actions">
-										<button class="btn btn-sm" onclick={() => loadGenerationInto(gen.id)}>↩ Nạp lại</button>
-										<button class="btn-icon btn-danger-icon" onclick={() => removeGeneration(gen.id)} title="Xóa">🗑️</button>
+										<button class="btn btn-sm" onclick={() => workshop.loadGenerationInto(gen.id)}>↩ Nạp lại</button>
+										<button class="btn-icon btn-danger-icon" onclick={() => workshop.removeGeneration(gen.id)} title="Xóa">🗑️</button>
 									</div>
 								</div>
 							{/each}
@@ -1190,30 +477,30 @@
 				<!-- Filter + Actions -->
 				<div class="wb-toolbar">
 					<div class="wb-filters">
-						<button class="filter-chip" class:active={entityFilter === ''} onclick={() => { entityFilter = ''; loadEntities(); }}>
+						<button class="filter-chip" class:active={worldBible.entityFilter === ''} onclick={() => worldBible.setFilter('')}>
 							Tất cả
 						</button>
 						{#each ENTITY_TYPES as et}
-							<button class="filter-chip" class:active={entityFilter === et.value} onclick={() => { entityFilter = et.value; loadEntities(); }}>
+							<button class="filter-chip" class:active={worldBible.entityFilter === et.value} onclick={() => worldBible.setFilter(et.value)}>
 								{et.label}
 							</button>
 						{/each}
 					</div>
 					<div class="wb-actions">
-						<input type="text" class="entity-search" placeholder="🔍 Tìm tên / bí danh / ID..." bind:value={entitySearch} />
-						<button class="btn" onclick={() => entityDetectFileInput.click()} disabled={isDetecting}>
-							{isDetecting ? '⏳ Đang phát hiện...' : '🔍 Import & Phát Hiện Entity'}
+						<input type="text" class="entity-search" placeholder="🔍 Tìm tên / bí danh / ID..." bind:value={worldBible.entitySearch} />
+						<button class="btn" onclick={() => entityDetectFileInput.click()} disabled={worldBible.isDetecting}>
+							{worldBible.isDetecting ? '⏳ Đang phát hiện...' : '🔍 Import & Phát Hiện Entity'}
 						</button>
-						<button class="btn btn-primary" onclick={openCreateEntity}>+ Tạo Entity</button>
+						<button class="btn btn-primary" onclick={worldBible.openCreate}>+ Tạo Entity</button>
 					</div>
 				</div>
 
 				<!-- Entity Table -->
 				<div class="entity-grid">
-					{#each filteredEntities as entity}
+					{#each worldBible.filtered as entity}
 						<div class="entity-card">
 							<div class="entity-card-header">
-								<span class="entity-icon">{getEntityIcon(entity.entity_type)}</span>
+								<span class="entity-icon">{entityIcon(entity.entity_type)}</span>
 								<span class="entity-id">{entity.id}</span>
 								{#if entity.role}
 									<span class="entity-role">{entity.role}</span>
@@ -1226,20 +513,20 @@
 								</p>
 							{/if}
 							{#if entity.description}
-								{#if expandedEntityIds.has(entity.id) || entity.description.length <= 120}
+								{#if worldBible.expandedEntityIds.has(entity.id) || entity.description.length <= 120}
 									<p class="entity-desc">{entity.description}</p>
 								{:else}
 									<p class="entity-desc">{entity.description.substring(0, 120)}...</p>
 								{/if}
 								{#if entity.description.length > 120}
-									<button class="entity-desc-toggle" onclick={() => toggleEntityExpand(entity.id)}>
-										{expandedEntityIds.has(entity.id) ? '▲ Thu gọn' : '▼ Xem đầy đủ'}
+									<button class="entity-desc-toggle" onclick={() => worldBible.toggleExpand(entity.id)}>
+										{worldBible.expandedEntityIds.has(entity.id) ? '▲ Thu gọn' : '▼ Xem đầy đủ'}
 									</button>
 								{/if}
 							{/if}
 							<div class="entity-actions">
-								<button class="btn btn-sm" onclick={() => openEditEntity(entity)}>✏️</button>
-								<button class="btn btn-sm btn-danger" onclick={() => removeEntity(entity.id)}>🗑️</button>
+								<button class="btn btn-sm" onclick={() => worldBible.openEdit(entity)}>✏️</button>
+								<button class="btn btn-sm btn-danger" onclick={() => worldBible.remove(entity.id)}>🗑️</button>
 							</div>
 						</div>
 					{:else}
@@ -1259,62 +546,62 @@
 					<h3 class="card-title">🤖 AI Phân Tích Chương Tự Động</h3>
 					<div class="form-row">
 						<label>Số chương</label>
-						<input type="number" bind:value={autoLogChapter} min="1" class="input-sm" />
+						<input type="number" bind:value={chronicle.autoLogChapter} min="1" class="input-sm" />
 					</div>
 					<div class="form-row">
 						<label>Dán nội dung chương</label>
-						<textarea bind:value={autoLogContent} placeholder="Dán toàn bộ nội dung chương vào đây, hoặc bấm Import File bên dưới..." rows="6"></textarea>
+						<textarea bind:value={chronicle.autoLogContent} placeholder="Dán toàn bộ nội dung chương vào đây, hoặc bấm Import File bên dưới..." rows="6"></textarea>
 					</div>
 					<div class="btn-row">
 						<button class="btn" onclick={() => importFileInput.click()}>
 							📂 Import File (.md / .txt)
 						</button>
-						<button class="btn btn-primary" onclick={doAutoAnalyze} disabled={isAutoAnalyzing}>
-							{isAutoAnalyzing ? '⏳ Đang phân tích...' : '🤖 AI Phân Tích & Lưu'}
+						<button class="btn btn-primary" onclick={chronicle.doAutoAnalyze} disabled={chronicle.isAutoAnalyzing}>
+							{chronicle.isAutoAnalyzing ? '⏳ Đang phân tích...' : '🤖 AI Phân Tích & Lưu'}
 						</button>
 					</div>
 				</div>
 
 				<!-- Manual Log -->
 				<div class="card card-compact">
-					<details bind:open={manualLogOpen}>
+					<details bind:open={chronicle.manualLogOpen}>
 						<summary class="card-title clickable">📝 Lưu Nhật Ký Thủ Công</summary>
 						<div class="manual-form">
 							<div class="form-row">
 								<label>Chương</label>
-								<input type="number" bind:value={manualLogChapter} min="1" class="input-sm" />
+								<input type="number" bind:value={chronicle.manualLogChapter} min="1" class="input-sm" />
 							</div>
 							<div class="form-row">
 								<label>Tóm tắt</label>
-								<textarea bind:value={manualLogSummary} rows="2" placeholder="Tóm tắt ngắn..."></textarea>
+								<textarea bind:value={chronicle.manualLogSummary} rows="2" placeholder="Tóm tắt ngắn..."></textarea>
 							</div>
 							<div class="form-row">
 								<label>Sự kiện chính (mỗi dòng 1 sự kiện)</label>
-								<textarea bind:value={manualLogEvents} rows="3" placeholder="Sự kiện 1&#10;Sự kiện 2"></textarea>
+								<textarea bind:value={chronicle.manualLogEvents} rows="3" placeholder="Sự kiện 1&#10;Sự kiện 2"></textarea>
 							</div>
 							<div class="form-row">
 								<label>Mầm cốt truyện (mỗi dòng 1 mầm)</label>
-								<textarea bind:value={manualLogSeeds} rows="3" placeholder="Phục bút 1&#10;Phục bút 2"></textarea>
+								<textarea bind:value={chronicle.manualLogSeeds} rows="3" placeholder="Phục bút 1&#10;Phục bút 2"></textarea>
 							</div>
-							<button class="btn btn-primary" onclick={saveManualLog}>💾 Lưu</button>
+							<button class="btn btn-primary" onclick={chronicle.saveManualLog}>💾 Lưu</button>
 						</div>
 					</details>
 				</div>
 
 				<!-- Timeline -->
-				{#if chapterLogs.length > 0}
+				{#if chronicle.chapterLogs.length > 0}
 					<div class="card">
 						<h3 class="card-title">📅 Timeline Cốt Truyện</h3>
 						<div class="timeline">
-							{#each chapterLogs as log}
+							{#each chronicle.chapterLogs as log}
 								<div class="timeline-item">
 									<div class="timeline-marker">CH{log.chapter_number}</div>
 									<div class="timeline-content">
 										<div class="timeline-head">
 											<p class="timeline-summary">{log.summary}</p>
 											<div class="timeline-actions">
-												<button class="btn-icon" onclick={() => editChapterLog(log)} title="Sửa">✏️</button>
-												<button class="btn-icon btn-danger-icon" onclick={() => removeChapterLog(log.chapter_number)} title="Xóa">🗑️</button>
+												<button class="btn-icon" onclick={() => chronicle.editChapterLog(log)} title="Sửa">✏️</button>
+												<button class="btn-icon btn-danger-icon" onclick={() => chronicle.removeChapterLog(log.chapter_number)} title="Xóa">🗑️</button>
 											</div>
 										</div>
 										{#if log.key_events?.length > 0}
@@ -1349,7 +636,7 @@
 
 					<!-- Scan Sources List -->
 					<div class="sources-list">
-						{#each scanSources as src}
+						{#each chronicle.scanSources as src}
 							<div class="source-item" class:disabled={!src.enabled}>
 								<div class="source-info">
 									<div class="source-header">
@@ -1366,31 +653,31 @@
 								<div class="source-actions">
 									<label class="toggle-switch" title={src.enabled ? 'Đang bật' : 'Đang tắt'}>
 										<input type="checkbox" checked={src.enabled}
-											onchange={() => toggleSource(src.id, !src.enabled)} />
+											onchange={() => chronicle.toggleSource(src.id, !src.enabled)} />
 										<span class="toggle-slider"></span>
 									</label>
-									<button class="btn-icon btn-danger-icon" onclick={() => removeSource(src.id, src.label)} title="Xóa">
+									<button class="btn-icon btn-danger-icon" onclick={() => chronicle.removeSource(src.id, src.label)} title="Xóa">
 										🗑️
 									</button>
 								</div>
 							</div>
 						{/each}
-						{#if scanSources.length === 0}
+						{#if chronicle.scanSources.length === 0}
 							<p class="text-muted">Chưa có nguồn quét nào. Thêm thư mục bên dưới.</p>
 						{/if}
 					</div>
 
 					<!-- Add Source Form -->
-					{#if showAddSource}
+					{#if chronicle.showAddSource}
 						<div class="add-source-form">
 							<div class="form-grid-2">
 								<div class="form-row">
 									<label>Tên hiển thị</label>
-									<input type="text" bind:value={newSourceLabel} placeholder="VD: 📕 Tập 2 - Biên Niên Sử" />
+									<input type="text" bind:value={chronicle.newSourceLabel} placeholder="VD: 📕 Tập 2 - Biên Niên Sử" />
 								</div>
 								<div class="form-row">
 									<label>Danh mục</label>
-									<select bind:value={newSourceCategory}>
+									<select bind:value={chronicle.newSourceCategory}>
 										<option value="manuscripts">📖 Bản thảo (manuscripts)</option>
 										<option value="worldbook">🌍 Thế giới quan (worldbook)</option>
 										<option value="references">📚 Tham khảo (references)</option>
@@ -1400,75 +687,75 @@
 							<div class="form-row">
 								<label>Đường dẫn thư mục</label>
 								<div class="path-input-row">
-									<input type="text" bind:value={newSourcePath}
+									<input type="text" bind:value={chronicle.newSourcePath}
 										placeholder="VD: E:/MyStory/TruyenMoi hoặc manuscripts/tap2" />
-									<button class="btn" type="button" onclick={openFolderBrowser}>📂 Duyệt</button>
+									<button class="btn" type="button" onclick={chronicle.openFolderBrowser}>📂 Duyệt</button>
 								</div>
 								<span class="form-hint">Bấm "Duyệt" để chọn thư mục, hoặc gõ đường dẫn trực tiếp.</span>
 							</div>
 							<div class="form-row-inline">
 								<label class="checkbox-label">
-									<input type="checkbox" bind:checked={newSourceRecursive} />
+									<input type="checkbox" bind:checked={chronicle.newSourceRecursive} />
 									Quét đệ quy thư mục con
 								</label>
 							</div>
 							<div class="form-actions">
-								<button class="btn" onclick={() => showAddSource = false}>Hủy</button>
-								<button class="btn btn-primary" onclick={addScanSource}>➕ Thêm Nguồn</button>
+								<button class="btn" onclick={() => chronicle.showAddSource = false}>Hủy</button>
+								<button class="btn btn-primary" onclick={chronicle.addScanSource}>➕ Thêm Nguồn</button>
 							</div>
 						</div>
 					{:else}
-						<button class="btn btn-outline" onclick={() => showAddSource = true} style="margin-bottom: 1rem;">
+						<button class="btn btn-outline" onclick={() => chronicle.showAddSource = true} style="margin-bottom: 1rem;">
 							➕ Thêm Thư Mục Quét
 						</button>
 					{/if}
 
 					<!-- Scan Button -->
 					<div class="index-toolbar">
-						<button class="btn btn-primary" onclick={doScanIndex} disabled={isScanning}>
-							{isScanning ? '⏳ Đang quét...' : '🔄 Scan & Index Tất Cả'}
+						<button class="btn btn-primary" onclick={chronicle.doScanIndex} disabled={chronicle.isScanning}>
+							{chronicle.isScanning ? '⏳ Đang quét...' : '🔄 Scan & Index Tất Cả'}
 						</button>
-						<button class="btn" onclick={doRebuildIndex} disabled={isScanning}
+						<button class="btn" onclick={chronicle.doRebuildIndex} disabled={chronicle.isScanning}
 							title="Xóa toàn bộ index và embed lại từ đầu (khi đổi model embedding)">
 							🧨 Re-index Toàn Bộ
 						</button>
-						{#if scanResult}
+						{#if chronicle.scanResult}
 							<div class="scan-result">
-								<span class="scan-badge new">+{scanResult.files_new} mới</span>
-								<span class="scan-badge updated">↻{scanResult.files_updated} cập nhật</span>
-								<span class="scan-badge unchanged">={scanResult.files_unchanged} giữ nguyên</span>
-								<span class="scan-badge chunks">🧩 {scanResult.chunks_created} chunks</span>
-								{#if scanResult.errors?.length > 0}
-									<span class="scan-badge errors">⚠️ {scanResult.errors.length} lỗi</span>
+								<span class="scan-badge new">+{chronicle.scanResult.files_new} mới</span>
+								<span class="scan-badge updated">↻{chronicle.scanResult.files_updated} cập nhật</span>
+								<span class="scan-badge unchanged">={chronicle.scanResult.files_unchanged} giữ nguyên</span>
+								<span class="scan-badge chunks">🧩 {chronicle.scanResult.chunks_created} chunks</span>
+								{#if chronicle.scanResult.errors?.length > 0}
+									<span class="scan-badge errors">⚠️ {chronicle.scanResult.errors.length} lỗi</span>
 								{/if}
 							</div>
 						{/if}
 					</div>
-					{#if isScanning && scanProgress}
+					{#if chronicle.isScanning && chronicle.scanProgress}
 						<div class="scan-progress">
 							<div class="progress-bar">
-								<div class="progress-fill" style="width: {scanProgress.files_total ? (scanProgress.files_done / scanProgress.files_total) * 100 : 0}%"></div>
+								<div class="progress-fill" style="width: {chronicle.scanProgress.files_total ? (chronicle.scanProgress.files_done / chronicle.scanProgress.files_total) * 100 : 0}%"></div>
 							</div>
 							<span class="scan-progress-text">
-								{scanProgress.stage} · {scanProgress.files_done}/{scanProgress.files_total} file
-								{#if scanProgress.current_file}· <code>{scanProgress.current_file}</code>{/if}
-								· 🧩 {scanProgress.chunks_created} chunks · 📝 {scanProgress.summaries_created} tóm tắt
+								{chronicle.scanProgress.stage} · {chronicle.scanProgress.files_done}/{chronicle.scanProgress.files_total} file
+								{#if chronicle.scanProgress.current_file}· <code>{chronicle.scanProgress.current_file}</code>{/if}
+								· 🧩 {chronicle.scanProgress.chunks_created} chunks · 📝 {chronicle.scanProgress.summaries_created} tóm tắt
 							</span>
 						</div>
 					{/if}
-					{#if scanResult?.errors?.length > 0}
+					{#if chronicle.scanResult?.errors?.length > 0}
 						<details class="error-details">
-							<summary>⚠️ Chi tiết lỗi ({scanResult.errors.length})</summary>
+							<summary>⚠️ Chi tiết lỗi ({chronicle.scanResult.errors.length})</summary>
 							<ul>
-								{#each scanResult.errors as err}
+								{#each chronicle.scanResult.errors as err}
 									<li><code>{err}</code></li>
 								{/each}
 							</ul>
 						</details>
 					{/if}
 
-					{#if documents.length > 0}
-						<h4 style="margin-top: 1.5rem;">📄 Tài liệu đã index ({documents.length})</h4>
+					{#if chronicle.documents.length > 0}
+						<h4 style="margin-top: 1.5rem;">📄 Tài liệu đã index ({chronicle.documents.length})</h4>
 						<table class="crud-table">
 							<thead>
 								<tr>
@@ -1480,7 +767,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each documents as doc}
+								{#each chronicle.documents as doc}
 									<tr>
 										<td data-label="File">{doc.filename}</td>
 										<td data-label="Danh mục">
@@ -1505,19 +792,19 @@
 				<!-- Knowledge Tree -->
 				<div class="card">
 					<details ontoggle={(e) => {
-						if ((e.currentTarget as HTMLDetailsElement).open && !treeLoaded && !isLoadingTree) loadTree();
+						if ((e.currentTarget as HTMLDetailsElement).open && !chronicle.treeLoaded && !chronicle.isLoadingTree) chronicle.loadTree();
 					}}>
 						<summary class="card-title clickable">🌲 Cây Tri Thức — mục lục AI đọc khi suy luận</summary>
 						<div class="tree-browser">
-							{#if isLoadingTree}
+							{#if chronicle.isLoadingTree}
 								<p class="text-muted">⏳ Đang tải cây tri thức...</p>
-							{:else if treeLoaded && treeDocs.length === 0}
+							{:else if chronicle.treeLoaded && chronicle.treeDocs.length === 0}
 								<p class="text-muted">Chưa có tài liệu nào. Scan & Index trước đã.</p>
 							{:else}
 								<div class="tree-toolbar">
-									<button class="btn btn-sm" onclick={loadTree}>↻ Tải lại</button>
+									<button class="btn btn-sm" onclick={chronicle.loadTree}>↻ Tải lại</button>
 								</div>
-								{#each treeDocs as doc}
+								{#each chronicle.treeDocs as doc}
 									<details class="tree-doc">
 										<summary>
 											📄 <strong>{doc.filename}</strong>
@@ -1550,17 +837,17 @@
 </div>
 
 <!-- Entity Modal -->
-{#if showEntityModal}
+{#if worldBible.showEntityModal}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="modal-overlay" onclick={() => showEntityModal = false}>
+	<div class="modal-overlay" onclick={() => worldBible.showEntityModal = false}>
 		<div class="modal-content" onclick={(e) => e.stopPropagation()}>
-			<h3>{editingEntity ? `Sửa ${editingEntity.id}` : 'Tạo Entity Mới'}</h3>
+			<h3>{worldBible.editingEntity ? `Sửa ${worldBible.editingEntity.id}` : 'Tạo Entity Mới'}</h3>
 			<div class="modal-form">
-				{#if !editingEntity}
+				{#if !worldBible.editingEntity}
 					<div class="form-row">
 						<label>Loại</label>
-						<select bind:value={entityForm.entity_type}>
+						<select bind:value={worldBible.entityForm.entity_type}>
 							{#each ENTITY_TYPES as et}
 								<option value={et.value}>{et.label}</option>
 							{/each}
@@ -1569,16 +856,16 @@
 				{/if}
 				<div class="form-row">
 					<label>Tên</label>
-					<input type="text" bind:value={entityForm.name} placeholder="Miyamoto Okita" />
+					<input type="text" bind:value={worldBible.entityForm.name} placeholder="Miyamoto Okita" />
 				</div>
 				<div class="form-row">
 					<label>Bí danh (cách nhau bởi dấu phẩy)</label>
-					<input type="text" bind:value={entityForm.aliases} placeholder="Okita, Kiếm Vương Đỏ" />
+					<input type="text" bind:value={worldBible.entityForm.aliases} placeholder="Okita, Kiếm Vương Đỏ" />
 				</div>
-				{#if entityForm.entity_type === 'character'}
+				{#if worldBible.entityForm.entity_type === 'character'}
 					<div class="form-row">
 						<label>Vai trò</label>
-						<select bind:value={entityForm.role}>
+						<select bind:value={worldBible.entityForm.role}>
 							<option value="">—</option>
 							<option value="protagonist">Nhân vật chính</option>
 							<option value="supporting">Nhân vật phụ</option>
@@ -1589,22 +876,22 @@
 				<div class="form-grid-2">
 					<div class="form-row">
 						<label>Chương xuất hiện</label>
-						<input type="number" bind:value={entityForm.first_chapter} min="1" />
+						<input type="number" bind:value={worldBible.entityForm.first_chapter} min="1" />
 					</div>
 					<div class="form-row">
 						<label>Ưu tiên va chạm</label>
-						<input type="number" bind:value={entityForm.collision_priority} min="1" />
+						<input type="number" bind:value={worldBible.entityForm.collision_priority} min="1" />
 					</div>
 				</div>
 				<div class="form-row">
 					<label>Mô tả</label>
-					<textarea bind:value={entityForm.description} rows="4" placeholder="Mô tả chi tiết..."></textarea>
+					<textarea bind:value={worldBible.entityForm.description} rows="4" placeholder="Mô tả chi tiết..."></textarea>
 				</div>
 			</div>
 			<div class="modal-actions">
-				<button class="btn" onclick={() => showEntityModal = false}>Hủy</button>
-				<button class="btn btn-primary" onclick={saveEntity}>
-					{editingEntity ? '💾 Cập Nhật' : '✨ Tạo Mới'}
+				<button class="btn" onclick={() => worldBible.showEntityModal = false}>Hủy</button>
+				<button class="btn btn-primary" onclick={worldBible.save}>
+					{worldBible.editingEntity ? '💾 Cập Nhật' : '✨ Tạo Mới'}
 				</button>
 			</div>
 		</div>
@@ -1613,33 +900,33 @@
 
 <!-- Hidden File Inputs -->
 <input type="file" accept=".md,.txt" style="display:none"
-	bind:this={importFileInput} onchange={handleChapterFileImport} />
+	bind:this={importFileInput} onchange={chronicle.handleChapterFileImport} />
 <input type="file" accept=".md,.txt" style="display:none"
-	bind:this={entityDetectFileInput} onchange={handleEntityDetectFile} />
+	bind:this={entityDetectFileInput} onchange={worldBible.handleDetectFile} />
 
 <!-- Entity Detection Modal -->
-{#if showDetectModal}
-<div class="modal-overlay" onclick={() => showDetectModal = false}>
+{#if worldBible.showDetectModal}
+<div class="modal-overlay" onclick={() => worldBible.showDetectModal = false}>
 	<div class="modal-content" style="max-width: 680px;" onclick={(e) => e.stopPropagation()}>
 		<h3>🔍 Entities AI Phát Hiện</h3>
 		<p class="text-muted" style="margin: 0 0 1rem;">
 			Chọn các entity mới để thêm vào World Bible. Entity trùng sẽ được đánh dấu.
 		</p>
-		{#if detectedEntities.length === 0}
+		{#if worldBible.detectedEntities.length === 0}
 			<p>Không phát hiện entity nào.</p>
 		{:else}
 			<div class="detect-list">
-				{#each detectedEntities as ent, idx}
+				{#each worldBible.detectedEntities as ent, idx}
 					<div class="detect-item" class:is-dup={!ent.is_new}>
 						<label class="detect-checkbox">
 							<input type="checkbox"
-								checked={detectSelectedIds.has(idx)}
+								checked={worldBible.detectSelectedIds.has(idx)}
 								disabled={!ent.is_new}
-								onchange={() => toggleDetectedEntity(idx)} />
+								onchange={() => worldBible.toggleDetected(idx)} />
 						</label>
 						<div class="detect-info">
 							<div class="detect-header">
-								<span class="entity-icon">{getEntityIcon(ent.entity_type)}</span>
+								<span class="entity-icon">{entityIcon(ent.entity_type)}</span>
 								<strong>{ent.name}</strong>
 								{#if !ent.is_new}
 									<span class="badge-flat">🔄 Đã có</span>
@@ -1659,10 +946,10 @@
 			</div>
 		{/if}
 		<div class="modal-actions">
-			<button class="btn" onclick={() => showDetectModal = false}>Hủy</button>
-			<button class="btn btn-primary" onclick={approveDetectedEntities}
-				disabled={detectSelectedIds.size === 0}>
-				✅ Thêm {detectSelectedIds.size} Entity Đã Chọn
+			<button class="btn" onclick={() => worldBible.showDetectModal = false}>Hủy</button>
+			<button class="btn btn-primary" onclick={worldBible.approveDetected}
+				disabled={worldBible.detectSelectedIds.size === 0}>
+				✅ Thêm {worldBible.detectSelectedIds.size} Entity Đã Chọn
 			</button>
 		</div>
 	</div>
@@ -1670,20 +957,20 @@
 {/if}
 
 <!-- Folder Browser Modal -->
-{#if showFolderBrowser}
-<div class="modal-overlay" onclick={() => showFolderBrowser = false}>
+{#if chronicle.showFolderBrowser}
+<div class="modal-overlay" onclick={() => chronicle.showFolderBrowser = false}>
 	<div class="modal-content" style="max-width: 600px; max-height: 80vh;" onclick={(e) => e.stopPropagation()}>
 		<h3>📂 Chọn Thư Mục</h3>
 
 		<!-- Breadcrumb -->
 		<div class="browse-breadcrumb">
-			{#if browseCurrentPath}
-				{@const parts = browseCurrentPath.replace(/\\/g, '/').split('/').filter(Boolean)}
-				<button class="breadcrumb-item" onclick={() => browseTo('')}>💻 Drives</button>
+			{#if chronicle.browseCurrentPath}
+				{@const parts = chronicle.browseCurrentPath.replace(/\\/g, '/').split('/').filter(Boolean)}
+				<button class="breadcrumb-item" onclick={() => chronicle.browseTo('')}>💻 Drives</button>
 				{#each parts as part, i}
 					<span class="breadcrumb-sep">/</span>
 					<button class="breadcrumb-item"
-						onclick={() => browseTo(parts.slice(0, i + 1).join('/') + '/')}>
+						onclick={() => chronicle.browseTo(parts.slice(0, i + 1).join('/') + '/')}>
 						{part}
 					</button>
 				{/each}
@@ -1694,20 +981,20 @@
 
 		<!-- Directory List -->
 		<div class="browse-list">
-			{#if isBrowsing}
+			{#if chronicle.isBrowsing}
 				<div class="empty-state"><p>⏳ Đang tải...</p></div>
-			{:else if browseCurrentPath && browseDirs.length === 0}
+			{:else if chronicle.browseCurrentPath && chronicle.browseDirs.length === 0}
 				<div class="empty-state"><p>Thư mục trống (không có thư mục con)</p></div>
 			{:else}
-				{#if !browseCurrentPath && browseDrives.length > 0}
-					{#each browseDrives as drive}
-						<button class="browse-item" onclick={() => browseTo(drive)}>
+				{#if !chronicle.browseCurrentPath && chronicle.browseDrives.length > 0}
+					{#each chronicle.browseDrives as drive}
+						<button class="browse-item" onclick={() => chronicle.browseTo(drive)}>
 							💾 {drive}
 						</button>
 					{/each}
 				{/if}
-				{#each browseDirs as dir}
-					<button class="browse-item" onclick={() => browseTo(dir)}>
+				{#each chronicle.browseDirs as dir}
+					<button class="browse-item" onclick={() => chronicle.browseTo(dir)}>
 						📁 {dir.replace(/\\/g, '/').split('/').filter(Boolean).pop() || dir}
 					</button>
 				{/each}
@@ -1715,10 +1002,10 @@
 		</div>
 
 		<div class="modal-actions">
-			<button class="btn" onclick={() => showFolderBrowser = false}>Hủy</button>
-			<button class="btn btn-primary" onclick={selectBrowsedFolder}
-				disabled={!browseCurrentPath}>
-				✅ Chọn: {browseCurrentPath || '...'}
+			<button class="btn" onclick={() => chronicle.showFolderBrowser = false}>Hủy</button>
+			<button class="btn btn-primary" onclick={chronicle.selectBrowsedFolder}
+				disabled={!chronicle.browseCurrentPath}>
+				✅ Chọn: {chronicle.browseCurrentPath || '...'}
 			</button>
 		</div>
 	</div>
