@@ -105,6 +105,7 @@
 				{ href: "/admin/llm-gateway", icon: "🤖", label: "Cổng AI" },
 				{ href: "/admin/claude-chat", icon: "💬", label: "Claude Chat" },
 				{ href: "/admin/co-writer", icon: "✍️", label: "Trợ Lý Sáng Tác" },
+				{ href: "/admin/co-writer/gates", icon: "🚦", label: "Cổng Duyệt Chương" },
 			],
 		},
 	];
