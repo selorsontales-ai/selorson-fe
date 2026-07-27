@@ -33,6 +33,11 @@
 		type ResearchPack,
 		type StoryProjection
 	} from '$lib/co-writer/workflow';
+	import {
+		previewCmsDraft,
+		pushCmsDraft,
+		type DraftPreview
+	} from '$lib/co-writer/cms';
 
 	// ═══════════════ TRẠNG THÁI ═══════════════
 	let capabilities = $state<RuntimeCapabilities | null>(null);
@@ -72,7 +77,12 @@
 	let deltaText = $state('');
 	let selectedRun = $state('');
 
+	// Gửi sang CMS (CW-510)
+	let cmsPreview = $state<DraftPreview | null>(null);
+	let confirmUnpublish = $state(false);
+
 	let writable = $derived(allowsCapability(capabilities, 'co_writer_write'));
+	let canPushCms = $derived(allowsCapability(capabilities, 'cms_draft_push'));
 	let stage = $derived<ChapterStage | null>(workflow?.stage ?? null);
 	let researchPack = $derived(parseStored<ResearchPack>(workflow?.research_pack_json ?? null));
 	let blueprint = $derived(
@@ -104,6 +114,21 @@
 		canonCommits = res.data.canon_commits ?? [];
 		syncFormFromWorkflow();
 		await loadProjections();
+		await loadCmsPreview();
+	}
+
+	/**
+	 * Không có canon thì không có gì để gửi, nên xem trước cũng không có
+	 * nghĩa — backend sẽ trả lỗi và toast sẽ nổ mỗi lần đổi chương.
+	 */
+	async function loadCmsPreview() {
+		confirmUnpublish = false;
+		if (!canonCommits.length) {
+			cmsPreview = null;
+			return;
+		}
+		const res = await previewCmsDraft(chapter);
+		cmsPreview = res.success ? res.data : null;
 	}
 
 	async function loadProjections() {
@@ -370,6 +395,25 @@
 			`Bản đồ: ${report.active} đang hoạt động · ${report.stale_commit} thuộc bản chương cũ · ${report.superseded} bị chương sau thay`
 		);
 		await loadProjections();
+	}
+
+	// ═══════════════ GỬI SANG CMS ═══════════════
+
+	async function pushToCms() {
+		busy = 'cms';
+		const res = await pushCmsDraft(chapter, confirmUnpublish);
+		busy = '';
+		if (!res.success) {
+			toast_error(res.message || 'Không gửi được sang CMS');
+			return;
+		}
+		const labels = {
+			create: 'Đã tạo bản nháp CMS',
+			update: 'Đã cập nhật bản nháp CMS',
+			unchanged: 'Bản nháp CMS đã khớp canon — không ghi gì'
+		};
+		toast_success(`${labels[res.data.action]} (chương #${res.data.chapter_id})`);
+		await loadCmsPreview();
 	}
 
 	// ═══════════════ XUẤT GÓI CHO ARTIFACT ═══════════════
@@ -771,6 +815,101 @@
 				{/if}
 			</section>
 		{/if}
+
+		<!-- ═══════════ GỬI SANG CMS (CW-510) ═══════════ -->
+		{#if cmsPreview}
+			<section class="card">
+				<h3 class="card-title">⑥ Gửi sang CMS</h3>
+				<p class="text-muted">
+					Đẩy bản canon hiện hành vào bảng chương của website, luôn dưới dạng
+					<strong>bản nháp</strong>. Xuất bản là hành động riêng — nhận canon không bao giờ tự
+					đưa chương lên website.
+				</p>
+
+				<div class="trace">
+					<span>
+						{cmsPreview.action === 'create'
+							? 'sẽ tạo hàng CMS mới'
+							: cmsPreview.action === 'update'
+								? 'sẽ cập nhật hàng CMS'
+								: 'đã khớp — không ghi gì'}
+					</span>
+					<span>canon rev {cmsPreview.target.revision}</span>
+					<code class="hash">{cmsPreview.target.content_hash.slice(0, 12)}</code>
+					{#if cmsPreview.existing}
+						<span>CMS #{cmsPreview.existing.id}</span>
+						<span class:danger={cmsPreview.existing.status === 'published'}>
+							{cmsPreview.existing.status}
+						</span>
+					{:else}
+						<span class="text-muted">chưa có trong CMS</span>
+					{/if}
+					{#if cmsPreview.in_sync}<span>khớp canon</span>{/if}
+				</div>
+
+				<dl class="cms-fields">
+					<dt>Tiêu đề</dt>
+					<dd>{cmsPreview.target.title}</dd>
+					<dt>Sẽ ghi</dt>
+					<dd>
+						{#if cmsPreview.changed_fields.length}
+							{#each cmsPreview.changed_fields as field}<code>{field}</code>{/each}
+						{:else}
+							<span class="text-muted">không cột nào</span>
+						{/if}
+					</dd>
+				</dl>
+
+				{#each cmsPreview.warnings as warning}
+					<div class="banner warn">{warning}</div>
+				{/each}
+
+				{#if cmsPreview.diff}
+					<h4>
+						Khác biệt nội dung — {cmsPreview.diff.removed_lines} dòng bỏ,
+						{cmsPreview.diff.added_lines} dòng thêm
+						<span class="text-muted">
+							(giữ nguyên {cmsPreview.diff.unchanged_prefix_lines} dòng đầu,
+							{cmsPreview.diff.unchanged_suffix_lines} dòng cuối)
+						</span>
+					</h4>
+					<div class="diff">
+						{#each cmsPreview.diff.removed as line}
+							<div class="diff-line removed">− {line}</div>
+						{/each}
+						{#each cmsPreview.diff.added as line}
+							<div class="diff-line added">+ {line}</div>
+						{/each}
+						{#if cmsPreview.diff.truncated}
+							<div class="diff-line text-muted">… đã cắt bớt để xem trước</div>
+						{/if}
+					</div>
+				{/if}
+
+				{#if cmsPreview.would_unpublish}
+					<label class="confirm">
+						<input type="checkbox" bind:checked={confirmUnpublish} />
+						Tôi biết chương này đang xuất bản và đồng ý đưa nó về bản nháp.
+					</label>
+				{/if}
+
+				<div class="btn-row">
+					<button
+						class="btn btn-primary"
+						onclick={pushToCms}
+						disabled={!canPushCms ||
+							busy === 'cms' ||
+							(cmsPreview.would_unpublish && !confirmUnpublish)}
+					>
+						{busy === 'cms' ? '⏳ Đang gửi...' : '→ Gửi bản nháp sang CMS'}
+					</button>
+					<button class="btn" onclick={loadCmsPreview}>↻ Xem lại</button>
+					{#if !canPushCms}
+						<span class="text-muted">Máy này không có quyền <code>cms_draft_push</code>.</span>
+					{/if}
+				</div>
+			</section>
+		{/if}
 	{:else if !loading}
 		<div class="empty-state">
 			<div class="empty-icon">🚦</div>
@@ -892,6 +1031,30 @@
 	.commits { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.375rem; }
 	.commits li { display: flex; gap: 0.625rem; align-items: center; font-size: 0.75rem; flex-wrap: wrap; }
 	.hash { color: var(--color-text-muted); }
+
+	.cms-fields {
+		display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem;
+		margin: 0; font-size: 0.8125rem;
+	}
+	.cms-fields dt { font-weight: 600; color: var(--color-text-muted); }
+	.cms-fields dd { margin: 0; display: flex; gap: 0.375rem; flex-wrap: wrap; }
+
+	.diff {
+		border: 1px solid var(--color-surface-300); border-radius: var(--radius-md);
+		background: var(--color-surface-200); padding: 0.5rem;
+		max-height: 22rem; overflow: auto;
+	}
+	.diff-line {
+		font-family: var(--font-mono, monospace); font-size: 0.75rem; line-height: 1.6;
+		white-space: pre-wrap; padding: 0 0.25rem; border-radius: 2px;
+	}
+	.diff-line.removed { background: rgba(239, 68, 68, 0.12); }
+	.diff-line.added { background: rgba(34, 197, 94, 0.12); }
+
+	.confirm {
+		display: flex; align-items: center; gap: 0.5rem;
+		font-size: 0.8125rem; font-weight: 600;
+	}
 
 	.empty-state { text-align: center; padding: 2.5rem 1rem; color: var(--color-text-muted); }
 	.empty-icon { font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.5; }
