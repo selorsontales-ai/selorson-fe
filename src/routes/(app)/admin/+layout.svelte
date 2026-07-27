@@ -106,6 +106,7 @@
 				{ href: "/admin/claude-chat", icon: "💬", label: "Claude Chat" },
 				{ href: "/admin/co-writer", icon: "✍️", label: "Trợ Lý Sáng Tác" },
 				{ href: "/admin/co-writer/gates", icon: "🚦", label: "Cổng Duyệt Chương" },
+				{ href: "/admin/co-writer/snapshots", icon: "📦", label: "Ảnh Chụp Co-Writer" },
 			],
 		},
 	];
