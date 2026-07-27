@@ -3,15 +3,20 @@ name: Frontend CI Check
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main, "cowriter/**"]
 
-# Cancel in-progress checks when a new push arrives to the same PR
 concurrency:
-  group: check-frontend-${{ github.head_ref }}
+  group: check-frontend-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
+# Four jobs rather than one, because they check four different targets and a
+# failure should say which. `web` and `desktop` are the two shipped builds;
+# `artifacts` and `sidecar` are code that ships inside them but is neither
+# TypeScript nor Svelte, so `svelte-check` never sees it.
 jobs:
-  check:
-    name: 🔍 SvelteKit Type Check
+  web:
+    name: 🌐 Web — check, build, leakage scan
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -40,3 +45,111 @@ jobs:
 
       - name: Run svelte-check
         run: npx svelte-check --tsconfig ./tsconfig.json
+
+      - name: Build the web bundle
+        run: npm run build:web
+
+      # Desktop-only code must never reach the public bundle. The runner
+      # drives a browser and holds a bridge token; shipping any of it to the
+      # website would be a real leak, not a size problem.
+      - name: Scan the bundle for desktop-only code
+        run: |
+          set -e
+          for needle in playwright-core __nf_ctl runner_start_sidecar runner_run_job \
+                        artifact-runner sidecar-runtime rate_limit_account detectAccountLimit; do
+            if grep -rqF "$needle" .svelte-kit/output/client; then
+              echo "::error::desktop-only symbol '$needle' reached the web bundle"
+              exit 1
+            fi
+          done
+          echo "clean: no desktop-only symbol in the client bundle"
+
+  artifacts:
+    name: 🎨 Artifacts — contracts and dist sync
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # `artifacts/` has no dependencies: an Artifact pasted into claude.ai
+      # can import nothing but react, so the suite runs on Node alone.
+      # `npm test` there runs `build.mjs --check` first, which fails when the
+      # checked-in dist/ has drifted from lib/ — the one thing that would
+      # ship an Artifact nobody tested.
+      - name: Run the Artifact suite
+        run: npm test --prefix artifacts
+
+  sidecar:
+    name: 🔌 Sidecar — protocol and bridge
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install sidecar dependencies
+        run: npm ci --prefix src-tauri/sidecar
+
+      - name: Run the sidecar suite
+        run: npm test --prefix src-tauri/sidecar
+
+  desktop:
+    name: 🖥 Desktop — Tauri checks
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-tauri-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-tauri-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install sidecar dependencies
+        run: npm ci --prefix src-tauri/sidecar
+
+      # windows-latest, not ubuntu: the runner drives WebView2 and the
+      # bundle stages a Windows Node runtime, so a Linux check would pass
+      # while telling us nothing about the target that actually ships.
+      #
+      # One of these tests parses tauri.conf.json and fails when a
+      # repository-owned sidecar script is not declared as a bundle
+      # resource — without it, a new script only breaks on a host that has
+      # no developer checkout.
+      - name: Run Tauri tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1
+
+      # The full `npm run tauri -- build` is deliberately not run here. It
+      # stages an 87 MB Node runtime and produces MSI and NSIS installers,
+      # which is minutes of CI on every push for an artifact nobody
+      # downloads. It stays a release-time check, recorded in
+      # RELEASE_MATRIX.yaml under build_targets.desktop.
+      - name: Check the Tauri crate compiles for release
+        run: cargo check --manifest-path src-tauri/Cargo.toml --release
