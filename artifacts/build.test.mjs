@@ -4,6 +4,15 @@ import { readFileSync } from "node:fs";
 
 import { renderArtifact, distPath, TARGETS } from "./build.mjs";
 
+/** esbuild đi kèm Vite ở workspace gốc; thiếu nó thì bỏ qua chứ không đỏ. */
+async function loadEsbuild() {
+  try {
+    return await import("esbuild");
+  } catch {
+    return null;
+  }
+}
+
 // dist/ là thứ được dán vào claude.ai. Nếu nó lệch với src/ + lib/, mọi
 // bài test ở đây vẫn xanh trong khi Artifact thật chạy mã cũ — nên bản
 // đồng bộ được kiểm ngay trong bộ test, không chỉ ở CI.
@@ -38,6 +47,24 @@ test("mỗi Artifact mang đủ hợp đồng, runtime và lõi của nó", () =
   assert.match(writer, /function callClaude/);
   assert.match(writer, /function buildWritePrompt/);
   assert.match(writer, /function buildSelfCheckPrompt/);
+});
+
+// Nội tuyến hoá là thao tác trên chuỗi, nên nó có thể tạo ra một file
+// vẫn "trông đúng" với mọi regex ở trên mà lại không parse được. Bản dán
+// vào claude.ai hỏng cú pháp thì không có gì bắt được, ngoài chỗ này.
+test("bản dist là JSX parse được", async (t) => {
+  const esbuild = await loadEsbuild();
+  if (!esbuild) {
+    t.skip("không tìm thấy esbuild — bỏ qua kiểm cú pháp");
+    return;
+  }
+  for (const name of TARGETS) {
+    const source = readFileSync(distPath(name), "utf8");
+    assert.doesNotThrow(
+      () => esbuild.transformSync(source, { loader: "jsx", format: "esm" }),
+      `dist/${name}.jsx không parse được`
+    );
+  }
 });
 
 test("cả hai Artifact dựng bridge và đường DOM dự phòng", () => {
