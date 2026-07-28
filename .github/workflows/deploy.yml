@@ -56,5 +56,5 @@ jobs:
       - name: Verify public web routes
         run: |
           curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 10 https://selorson-frontend-v3.pages.dev/ > /dev/null
-          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 10 https://selorson-frontend-v3.pages.dev/login > /dev/null
+          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 10 https://selorson-frontend-v3.pages.dev/about > /dev/null
           curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 10 https://selorson-frontend-v3.pages.dev/profile/1 > /dev/null
