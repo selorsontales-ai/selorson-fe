@@ -22,8 +22,8 @@ No confirmed unresolved runtime defect remains after focused validation.
 - Backend must deploy before frontend. The OpenAI provider migration is an
   optional idempotent data insert, not a schema prerequisite, and is deferred
   from this release.
-- Direct `flyctl` rollback requires a fresh CLI login on this machine. Normal
-  deployment uses GitHub Actions and the existing `FLY_API_TOKEN` secret.
+- Direct `flyctl` access and release visibility were confirmed without displaying
+  secret values. Normal deployment continues to use GitHub Actions.
 
 ## Runtime model verified
 
@@ -42,3 +42,14 @@ Svelte check completed with zero errors and zero warnings, the backend compiled
 for all targets, the focused health API test passed, the public web bundle had
 no desktop-only symbol, the Git diff passed whitespace validation, and the web
 SSR/client production build completed successfully.
+## Production verification
+
+- Backend `main` commit `bdaa142` passed CI and deployed as Fly release `v34`.
+  The public health endpoint reports PostgreSQL connected; deploy capabilities
+  correctly disable Co-Writer read/write and desktop runner jobs.
+- Frontend application commit `0e73e915` passed Web, Artifacts, Sidecar, and
+  Desktop CI on `main`. Public smoke checks returned HTTP 200 for `/`, `/about`,
+  `/profile/1`, `/settings`, `/messages`, and `/admin`.
+- Workflow-only commit `2d8807e` replaced the nonexistent `/login` smoke route
+  with `/about`; `[skip ci]` intentionally avoided a duplicate 38-minute Desktop
+  build after the application commit had already passed all four CI jobs.
