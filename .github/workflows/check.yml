@@ -150,6 +150,10 @@ jobs:
         run: npm ci --prefix src-tauri/sidecar
         working-directory: frontend-v3
 
+      - name: Stage the bundled Node runtime
+        run: npm run sidecar:runtime
+        working-directory: frontend-v3
+
       # windows-latest, not ubuntu: the runner drives WebView2 and the
       # bundle stages a Windows Node runtime, so a Linux check would pass
       # while telling us nothing about the target that actually ships.

@@ -86,7 +86,7 @@ async function runAgainst(page, request, messages) {
     },
     emit: async (message) => messages.push(message),
     sleep: async () => {},
-    now: () => new Date('2026-07-26T12:00:00+07:00')
+    now: () => new Date(2026, 6, 26, 12, 0, 0)
   });
 }
 
@@ -143,7 +143,7 @@ test('a confirmed limit on open is reported as rate_limited with the reset time'
   assert.equal(terminal.payload.resetTime, '3:00 PM');
   assert.equal(
     new Date(terminal.payload.resetAt).toISOString(),
-    new Date('2026-07-26T15:00:00+07:00').toISOString()
+    new Date(2026, 6, 26, 15, 0, 0).toISOString()
   );
   assert.equal(messages.filter((message) => message.kind === 'result').length, 0);
 });
@@ -254,15 +254,15 @@ test('a limit banner is read from the Artifact tab, not from a stale one', async
 });
 
 test('reset clocks resolve to the next occurrence of that time', () => {
-  const now = new Date('2026-07-26T12:00:00+07:00');
+  const now = new Date(2026, 6, 26, 12, 0, 0);
 
   assert.equal(
     new Date(parseResetClock('3:00 PM', now)).toISOString(),
-    new Date('2026-07-26T15:00:00+07:00').toISOString()
+    new Date(2026, 6, 26, 15, 0, 0).toISOString()
   );
   assert.equal(
     new Date(parseResetClock('9 AM', now)).toISOString(),
-    new Date('2026-07-27T09:00:00+07:00').toISOString()
+    new Date(2026, 6, 27, 9, 0, 0).toISOString()
   );
   assert.equal(parseResetClock('not a clock', now), null);
   assert.equal(parseResetClock('26:00', now), null);
