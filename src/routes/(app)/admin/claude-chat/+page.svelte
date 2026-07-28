@@ -273,26 +273,26 @@
 		<div class="modal" onclick={(e) => e.stopPropagation()}>
 			<h3>➕ Thêm Tài Khoản Claude</h3>
 			<div class="form-group">
-				<label>Tên / Nhãn</label>
-				<input type="text" bind:value={newLabel} placeholder="Ví dụ: Gmail chính" />
+				<label for="claude-new-label">Tên / Nhãn</label>
+				<input id="claude-new-label" type="text" bind:value={newLabel} placeholder="Ví dụ: Gmail chính" />
 			</div>
 			<div class="form-group">
-				<label>Ghi chú</label>
-				<input type="text" bind:value={newNote} placeholder="Email hoặc ghi chú" />
+				<label for="claude-new-note">Ghi chú</label>
+				<input id="claude-new-note" type="text" bind:value={newNote} placeholder="Email hoặc ghi chú" />
 			</div>
 			<div class="form-group">
-				<label>Emoji</label>
+				<span class="form-label">Emoji</span>
 				<div class="picker-row">
 					{#each emojiOptions as em}
-						<button class="picker-btn" class:selected={newEmoji === em} onclick={() => newEmoji = em}>{em}</button>
+						<button type="button" class="picker-btn" class:selected={newEmoji === em} onclick={() => newEmoji = em}>{em}</button>
 					{/each}
 				</div>
 			</div>
 			<div class="form-group">
-				<label>Màu</label>
+				<span class="form-label">Màu</span>
 				<div class="picker-row">
 					{#each colorOptions as col}
-						<button class="picker-btn color-btn" class:selected={newColor === col} style="background: {col}" onclick={() => newColor = col}></button>
+						<button type="button" class="picker-btn color-btn" class:selected={newColor === col} style="background: {col}" aria-label={`Chọn màu ${col}`} title={col} onclick={() => newColor = col}></button>
 					{/each}
 				</div>
 			</div>
@@ -314,32 +314,32 @@
 		<div class="modal" onclick={(e) => e.stopPropagation()}>
 			<h3>✏️ Sửa Tài Khoản</h3>
 			<div class="form-group">
-				<label>Tên / Nhãn</label>
-				<input type="text" bind:value={editLabel} />
+				<label for="claude-edit-label">Tên / Nhãn</label>
+				<input id="claude-edit-label" type="text" bind:value={editLabel} />
 			</div>
 			<div class="form-group">
-				<label>Ghi chú</label>
-				<input type="text" bind:value={editNote} />
+				<label for="claude-edit-note">Ghi chú</label>
+				<input id="claude-edit-note" type="text" bind:value={editNote} />
 			</div>
 			<div class="form-group">
-				<label>Emoji</label>
+				<span class="form-label">Emoji</span>
 				<div class="picker-row">
 					{#each emojiOptions as em}
-						<button class="picker-btn" class:selected={editEmoji === em} onclick={() => editEmoji = em}>{em}</button>
+						<button type="button" class="picker-btn" class:selected={editEmoji === em} onclick={() => editEmoji = em}>{em}</button>
 					{/each}
 				</div>
 			</div>
 			<div class="form-group">
-				<label>Màu</label>
+				<span class="form-label">Màu</span>
 				<div class="picker-row">
 					{#each colorOptions as col}
-						<button class="picker-btn color-btn" class:selected={editColor === col} style="background: {col}" onclick={() => editColor = col}></button>
+						<button type="button" class="picker-btn color-btn" class:selected={editColor === col} style="background: {col}" aria-label={`Chọn màu ${col}`} title={col} onclick={() => editColor = col}></button>
 					{/each}
 				</div>
 			</div>
 			<div class="form-group">
-				<label>⏳ Đặt giới hạn (số giờ từ bây giờ)</label>
-				<input type="number" bind:value={editLimitHours} placeholder="Ví dụ: 5 (= 5 giờ)" min="0" step="0.5" />
+				<label for="claude-edit-limit-hours">⏳ Đặt giới hạn (số giờ từ bây giờ)</label>
+				<input id="claude-edit-limit-hours" type="number" bind:value={editLimitHours} placeholder="Ví dụ: 5 (= 5 giờ)" min="0" step="0.5" />
 			</div>
 			<div class="modal-actions">
 				<button class="btn btn-outline" onclick={() => editingAccount = null}>Hủy</button>
@@ -431,8 +431,8 @@
 	.modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
 
 	.form-group { margin-bottom: 0.75rem; }
-	.form-group label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--color-text-muted); margin-bottom: 0.25rem; text-transform: uppercase; }
-	.form-group input, .form-group select {
+	.form-group label, .form-group .form-label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--color-text-muted); margin-bottom: 0.25rem; text-transform: uppercase; }
+	.form-group input {
 		width: 100%; padding: 0.5rem 0.75rem; font-size: 0.875rem;
 		background: var(--color-surface-200); border: 1px solid rgba(255,255,255,0.1);
 		border-radius: var(--radius-md); color: var(--color-text-primary);

@@ -235,13 +235,13 @@
 					<h3 class="card-title">🧠 Brainstorm Dàn Ý</h3>
 					<div class="form-grid-2">
 						<div class="form-row">
-							<label>Chương đang viết</label>
-							<input type="number" bind:value={workshop.targetChapter} min="1" class="input-sm" />
+							<label for="cw-target-chapter">Chương đang viết</label>
+							<input id="cw-target-chapter" type="number" bind:value={workshop.targetChapter} min="1" class="input-sm" />
 						</div>
 					</div>
 					<div class="form-row">
-						<label>Định hướng chương mới</label>
-						<textarea bind:value={workshop.brainstormGoal} placeholder="Ví dụ: Okita gặp kẻ thù cũ tại lễ hội, cuộc đối đầu bất ngờ..." rows="3"></textarea>
+						<label for="cw-brainstorm-goal">Định hướng chương mới</label>
+						<textarea id="cw-brainstorm-goal" bind:value={workshop.brainstormGoal} placeholder="Ví dụ: Okita gặp kẻ thù cũ tại lễ hội, cuộc đối đầu bất ngờ..." rows="3"></textarea>
 					</div>
 					<button class="btn btn-primary" onclick={workshop.doBrainstorm} disabled={workshop.isBrainstorming}>
 						{workshop.isBrainstorming ? '⏳ Đang suy nghĩ...' : '🧠 AI Brainstorm'}
@@ -260,17 +260,17 @@
 						<summary class="card-title clickable">⚙️ Cài Đặt Nâng Cao</summary>
 						<div class="settings-grid" style="padding-top: 0.75rem;">
 							<div class="form-row">
-								<label>Tóm tắt bổ sung</label>
-								<textarea bind:value={workshop.customSummary} placeholder="Bổ sung ngữ cảnh nếu cần..." rows="2"></textarea>
+								<label for="cw-custom-summary">Tóm tắt bổ sung</label>
+								<textarea id="cw-custom-summary" bind:value={workshop.customSummary} placeholder="Bổ sung ngữ cảnh nếu cần..." rows="2"></textarea>
 							</div>
 							<div class="form-grid-2">
 								<div class="slider-row">
-									<label>Ưu tiên liên quan (giảm để nguồn đa dạng hơn): {workshop.mmrLambda.toFixed(2)}</label>
-									<input type="range" min="0" max="1" step="0.05" bind:value={workshop.mmrLambda} />
+									<label for="cw-mmr-lambda">Ưu tiên liên quan (giảm để nguồn đa dạng hơn): {workshop.mmrLambda.toFixed(2)}</label>
+									<input id="cw-mmr-lambda" type="range" min="0" max="1" step="0.05" bind:value={workshop.mmrLambda} />
 								</div>
 								<div class="slider-row">
-									<label>Ưu tiên chương gần (0 = tắt): {workshop.temporalLambda.toFixed(3)}</label>
-									<input type="range" min="0" max="0.02" step="0.001" bind:value={workshop.temporalLambda} />
+									<label for="cw-temporal-lambda">Ưu tiên chương gần (0 = tắt): {workshop.temporalLambda.toFixed(3)}</label>
+									<input id="cw-temporal-lambda" type="range" min="0" max="0.02" step="0.001" bind:value={workshop.temporalLambda} />
 								</div>
 							</div>
 							<label class="checkbox-row">
@@ -283,8 +283,8 @@
 								<h4 class="sources-sub">🤖 Model AI</h4>
 								<div class="form-grid-2">
 									<div class="form-row">
-										<label>Nhà cung cấp viết chương</label>
-										<select bind:value={workshop.settings.gen_provider}>
+										<label for="cw-gen-provider">Nhà cung cấp viết chương</label>
+										<select id="cw-gen-provider" bind:value={workshop.settings.gen_provider}>
 											<option value="">Tự động (theo thứ tự)</option>
 											{#each workshop.modelProviders as p}
 												<option value={p.id}>{p.name} — {p.key_count} key</option>
@@ -292,19 +292,19 @@
 										</select>
 									</div>
 									<div class="form-row">
-										<label>Model (trống = mặc định)</label>
-										<input type="text" bind:value={workshop.settings.gen_model}
+										<label for="cw-gen-model">Model (trống = mặc định)</label>
+										<input id="cw-gen-model" type="text" bind:value={workshop.settings.gen_model}
 											placeholder={workshop.modelProviders.find((p) => p.id === workshop.settings.gen_provider)?.default_model || 'mặc định của provider'} />
 									</div>
 								</div>
 								<div class="form-grid-2">
 									<div class="form-row">
-										<label>Max tokens viết chương</label>
-										<input type="number" bind:value={workshop.settings.gen_max_tokens} placeholder="16384" min="1024" step="1024" />
+										<label for="cw-gen-max-tokens">Max tokens viết chương</label>
+										<input id="cw-gen-max-tokens" type="number" bind:value={workshop.settings.gen_max_tokens} placeholder="16384" min="1024" step="1024" />
 									</div>
 									<div class="form-row">
-										<label>Model phụ (tóm tắt / chọn nguồn)</label>
-										<input type="text" bind:value={workshop.settings.worker_model}
+										<label for="cw-worker-model">Model phụ (tóm tắt / chọn nguồn)</label>
+										<input id="cw-worker-model" type="text" bind:value={workshop.settings.worker_model}
 											placeholder={workshop.settings.default_worker_model || 'gemini-2.5-flash'} />
 									</div>
 								</div>
@@ -545,12 +545,12 @@
 				<div class="card">
 					<h3 class="card-title">🤖 AI Phân Tích Chương Tự Động</h3>
 					<div class="form-row">
-						<label>Số chương</label>
-						<input type="number" bind:value={chronicle.autoLogChapter} min="1" class="input-sm" />
+						<label for="cw-auto-log-chapter">Số chương</label>
+						<input id="cw-auto-log-chapter" type="number" bind:value={chronicle.autoLogChapter} min="1" class="input-sm" />
 					</div>
 					<div class="form-row">
-						<label>Dán nội dung chương</label>
-						<textarea bind:value={chronicle.autoLogContent} placeholder="Dán toàn bộ nội dung chương vào đây, hoặc bấm Import File bên dưới..." rows="6"></textarea>
+						<label for="cw-auto-log-content">Dán nội dung chương</label>
+						<textarea id="cw-auto-log-content" bind:value={chronicle.autoLogContent} placeholder="Dán toàn bộ nội dung chương vào đây, hoặc bấm Import File bên dưới..." rows="6"></textarea>
 					</div>
 					<div class="btn-row">
 						<button class="btn" onclick={() => importFileInput.click()}>
@@ -568,20 +568,20 @@
 						<summary class="card-title clickable">📝 Lưu Nhật Ký Thủ Công</summary>
 						<div class="manual-form">
 							<div class="form-row">
-								<label>Chương</label>
-								<input type="number" bind:value={chronicle.manualLogChapter} min="1" class="input-sm" />
+								<label for="cw-manual-log-chapter">Chương</label>
+								<input id="cw-manual-log-chapter" type="number" bind:value={chronicle.manualLogChapter} min="1" class="input-sm" />
 							</div>
 							<div class="form-row">
-								<label>Tóm tắt</label>
-								<textarea bind:value={chronicle.manualLogSummary} rows="2" placeholder="Tóm tắt ngắn..."></textarea>
+								<label for="cw-manual-log-summary">Tóm tắt</label>
+								<textarea id="cw-manual-log-summary" bind:value={chronicle.manualLogSummary} rows="2" placeholder="Tóm tắt ngắn..."></textarea>
 							</div>
 							<div class="form-row">
-								<label>Sự kiện chính (mỗi dòng 1 sự kiện)</label>
-								<textarea bind:value={chronicle.manualLogEvents} rows="3" placeholder="Sự kiện 1&#10;Sự kiện 2"></textarea>
+								<label for="cw-manual-log-events">Sự kiện chính (mỗi dòng 1 sự kiện)</label>
+								<textarea id="cw-manual-log-events" bind:value={chronicle.manualLogEvents} rows="3" placeholder="Sự kiện 1&#10;Sự kiện 2"></textarea>
 							</div>
 							<div class="form-row">
-								<label>Mầm cốt truyện (mỗi dòng 1 mầm)</label>
-								<textarea bind:value={chronicle.manualLogSeeds} rows="3" placeholder="Phục bút 1&#10;Phục bút 2"></textarea>
+								<label for="cw-manual-log-seeds">Mầm cốt truyện (mỗi dòng 1 mầm)</label>
+								<textarea id="cw-manual-log-seeds" bind:value={chronicle.manualLogSeeds} rows="3" placeholder="Phục bút 1&#10;Phục bút 2"></textarea>
 							</div>
 							<button class="btn btn-primary" onclick={chronicle.saveManualLog}>💾 Lưu</button>
 						</div>
@@ -672,12 +672,12 @@
 						<div class="add-source-form">
 							<div class="form-grid-2">
 								<div class="form-row">
-									<label>Tên hiển thị</label>
-									<input type="text" bind:value={chronicle.newSourceLabel} placeholder="VD: 📕 Tập 2 - Biên Niên Sử" />
+									<label for="cw-source-label">Tên hiển thị</label>
+									<input id="cw-source-label" type="text" bind:value={chronicle.newSourceLabel} placeholder="VD: 📕 Tập 2 - Biên Niên Sử" />
 								</div>
 								<div class="form-row">
-									<label>Danh mục</label>
-									<select bind:value={chronicle.newSourceCategory}>
+									<label for="cw-source-category">Danh mục</label>
+									<select id="cw-source-category" bind:value={chronicle.newSourceCategory}>
 										<option value="manuscripts">📖 Bản thảo (manuscripts)</option>
 										<option value="worldbook">🌍 Thế giới quan (worldbook)</option>
 										<option value="references">📚 Tham khảo (references)</option>
@@ -685,9 +685,9 @@
 								</div>
 							</div>
 							<div class="form-row">
-								<label>Đường dẫn thư mục</label>
+								<label for="cw-source-path">Đường dẫn thư mục</label>
 								<div class="path-input-row">
-									<input type="text" bind:value={chronicle.newSourcePath}
+									<input id="cw-source-path" type="text" bind:value={chronicle.newSourcePath}
 										placeholder="VD: E:/MyStory/TruyenMoi hoặc manuscripts/tap2" />
 									<button class="btn" type="button" onclick={chronicle.openFolderBrowser}>📂 Duyệt</button>
 								</div>
@@ -846,8 +846,8 @@
 			<div class="modal-form">
 				{#if !worldBible.editingEntity}
 					<div class="form-row">
-						<label>Loại</label>
-						<select bind:value={worldBible.entityForm.entity_type}>
+					<label for="cw-entity-type">Loại</label>
+					<select id="cw-entity-type" bind:value={worldBible.entityForm.entity_type}>
 							{#each ENTITY_TYPES as et}
 								<option value={et.value}>{et.label}</option>
 							{/each}
@@ -855,17 +855,17 @@
 					</div>
 				{/if}
 				<div class="form-row">
-					<label>Tên</label>
-					<input type="text" bind:value={worldBible.entityForm.name} placeholder="Miyamoto Okita" />
+					<label for="cw-entity-name">Tên</label>
+					<input id="cw-entity-name" type="text" bind:value={worldBible.entityForm.name} placeholder="Miyamoto Okita" />
 				</div>
 				<div class="form-row">
-					<label>Bí danh (cách nhau bởi dấu phẩy)</label>
-					<input type="text" bind:value={worldBible.entityForm.aliases} placeholder="Okita, Kiếm Vương Đỏ" />
+					<label for="cw-entity-aliases">Bí danh (cách nhau bởi dấu phẩy)</label>
+					<input id="cw-entity-aliases" type="text" bind:value={worldBible.entityForm.aliases} placeholder="Okita, Kiếm Vương Đỏ" />
 				</div>
 				{#if worldBible.entityForm.entity_type === 'character'}
 					<div class="form-row">
-						<label>Vai trò</label>
-						<select bind:value={worldBible.entityForm.role}>
+						<label for="cw-entity-role">Vai trò</label>
+						<select id="cw-entity-role" bind:value={worldBible.entityForm.role}>
 							<option value="">—</option>
 							<option value="protagonist">Nhân vật chính</option>
 							<option value="supporting">Nhân vật phụ</option>
@@ -875,17 +875,17 @@
 				{/if}
 				<div class="form-grid-2">
 					<div class="form-row">
-						<label>Chương xuất hiện</label>
-						<input type="number" bind:value={worldBible.entityForm.first_chapter} min="1" />
+						<label for="cw-entity-first-chapter">Chương xuất hiện</label>
+						<input id="cw-entity-first-chapter" type="number" bind:value={worldBible.entityForm.first_chapter} min="1" />
 					</div>
 					<div class="form-row">
-						<label>Ưu tiên va chạm</label>
-						<input type="number" bind:value={worldBible.entityForm.collision_priority} min="1" />
+						<label for="cw-entity-collision-priority">Ưu tiên va chạm</label>
+						<input id="cw-entity-collision-priority" type="number" bind:value={worldBible.entityForm.collision_priority} min="1" />
 					</div>
 				</div>
 				<div class="form-row">
-					<label>Mô tả</label>
-					<textarea bind:value={worldBible.entityForm.description} rows="4" placeholder="Mô tả chi tiết..."></textarea>
+					<label for="cw-entity-description">Mô tả</label>
+					<textarea id="cw-entity-description" bind:value={worldBible.entityForm.description} rows="4" placeholder="Mô tả chi tiết..."></textarea>
 				</div>
 			</div>
 			<div class="modal-actions">
@@ -906,9 +906,19 @@
 
 <!-- Entity Detection Modal -->
 {#if worldBible.showDetectModal}
-<div class="modal-overlay" onclick={() => worldBible.showDetectModal = false}>
-	<div class="modal-content" style="max-width: 680px;" onclick={(e) => e.stopPropagation()}>
-		<h3>🔍 Entities AI Phát Hiện</h3>
+<div
+	class="modal-overlay"
+	role="presentation"
+	tabindex="-1"
+	onclick={(event) => {
+		if (event.target === event.currentTarget) worldBible.showDetectModal = false;
+	}}
+	onkeydown={(event) => {
+		if (event.key === 'Escape') worldBible.showDetectModal = false;
+	}}
+>
+	<div class="modal-content" style="max-width: 680px;" role="dialog" aria-modal="true" aria-labelledby="cw-detect-modal-title">
+		<h3 id="cw-detect-modal-title">🔍 Entities AI Phát Hiện</h3>
 		<p class="text-muted" style="margin: 0 0 1rem;">
 			Chọn các entity mới để thêm vào World Bible. Entity trùng sẽ được đánh dấu.
 		</p>
@@ -958,9 +968,19 @@
 
 <!-- Folder Browser Modal -->
 {#if chronicle.showFolderBrowser}
-<div class="modal-overlay" onclick={() => chronicle.showFolderBrowser = false}>
-	<div class="modal-content" style="max-width: 600px; max-height: 80vh;" onclick={(e) => e.stopPropagation()}>
-		<h3>📂 Chọn Thư Mục</h3>
+<div
+	class="modal-overlay"
+	role="presentation"
+	tabindex="-1"
+	onclick={(event) => {
+		if (event.target === event.currentTarget) chronicle.showFolderBrowser = false;
+	}}
+	onkeydown={(event) => {
+		if (event.key === 'Escape') chronicle.showFolderBrowser = false;
+	}}
+>
+	<div class="modal-content" style="max-width: 600px; max-height: 80vh;" role="dialog" aria-modal="true" aria-labelledby="cw-folder-modal-title">
+		<h3 id="cw-folder-modal-title">📂 Chọn Thư Mục</h3>
 
 		<!-- Breadcrumb -->
 		<div class="browse-breadcrumb">
@@ -1378,7 +1398,7 @@
 	.history-preview {
 		margin: 0.25rem 0 0; font-size: 0.75rem; color: var(--color-text-muted);
 		line-height: 1.4;
-		display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+		display: -webkit-box; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 		overflow: hidden;
 	}
 	.history-actions { display: flex; align-items: center; gap: 0.375rem; flex-shrink: 0; }
@@ -1458,7 +1478,7 @@
 	.tree-node-summary {
 		margin: 0.125rem 0 0; font-size: 0.75rem; color: var(--color-text-muted);
 		line-height: 1.45;
-		display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+		display: -webkit-box; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 		overflow: hidden;
 	}
 

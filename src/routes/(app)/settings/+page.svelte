@@ -42,12 +42,8 @@
 	let emailCode = $state("");
 
 	// Devices
-	let { data = { devices: [] } }: { data?: { devices?: any[] } } = $props();
 	let devices = $state<any[]>([]);
 
-	$effect(() => {
-		if (data?.devices) devices = data.devices;
-	});
 
 	$effect(() => {
 		const uri = get2FAQr();

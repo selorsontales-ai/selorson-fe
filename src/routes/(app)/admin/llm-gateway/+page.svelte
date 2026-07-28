@@ -189,7 +189,7 @@
 	}
 
 	// --- File-based Import / Export ---
-	let fileInputEl: HTMLInputElement;
+	let fileInputEl = $state<HTMLInputElement>();
 
 	function triggerFileImport() {
 		fileInputEl?.click();
@@ -446,8 +446,9 @@
 							<span class="model-name">{prov.name}</span>
 						</div>
 						<div class="model-body">
-							<label class="model-label">Model ID</label>
+							<label class="model-label" for={`provider-model-${prov.id}`}>Model ID</label>
 							<input
+								id={`provider-model-${prov.id}`}
 								type="text"
 								class="model-input"
 								value={prov.default_model}
@@ -517,8 +518,8 @@
 		<div class="modal" onclick={(e) => e.stopPropagation()}>
 			<h3>➕ Thêm API Key</h3>
 			<div class="form-group">
-				<label>Provider</label>
-				<select bind:value={newKeyProvider}>
+				<label for="llm-new-key-provider">Provider</label>
+				<select id="llm-new-key-provider" bind:value={newKeyProvider}>
 					<option value="">— Chọn —</option>
 					{#each providers.filter(p => p.needs_key) as p}
 						<option value={p.id}>{p.name}</option>
@@ -532,12 +533,12 @@
 				{/if}
 			{/if}
 			<div class="form-group">
-				<label>API Key</label>
-				<input type="password" bind:value={newKeyRawVal} placeholder="sk-..." />
+				<label for="llm-new-key-value">API Key</label>
+				<input id="llm-new-key-value" type="password" bind:value={newKeyRawVal} placeholder="sk-..." />
 			</div>
 			<div class="form-group">
-				<label>Nhãn (tùy chọn)</label>
-				<input type="text" bind:value={newKeyLabel} placeholder="Ví dụ: Key chính" />
+				<label for="llm-new-key-label">Nhãn (tùy chọn)</label>
+				<input id="llm-new-key-label" type="text" bind:value={newKeyLabel} placeholder="Ví dụ: Key chính" />
 			</div>
 			<div class="modal-actions">
 				<button class="btn btn-outline" onclick={() => showAddKeyModal = false}>Hủy</button>

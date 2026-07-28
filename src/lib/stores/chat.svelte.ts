@@ -1,10 +1,11 @@
 import { api } from '$lib/api';
 import { getToken } from '$lib/stores/auth.svelte';
 import { PUBLIC_API_BASE } from '$env/static/public';
+import { countUnread, markConversationRead, normalizeConversations } from '$lib/chat-model.js';
 
 export interface ConvData { id: number; other_user: { id: number; name: string; username: string; avatar: string|null; is_online: boolean }|null; last_message: string|null; last_message_at: string|null; unread: number }
 interface MsgData { id: number; sender_id: number; message: string; created_at: string }
-interface ChatWin { convId: number; otherUser: ConvData['other_user']; messages: MsgData[]; draft: string; loading: boolean; sending: boolean; unread: number; lastActivity: number }
+interface ChatWin { convId: number; otherUser: ConvData['other_user']; messages: MsgData[]; draft: string; loading: boolean; sending: boolean; unread: number; lastActivity: number; error: string }
 
 const MAX_WINDOWS = 2;
 const MAX_BUBBLES = 4;
@@ -15,8 +16,10 @@ let bubbles = $state<ChatWin[]>([]);
 let totalUnread = $state(0);
 let drawerOpen = $state(false);
 let loadingConvs = $state(true);
+let conversationsError = $state('');
 let showOverflow = $state(false);
 let chatSSE: EventSource | null = null;
+let activePageConversationId: number | null = null;
 
 export function getConversations() { return conversations; }
 export function getOpenWindows() { return openWindows; }
@@ -25,28 +28,36 @@ export function getVisibleBubbles() { return bubbles.slice(0, MAX_BUBBLES); }
 export function getOverflowBubbles() { return bubbles.slice(MAX_BUBBLES); }
 export function isDrawerOpen() { return drawerOpen; }
 export function isLoadingConvs() { return loadingConvs; }
+export function getConversationsError() { return conversationsError; }
 export function isOverflowOpen() { return showOverflow; }
 export function toggleOverflow() { showOverflow = !showOverflow; }
 export function getTotalUnread() { return totalUnread; }
+export function setActivePageConversation(convId: number | null) {
+	activePageConversationId = convId;
+}
 
 function updateTotalUnread() {
-	totalUnread = conversations.reduce((s, c) => s + (Number(c.unread) || 0), 0) + 
-		          bubbles.reduce((s, b) => s + (Number(b.unread) || 0), 0);
+	totalUnread = countUnread(conversations);
 }
 
 export function toggleDrawer() { drawerOpen = !drawerOpen; }
 export function closeDrawer() { drawerOpen = false; }
-export function sortConversations() { conversations = [...conversations].sort((a, b) => new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime()); }
+export function sortConversations() { conversations = normalizeConversations(conversations); }
+export function markConversationAsRead(convId: number) {
+	conversations = markConversationRead(conversations, convId);
+	updateTotalUnread();
+}
 
 export async function fetchConversations() {
 	loadingConvs = true;
+	conversationsError = '';
 	try { 
 		const r = await api<any>('/chat/conversations'); 
-		conversations = (r.data || [])
-			.map((c: any) => ({ ...c, unread: c.unread_count || c.unread || 0 }))
-			.sort((a: any, b: any) => new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime());
+		conversations = normalizeConversations(r.data || []);
 		updateTotalUnread();
-	} catch {}
+	} catch (error) {
+		conversationsError = (error as { message?: string })?.message || 'Không thể tải danh sách tin nhắn';
+	}
 	finally { loadingConvs = false; }
 	initChatSSE();
 }
@@ -85,21 +96,19 @@ export async function openWindow(conv: ConvData) {
 	drawerOpen = false;
 	if (openWindows.some(x => x.convId === conv.id)) return;
 	
-	const cIdx = conversations.findIndex(x => x.id === conv.id);
-	if (cIdx !== -1) {
-		conversations[cIdx].unread = 0;
-		updateTotalUnread();
-	}
-
 	const eb = bubbles.find(b => b.convId === conv.id);
-	if (eb) { promoteBubble(eb); return; }
-	const win: ChatWin = { convId: conv.id, otherUser: conv.other_user, messages: [], draft: '', loading: true, sending: false, unread: 0, lastActivity: Date.now() };
+	if (eb) {
+		promoteBubble(eb);
+		await loadMessages(conv.id);
+		return;
+	}
+	const win: ChatWin = { convId: conv.id, otherUser: conv.other_user, messages: [], draft: '', loading: true, sending: false, unread: 0, lastActivity: Date.now(), error: '' };
 	if (openWindows.length >= MAX_WINDOWS) {
 		const oldest = openWindows.reduce((a, b) => a.lastActivity < b.lastActivity ? a : b);
 		minimizeWindow(oldest);
 	}
 	openWindows = [...openWindows, win];
-	loadMessages(conv.id);
+	await loadMessages(conv.id);
 }
 
 export async function openChatWithUser(userId: number) {
@@ -114,15 +123,40 @@ export async function openChatWithUser(userId: number) {
 	} catch {}
 }
 
-async function loadMessages(convId: number) {
-	const winIdx = openWindows.findIndex(w => w.convId === convId);
-	if (winIdx === -1) return;
-	openWindows[winIdx].loading = true;
+async function loadMessages(convId: number, showLoading = true) {
+	let winIdx = openWindows.findIndex(w => w.convId === convId);
+	if (winIdx === -1) return false;
+	if (showLoading) {
+		openWindows[winIdx] = { ...openWindows[winIdx], loading: true, error: '' };
+		openWindows = [...openWindows];
+	}
 	try { 
 		const r = await api<any>(`/chat/conversations/${convId}/messages`); 
-		openWindows[winIdx].messages = r.data || []; 
-	} catch {}
-	finally { openWindows[winIdx].loading = false; }
+		winIdx = openWindows.findIndex(w => w.convId === convId);
+		if (winIdx !== -1) {
+			openWindows[winIdx] = {
+				...openWindows[winIdx],
+				messages: r.data || [],
+				loading: false,
+				unread: 0,
+				error: '',
+			};
+			openWindows = [...openWindows];
+		}
+		markConversationAsRead(convId);
+		return true;
+	} catch (error) {
+		winIdx = openWindows.findIndex(w => w.convId === convId);
+		if (winIdx !== -1) {
+			openWindows[winIdx] = {
+				...openWindows[winIdx],
+				loading: false,
+				error: (error as { message?: string })?.message || 'Không thể tải nội dung cuộc trò chuyện',
+			};
+			openWindows = [...openWindows];
+		}
+		return false;
+	}
 }
 
 export async function sendMsg(w: ChatWin) {
@@ -130,7 +164,8 @@ export async function sendMsg(w: ChatWin) {
 	const winIdx = openWindows.findIndex(x => x.convId === w.convId);
 	if (winIdx === -1) return;
 	
-	openWindows[winIdx].sending = true;
+	openWindows[winIdx] = { ...openWindows[winIdx], sending: true, error: '' };
+	openWindows = [...openWindows];
 	try {
 		const r = await api<any>('/chat/messages', { method: 'POST', body: { receiver_id: w.otherUser?.id, message: w.draft } });
 		if (r.success) {
@@ -144,9 +179,22 @@ export async function sendMsg(w: ChatWin) {
 				conversations = [...conversations].sort((a, b) => new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime());
 			}
 		}
-	} catch {}
+	} catch (error) {
+		const currentIdx = openWindows.findIndex(x => x.convId === w.convId);
+		if (currentIdx !== -1) {
+			openWindows[currentIdx] = {
+				...openWindows[currentIdx],
+				error: (error as { message?: string })?.message || 'Không thể gửi tin nhắn',
+			};
+			openWindows = [...openWindows];
+		}
+	}
 	finally { 
-		if (openWindows[winIdx]) openWindows[winIdx].sending = false; 
+		const currentIdx = openWindows.findIndex(x => x.convId === w.convId);
+		if (currentIdx !== -1) {
+			openWindows[currentIdx] = { ...openWindows[currentIdx], sending: false };
+			openWindows = [...openWindows];
+		}
 	}
 }
 
@@ -172,14 +220,20 @@ export function closeWindow(w: ChatWin) {
 
 export function updateDraft(convId: number, text: string) {
 	const winIdx = openWindows.findIndex(x => x.convId === convId);
-	if (winIdx !== -1) openWindows[winIdx].draft = text;
+	if (winIdx !== -1) {
+		openWindows[winIdx] = { ...openWindows[winIdx], draft: text, error: '' };
+		openWindows = [...openWindows];
+	}
 }
 
 export function handleIncomingMessage(data: { conversation_id: number; message: MsgData }) {
 	const winIdx = openWindows.findIndex(x => x.convId === data.conversation_id);
+	const isActive = winIdx !== -1 || activePageConversationId === data.conversation_id;
 	if (winIdx !== -1) { 
 		openWindows[winIdx].messages = [...openWindows[winIdx].messages, data.message]; 
 		openWindows[winIdx].lastActivity = Date.now(); 
+		openWindows = [...openWindows];
+		void loadMessages(data.conversation_id, false);
 	}
 	const bIdx = bubbles.findIndex(x => x.convId === data.conversation_id);
 	if (bIdx !== -1) { 
@@ -191,12 +245,17 @@ export function handleIncomingMessage(data: { conversation_id: number; message: 
 	if (cIdx !== -1) { 
 		conversations[cIdx].last_message = data.message.message; 
 		conversations[cIdx].last_message_at = data.message.created_at; 
-		if (winIdx === -1) {
+		if (!isActive) {
 			conversations[cIdx].unread++; 
 		}
 		conversations = [...conversations].sort((a, b) => new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime());
 	}
 	updateTotalUnread();
+	if (activePageConversationId === data.conversation_id && winIdx === -1) {
+		void api<any>(`/chat/conversations/${data.conversation_id}/messages`)
+			.then(() => markConversationAsRead(data.conversation_id))
+			.catch(() => {});
+	}
 	if (winIdx === -1 && bIdx === -1 && cIdx === -1) {
 		fetchConversations();
 	}

@@ -1,0 +1,96 @@
+name: Desktop Installer Release Gate
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+      - "desktop-v*"
+      - "selorson-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-installer:
+    name: Build and smoke-test packaged desktop
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      CARGO_BUILD_JOBS: "1"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          path: frontend-v3
+
+      - name: Checkout matching backend source
+        uses: actions/checkout@v4
+        with:
+          repository: selorsontales-ai/selorson-be
+          ref: ${{ github.ref_name }}
+          path: backend-v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend-v3/package-lock.json
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            frontend-v3/src-tauri/target
+          key: ${{ runner.os }}-tauri-release-${{ hashFiles('frontend-v3/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-tauri-release-
+            ${{ runner.os }}-tauri-
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend-v3
+
+      - name: Install sidecar dependencies
+        run: npm ci --prefix src-tauri/sidecar
+        working-directory: frontend-v3
+
+      - name: Build MSI and NSIS installers
+        run: npm run tauri -- build
+        working-directory: frontend-v3
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked
+
+      - name: Install matching Edge WebDriver
+        shell: pwsh
+        run: |
+          cargo install --git https://github.com/chippers/msedgedriver-tool
+          msedgedriver-tool
+          $PWD.Path | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Smoke-test packaged navigation
+        run: npm run test:desktop:e2e
+        working-directory: frontend-v3
+        env:
+          TAURI_APP_PATH: src-tauri/target/release/app.exe
+
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: selorson-windows-installers-${{ github.ref_name }}
+          if-no-files-found: error
+          path: |
+            frontend-v3/src-tauri/target/release/bundle/msi/*.msi
+            frontend-v3/src-tauri/target/release/bundle/nsis/*-setup.exe

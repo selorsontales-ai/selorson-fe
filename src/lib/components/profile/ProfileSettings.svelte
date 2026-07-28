@@ -1,14 +1,16 @@
 <script lang="ts">
-	import { getUser, getToken } from '$lib/stores/auth.svelte';
-	import { apiUpload } from '$lib/api';
-	import { PUBLIC_API_BASE } from '$env/static/public';
+	import { getUser, updateUser, type User } from '$lib/stores/auth.svelte';
+	import { api, apiUpload } from '$lib/api';
 	import { onMount } from 'svelte';
 	import ImageCropper from '$lib/components/ui/ImageCropper.svelte';
 	import * as m from '$lib/paraglide/messages';
 
+	let { onProfileSaved }: { onProfileSaved?: (user: User) => void } = $props();
+
 	let saving = $state(false);
 	let savingPrivacy = $state(false);
 	let message = $state('');
+	let messageType = $state<'success' | 'error'>('success');
 
 	// Profile fields
 	let form = $state({ name: '', nickname: '', biography: '', occupation: '', hobbies: '', phone_number: '', birthday: '', gender: '', address: '' });
@@ -49,31 +51,52 @@
 	let loadingBlocked = $state(true);
 	let unblocking = $state<number | null>(null);
 
-	async function apiFetch(endpoint: string, options: RequestInit = {}) {
-		const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json', ...(options.headers as Record<string, string> || {}) };
-		const token = getToken(); if (token) headers['Authorization'] = `Bearer ${token}`;
-		const res = await fetch(`${PUBLIC_API_BASE}${endpoint}`, { ...options, headers });
-		return res.json();
+	function notify(text: string, type: 'success' | 'error') {
+		message = text;
+		messageType = type;
+		setTimeout(() => {
+			if (message === text) message = '';
+		}, 3500);
 	}
 
 	onMount(async () => {
 		const u = getUser();
 		if (u) {
 			form = { name: u.name || '', nickname: (u as any).nickname || '', biography: (u as any).biography || '', occupation: (u as any).occupation || '', hobbies: (u as any).hobbies || '', phone_number: (u as any).phone_number || '', birthday: (u as any).birthday || '', gender: (u as any).gender || '', address: (u as any).address || '' };
-			const p = (u as any).privacy || {};
+			const p = u.privacy_settings || {};
 			privacyItems.forEach(i => privacy[i.key] = p[i.key] ?? false);
 		}
-		try { const r = await apiFetch('/social/blocked'); if (r.success) blockedUsers = r.data; } catch {} finally { loadingBlocked = false; }
+		try { const r = await api<any[]>('/social/blocked'); blockedUsers = r.data; } catch {} finally { loadingBlocked = false; }
 	});
 
 	async function saveProfile() {
 		saving = true; message = '';
-		try { const r = await apiFetch('/auth/profile', { method: 'PUT', body: JSON.stringify(form) }); message = r.success ? m.settings_prof_saved() : r.message || m.settings_prof_err(); } catch { message = m.settings_prof_err(); } finally { saving = false; }
+		try {
+			const r = await api<User>('/auth/profile', { method: 'PUT', body: form });
+			updateUser(r.data);
+			onProfileSaved?.(r.data);
+			notify(r.message || m.settings_prof_saved(), 'success');
+		} catch (error) {
+			notify((error as { message?: string })?.message || m.settings_prof_err(), 'error');
+		} finally {
+			saving = false;
+		}
 	}
 
 	async function savePrivacy() {
 		savingPrivacy = true;
-		try { const r = await apiFetch('/auth/privacy', { method: 'PUT', body: JSON.stringify(privacy) }); message = r.success ? m.settings_priv_saved() : m.settings_prof_err(); } catch { message = m.settings_prof_err(); } finally { savingPrivacy = false; }
+		try {
+			const r = await api<User>('/auth/privacy', {
+				method: 'PUT',
+				body: { privacy_settings: privacy },
+			});
+			updateUser(r.data);
+			notify(r.message || m.settings_priv_saved(), 'success');
+		} catch (error) {
+			notify((error as { message?: string })?.message || m.settings_prof_err(), 'error');
+		} finally {
+			savingPrivacy = false;
+		}
 	}
 
 	function onAvatarSelect(e: Event) {
@@ -96,15 +119,15 @@
 			const fd = new FormData();
 			fd.append('avatar', avatarFile);
 			const res = await apiUpload<{ url: string }>('/upload/avatar', fd);
-			message = m.settings_ava_updated();
+			notify(m.settings_ava_updated(), 'success');
 			avatarFile = null;
 			if (res.success && res.data?.url) avatarPreview = res.data.url;
-		} catch { message = m.settings_err_upload(); } finally { uploadingAvatar = false; }
+		} catch { notify(m.settings_err_upload(), 'error'); } finally { uploadingAvatar = false; }
 	}
 
 	async function deleteAvatar() {
 		if (!confirm(m.settings_ava_delete_conf())) return;
-		try { await apiFetch('/auth/avatar', { method: 'DELETE' }); message = m.settings_ava_deleted(); } catch { message = m.settings_prof_err(); }
+		try { await api('/auth/avatar', { method: 'DELETE' }); notify(m.settings_ava_deleted(), 'success'); } catch { notify(m.settings_prof_err(), 'error'); }
 	}
 
 	function onCoverSelect(e: Event) {
@@ -129,29 +152,29 @@
 			fd.append('folder', 'covers');
 			const res = await apiUpload<{ url: string }>('/upload/image', fd);
 			if (res.success && res.data?.url) {
-				await apiFetch('/profile/me', { method: 'PUT', body: JSON.stringify({ cover_image: res.data.url }) });
-				message = m.settings_cover_updated();
+				await api('/profile/me', { method: 'PUT', body: { cover_image: res.data.url } });
+				notify(m.settings_cover_updated(), 'success');
 				coverPreview = res.data.url;
 			} else {
-				message = m.settings_err_cover();
+				notify(m.settings_err_cover(), 'error');
 			}
 			coverFile = null;
-		} catch { message = m.settings_err_upload(); } finally { uploadingCover = false; }
+		} catch { notify(m.settings_err_upload(), 'error'); } finally { uploadingCover = false; }
 	}
 
 	async function deleteCover() {
 		if (!confirm(m.settings_cover_delete_conf())) return;
-		try { await apiFetch('/auth/cover', { method: 'DELETE' }); message = m.settings_cover_deleted(); } catch { message = m.settings_prof_err(); }
+		try { await api('/auth/cover', { method: 'DELETE' }); notify(m.settings_cover_deleted(), 'success'); } catch { notify(m.settings_prof_err(), 'error'); }
 	}
 
 	async function unblockUser(userId: number) {
 		unblocking = userId;
-		try { const r = await apiFetch(`/social/block/${userId}`, { method: 'POST' }); if (r.success) { blockedUsers = blockedUsers.filter(u => u.id !== userId); message = m.settings_unblock_success(); } } catch { message = m.settings_prof_err(); } finally { unblocking = null; }
+		try { await api(`/social/block/${userId}`, { method: 'POST' }); blockedUsers = blockedUsers.filter(u => u.id !== userId); notify(m.settings_unblock_success(), 'success'); } catch { notify(m.settings_prof_err(), 'error'); } finally { unblocking = null; }
 	}
 </script>
 
 <div class="profile-settings">
-	{#if message}<div class="toast-msg">{message}</div>{/if}
+	{#if message}<div class:error={messageType === 'error'} class="toast-msg" role="status">{message}</div>{/if}
 
 	<!-- Edit Profile -->
 	<section class="card">
@@ -245,7 +268,8 @@
 
 <style>
 	.profile-settings{max-width:900px}
-	.toast-msg{background:rgba(12,113,61,.15);border:1px solid rgba(12,113,61,.3);color:var(--color-brand-300);padding:.65rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.85rem}
+	.toast-msg{position:fixed;top:80px;right:1.5rem;z-index:10001;max-width:360px;background:rgba(12,113,61,.92);border:1px solid rgba(255,255,255,.18);color:#fff;padding:.75rem 1rem;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.28);font-size:.85rem}
+	.toast-msg.error{background:rgba(185,28,28,.94)}
 	.card{background:var(--color-surface-100);border-radius:1rem;padding:2rem;border:1px solid rgba(255,255,255,.04);margin-bottom:1.5rem;transition:border-color .3s}
 	.card:hover{border-color:rgba(255,255,255,.08)}
 	.card h3{font-size:1.125rem;font-weight:700;color:var(--color-brand-400);margin:0 0 1.5rem}

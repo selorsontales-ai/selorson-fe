@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { isAuthenticated, getUser } from '$lib/stores/auth.svelte';
 	import {
-		fetchConversations, getConversations, isDrawerOpen, isLoadingConvs,
+		fetchConversations, getConversations, getConversationsError, isDrawerOpen, isLoadingConvs,
 		toggleDrawer, closeDrawer, openWindow, getOpenWindows, getBubbles,
 		getVisibleBubbles, getOverflowBubbles, isOverflowOpen, toggleOverflow,
 		sendMsg, minimizeWindow, closeWindow, promoteBubble, getTotalUnread, updateDraft
@@ -48,6 +48,7 @@
 	<div class="pchat-drawer">
 		<div class="pchat-drawer-head"><strong>{m.pchat_title()}</strong><button class="pchat-x" onclick={closeDrawer}>✕</button></div>
 		{#if isLoadingConvs()}<div class="pchat-loading">{m.pchat_loading()}</div>
+		{:else if getConversationsError()}<div class="pchat-error">{getConversationsError()}</div>
 		{:else if getConversations().length === 0}<div class="pchat-empty">{m.pchat_empty()}</div>
 		{:else}
 		<div class="pchat-conv-list">
@@ -66,7 +67,7 @@
 	{/if}
 
 	<!-- Chat Windows (max 2) -->
-	{#each getOpenWindows() as w, i}
+	{#each getOpenWindows() as w, i (w.convId)}
 	<div class="pchat-win" style="right:{i * 340 + 60}px">
 		<div class="pchat-win-head">
 			<a href="/profile/{w.otherUser?.username}" class="pchat-win-user">
@@ -81,6 +82,7 @@
 		</div>
 		<div class="pchat-win-msgs" bind:this={msgRefs[w.convId]}>
 			{#if w.loading}<div class="pchat-loading">{m.pchat_loading()}</div>
+			{:else if w.error}<div class="pchat-error">{w.error}</div>
 			{:else if w.messages.length === 0}<div class="pchat-empty">{m.pchat_start()}</div>
 			{:else}
 				{#each w.messages as m}
@@ -138,7 +140,8 @@
 	.pchat-drawer-head{display:flex;justify-content:space-between;align-items:center;padding:.875rem 1rem;border-bottom:1px solid rgba(255,255,255,.06)}
 	.pchat-drawer-head strong{font-size:.9375rem}
 	.pchat-x{background:none;border:none;font-size:1rem;cursor:pointer;color:var(--color-text-muted);padding:.25rem}
-	.pchat-loading,.pchat-empty{padding:2rem;text-align:center;color:var(--color-text-muted);font-size:.8rem}
+	.pchat-loading,.pchat-empty,.pchat-error{padding:2rem;text-align:center;color:var(--color-text-muted);font-size:.8rem}
+	.pchat-error{color:#fca5a5}
 	.pchat-conv-list{overflow-y:auto;flex:1}
 	.pchat-conv{display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;cursor:pointer;border:none;background:none;border-bottom:1px solid rgba(255,255,255,.02);transition:background .15s;width:100%;text-align:left;color:var(--color-text-primary)}
 	.pchat-conv:hover{background:rgba(12,113,61,.04)}
@@ -148,7 +151,7 @@
 	.pchat-conv-info strong{display:block;font-size:.8rem}
 	.pchat-conv-info p{margin:0;font-size:.68rem;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 	.pchat-conv-badge{background:#ef4444;color:#fff;font-size:.56rem;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center}
-	.pchat-win{position:fixed;bottom:0;width:320px;height:400px;background:var(--color-surface-100);border-radius:.75rem .75rem 0 0;box-shadow:0 -4px 24px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.04);display:flex;flex-direction:column;overflow:hidden;z-index:9989;animation:winUp .25s ease;pointer-events:auto}
+	.pchat-win{position:fixed;bottom:0;width:320px;height:400px;background:var(--color-surface-100);border-radius:.75rem .75rem 0 0;box-shadow:0 -4px 24px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.04);display:flex;flex-direction:column;overflow:hidden;z-index:9992;animation:winUp .25s ease;pointer-events:auto}
 	@keyframes winUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
 	.pchat-win-head{display:flex;align-items:center;justify-content:space-between;padding:.625rem .75rem;background:linear-gradient(135deg,#0c713d,#085a30);color:#fff;flex-shrink:0}
 	.pchat-win-user{display:flex;align-items:center;gap:.5rem;text-decoration:none;color:#fff;flex:1;min-width:0}

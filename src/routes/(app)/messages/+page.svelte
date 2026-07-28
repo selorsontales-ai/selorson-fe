@@ -1,29 +1,44 @@
 <script lang="ts">
 	import { api } from '$lib/api';
-	import { onMount, onDestroy } from 'svelte';
+	import { onDestroy } from 'svelte';
 	import { page } from '$app/state';
 	import { PUBLIC_API_BASE } from '$env/static/public';
-	import { getToken, getUser, isAuthenticated } from '$lib/stores/auth.svelte';
-	import { getConversations, fetchConversations, sortConversations, type ConvData } from '$lib/stores/chat.svelte';
+	import { getToken, getUser, isAuthenticated, isLoading } from '$lib/stores/auth.svelte';
+	import {
+		getConversations, getConversationsError, fetchConversations,
+		markConversationAsRead, setActivePageConversation, sortConversations,
+		type ConvData
+	} from '$lib/stores/chat.svelte';
 	import * as m from '$lib/paraglide/messages';
 
 
 	interface Msg { id: number; sender_id: number; message: string; is_read: boolean; created_at: string; }
 
-	let { data = { conversations: [], ssrAccessToken: null } }: { data?: { conversations?: any[]; ssrAccessToken?: string | null } } = $props();
 	let activeConv = $state<ConvData | null>(null);
 	let messages = $state<Msg[]>([]);
 	let newMsg = $state('');
 	let loading = $state(true);
+	let historyLoading = $state(false);
+	let historyError = $state('');
+	let sendError = $state('');
 	let ws: WebSocket | null = null;
 	let msgsEl = $state<HTMLElement | null>(null);
 
-	onMount(async () => {
-		if (!isAuthenticated()) { loading = false; return; }
-		if (getConversations().length === 0) {
-			await fetchConversations();
+	let conversationsFetched = false;
+	$effect(() => {
+		if (isLoading()) return;
+		if (!isAuthenticated()) {
+			loading = false;
+			return;
 		}
-		loading = false;
+		if (!conversationsFetched) {
+			conversationsFetched = true;
+			void fetchConversations().finally(() => {
+				loading = false;
+			});
+		} else {
+			loading = false;
+		}
 	});
 
 	$effect(() => {
@@ -37,18 +52,32 @@
 		}
 	});
 
-	onDestroy(() => { ws?.close(); });
+	onDestroy(() => {
+		ws?.close();
+		setActivePageConversation(null);
+	});
 
 	async function selectConv(conv: ConvData) {
 		const hadUnread = (conv.unread || 0) > 0;
 		activeConv = conv;
+		setActivePageConversation(conv.id);
 		ws?.close();
+		historyLoading = true;
+		historyError = '';
+		sendError = '';
 
 		// Load history
 		try {
 			const res = await api<any>(`/chat/conversations/${conv.id}/messages`);
 			messages = res.data || [];
-		} catch { messages = []; }
+			markConversationAsRead(conv.id);
+			activeConv = { ...conv, unread: 0 };
+		} catch (error) {
+			messages = [];
+			historyError = (error as { message?: string })?.message || 'Không thể tải nội dung cuộc trò chuyện';
+		} finally {
+			historyLoading = false;
+		}
 
 		// Smart scroll: if unread, scroll to first unread; otherwise scroll to bottom
 		setTimeout(() => {
@@ -94,6 +123,7 @@
 		if (!newMsg.trim()) return;
 		const text = newMsg;
 		newMsg = '';
+		sendError = '';
 		try {
 			const r = await api<any>('/chat/messages', {
 				method: 'POST',
@@ -113,7 +143,10 @@
 				// Scroll
 				setTimeout(() => { if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight; }, 50);
 			}
-		} catch {}
+		} catch (error) {
+			newMsg = text;
+			sendError = (error as { message?: string })?.message || 'Không thể gửi tin nhắn';
+		}
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -134,6 +167,8 @@
 				<h2>{m.msg_title()}</h2>
 				{#if loading}
 					<p class="loading-text">{m.msg_loading()}</p>
+				{:else if getConversationsError()}
+					<p class="error-text">{getConversationsError()}</p>
 				{:else if getConversations().length === 0}
 					<p class="empty-text">{m.msg_empty_list()}</p>
 				{:else}
@@ -175,12 +210,20 @@
 					</div>
 
 					<div class="chat-messages" bind:this={msgsEl}>
-						{#each messages as msg}
+						{#if historyLoading}
+							<p class="loading-text">{m.msg_loading()}</p>
+						{:else if historyError}
+							<p class="error-text">{historyError}</p>
+						{:else if messages.length === 0}
+							<p class="empty-text">{m.pchat_start()}</p>
+						{:else}
+						{#each messages as msg (msg.id)}
 							<div class="msg" class:mine={msg.sender_id === getUser()?.id} class:unread={!msg.is_read && msg.sender_id !== getUser()?.id}>
 								<div class="msg-bubble">{msg.message}</div>
 								<span class="msg-time">{new Date(msg.created_at).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</span>
 							</div>
 						{/each}
+						{/if}
 					</div>
 
 					<div class="chat-input">
@@ -192,6 +235,7 @@
 						/>
 						<button class="btn-brand" onclick={sendMessage}>{m.msg_btn_send()}</button>
 					</div>
+					{#if sendError}<p class="send-error">{sendError}</p>{/if}
 				{/if}
 			</main>
 		</div>
@@ -204,7 +248,8 @@
 	.chat-layout{display:grid;grid-template-columns:300px 1fr;gap:1rem;height:calc(100vh - 160px)}
 	.conv-list{padding:1rem;overflow-y:auto}
 	.conv-list h2{font-size:1rem;font-weight:700;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid rgba(255,255,255,.06)}
-	.loading-text,.empty-text{font-size:.85rem;color:var(--color-text-muted);text-align:center;padding:1rem}
+	.loading-text,.empty-text,.error-text{font-size:.85rem;color:var(--color-text-muted);text-align:center;padding:1rem}
+	.error-text,.send-error{color:#fca5a5}
 	.conv-item{display:flex;align-items:center;gap:.75rem;width:100%;padding:.65rem .5rem;border:none;background:transparent;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s;text-align:left;font-family:inherit;color:inherit}
 	.conv-item:hover{background:rgba(255,255,255,.04)}
 	.conv-item.active{background:rgba(12,113,61,.1)}
@@ -230,6 +275,7 @@
 	.chat-input{display:flex;gap:.5rem;padding:.75rem 1rem;border-top:1px solid rgba(255,255,255,.06)}
 	.chat-input input{flex:1;padding:.5rem .75rem;background:var(--color-surface-200);border:1px solid rgba(255,255,255,.08);border-radius:var(--radius-md);color:var(--color-text-primary);font-family:inherit;font-size:.88rem}
 	.chat-input input:focus{outline:none;border-color:var(--color-brand-500)}
+	.send-error{font-size:.75rem;margin:0;padding:0 1rem .75rem}
 
 	@media (max-width:768px){
 		.chat-layout{grid-template-columns:1fr;height:auto}

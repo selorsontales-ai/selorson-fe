@@ -9,9 +9,8 @@
 	import ImageCropper from '$lib/components/ui/ImageCropper.svelte';
 	import * as m from '$lib/paraglide/messages';
 
-	let { data = { profile: null, ssrAccessToken: null } }: { data?: { profile?: any; ssrAccessToken?: string | null } } = $props();
-
-	let profile = $state<any>(null);
+	let { data }: { data: { profile: any | null } } = $props();
+	let profile = $derived(data.profile);
 	let loading = $state(false);
 	let isSelf = $derived(getUser()?.id != null && getUser()?.id === profile?.id);
 	let avatarUploading = $state(false);
@@ -23,14 +22,11 @@
 	let avatarCropSrc = $state('');
 	let showAvatarCrop = $state(false);
 
-	// Synchronize when navigating between profiles
-	$effect(() => {
-		if (data?.profile) profile = data.profile;
-	});
 
 	onMount(async () => {
 		const id = page.params.id;
 		if (!profile) {
+			loading = true;
 			try {
 				const profRes = await api<any>(`/profile/${id}`);
 				profile = profRes.data;
@@ -262,7 +258,7 @@
 						{/if}
 					</div>
 				{:else if activeTab === 'settings'}
-					<ProfileSettings />
+					<ProfileSettings onProfileSaved={(updated) => profile = { ...profile, ...updated }} />
 				{/if}
 			</div>
 		</div>

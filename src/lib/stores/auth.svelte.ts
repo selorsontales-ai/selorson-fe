@@ -13,6 +13,15 @@ export interface User {
 	status: string;
 	avatar: string | null;
 	cover_image: string | null;
+	cover_position?: number;
+	phone_number?: string | null;
+	biography?: string | null;
+	hobbies?: string | null;
+	occupation?: string | null;
+	birthday?: string | null;
+	gender?: string | null;
+	address?: string | null;
+	privacy_settings?: Record<string, boolean> | null;
 	is_online: boolean;
 	has_password: boolean;
 	email_verified_at: string | null;
@@ -224,6 +233,10 @@ export function setAuth(token: string, user: User) {
 export function updateToken(newToken: string) {
 	state.token = newToken;
 	saveToken(newToken);
+}
+
+export function updateUser(user: User) {
+	state.user = user;
 }
 
 // ---- Getters (exported as functions for reactivity) ----

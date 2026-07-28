@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, "cowriter/**"]
+    branches: [main, "cowriter/**", "release/**"]
 
 concurrency:
   group: check-frontend-${{ github.head_ref || github.ref }}
@@ -45,6 +45,9 @@ jobs:
 
       - name: Run svelte-check
         run: npx svelte-check --tsconfig ./tsconfig.json
+
+      - name: Run runtime target regression tests
+        run: npm run test:runtime
 
       - name: Build the web bundle
         run: npm run build:web
@@ -108,12 +111,22 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          path: frontend-v3
+
+      - name: Checkout matching backend source
+        uses: actions/checkout@v4
+        with:
+          repository: selorsontales-ai/selorson-be
+          ref: ${{ github.head_ref || github.ref_name }}
+          path: backend-v3
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: frontend-v3/package-lock.json
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -124,16 +137,18 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src-tauri/target
-          key: ${{ runner.os }}-tauri-${{ hashFiles('src-tauri/Cargo.lock') }}
+            frontend-v3/src-tauri/target
+          key: ${{ runner.os }}-tauri-${{ hashFiles('frontend-v3/src-tauri/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-tauri-
 
       - name: Install dependencies
         run: npm ci
+        working-directory: frontend-v3
 
       - name: Install sidecar dependencies
         run: npm ci --prefix src-tauri/sidecar
+        working-directory: frontend-v3
 
       # windows-latest, not ubuntu: the runner drives WebView2 and the
       # bundle stages a Windows Node runtime, so a Linux check would pass
@@ -145,11 +160,11 @@ jobs:
       # no developer checkout.
       - name: Run Tauri tests
         run: cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1
+        working-directory: frontend-v3
 
-      # The full `npm run tauri -- build` is deliberately not run here. It
-      # stages an 87 MB Node runtime and produces MSI and NSIS installers,
-      # which is minutes of CI on every push for an artifact nobody
-      # downloads. It stays a release-time check, recorded in
-      # RELEASE_MATRIX.yaml under build_targets.desktop.
+      # The full installer build and packaged-app navigation smoke test run in
+      # release-desktop.yml. Keeping them off every push avoids repeatedly
+      # staging the bundled Node runtime and generating MSI/NSIS artifacts.
       - name: Check the Tauri crate compiles for release
         run: cargo check --manifest-path src-tauri/Cargo.toml --release
+        working-directory: frontend-v3
