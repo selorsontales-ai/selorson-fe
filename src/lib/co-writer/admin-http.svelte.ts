@@ -80,4 +80,6 @@ export interface CoWriterHooks {
 	refreshStatus: () => void | Promise<void>;
 	/** Nhật ký chương vừa đổi; Biên Niên Sử phải nạp lại timeline. */
 	refreshChapterLogs: () => void | Promise<void>;
+	/** Profile/generation embedding vừa đổi hoặc re-index vừa hoàn tất. */
+	refreshEmbedding?: () => void | Promise<void>;
 }

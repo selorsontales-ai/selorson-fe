@@ -166,8 +166,9 @@ export class ChronicleState {
 		void this.pollScanProgress();
 	}
 
-	async doRebuildIndex() {
+	async doRebuildIndex(skipConfirm = false) {
 		if (
+			!skipConfirm &&
 			!confirm(
 				'Re-index TOÀN BỘ: xóa index hiện tại và embed lại từ đầu (tốn thời gian + quota API). Tiếp tục?'
 			)
@@ -212,6 +213,7 @@ export class ChronicleState {
 			);
 			await this.loadDocuments();
 			await this.hooks.refreshStatus();
+			await this.hooks.refreshEmbedding?.();
 			// Kho vừa đổi nên mục lục cũ không còn đúng; đánh dấu để lần mở
 			// sau tải lại thay vì hiện một cây đã lỗi thời.
 			this.treeLoaded = false;

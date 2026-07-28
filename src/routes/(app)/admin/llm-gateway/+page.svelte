@@ -13,6 +13,9 @@
 		needs_key: boolean;
 		signup_url: string | null;
 		free_tier: string;
+		supports_embedding?: boolean;
+		supports_generation?: boolean;
+		cost_type?: 'paid' | 'free_tier';
 		key_hint: string | null;
 	}
 
@@ -377,7 +380,7 @@
 						<span class="fallback-emoji">{getStatusEmoji(status?.status ?? 'no_key')}</span>
 						<span class="fallback-name">{prov?.name ?? pid}</span>
 						<span class="fallback-info">{status?.keys_count ?? 0} keys</span>
-						<span class="fallback-tier">{prov?.free_tier ?? ''}</span>
+						<span class="fallback-tier">{prov?.cost_type === 'paid' ? 'Trả phí' : 'Có miễn phí'} · {prov?.supports_embedding ? 'Embedding' : 'Sinh nội dung'}{prov?.supports_embedding && prov?.supports_generation ? ' + Sinh nội dung' : ''}</span>
 					</div>
 				{/each}
 			</div>

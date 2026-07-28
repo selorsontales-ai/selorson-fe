@@ -37,6 +37,15 @@ export interface EmbeddingModelSpec {
 	default_dimensions: number;
 	/** Only third-generation models accept a reduced dimension. */
 	supports_custom_dimensions: boolean;
+	supported_dimensions?: number[];
+}
+
+export interface EmbeddingCatalogProvider {
+	id: string;
+	name: string;
+	cost_type: 'paid' | 'free_tier';
+	enabled_key: boolean;
+	models: EmbeddingModelSpec[];
 }
 
 export interface ModelCatalog {
@@ -65,6 +74,11 @@ export function beginIndexGeneration(
 /** Switch search to a generation. Refused while it holds no vectors. */
 export function activateIndexGeneration(id: number): Promise<ApiResponse<unknown>> {
 	return adminPost(`${base}/generations/${id}/activate`);
+}
+
+/** Embedding-capable providers only; generation-only providers are excluded. */
+export function fetchEmbeddingCatalog(): Promise<ApiResponse<EmbeddingCatalogProvider[]>> {
+	return adminGet(base + '/catalog');
 }
 
 /**

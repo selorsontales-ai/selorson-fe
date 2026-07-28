@@ -39,10 +39,12 @@ export class WorkshopState {
 		gen_provider: '',
 		gen_model: '',
 		gen_max_tokens: '',
+		worker_provider: 'google',
 		worker_model: '',
 		default_worker_model: ''
 	});
 	modelProviders = $state<any[]>([]);
+	providerModels = $state<Record<string, string[]>>({});
 	isSavingSettings = $state(false);
 
 	constructor(
@@ -72,6 +74,7 @@ export class WorkshopState {
 			gen_provider: '',
 			gen_model: '',
 			gen_max_tokens: '',
+			worker_provider: 'google',
 			worker_model: '',
 			default_worker_model: ''
 		};
@@ -222,7 +225,24 @@ export class WorkshopState {
 			this.http.get<any[]>('/admin/writer/models')
 		]);
 		if (saved.success && saved.data) this.settings = { ...this.settings, ...saved.data };
+		if (!this.settings.worker_provider) this.settings.worker_provider = 'google';
 		if (providers.success && providers.data) this.modelProviders = providers.data;
+		await Promise.all([
+			this.loadProviderModels(this.settings.gen_provider),
+			this.loadProviderModels(this.settings.worker_provider)
+		]);
+	}
+
+	async loadProviderModels(providerId: string) {
+		if (!providerId || this.providerModels[providerId]) return;
+		const res = await this.http.get<string[]>('/admin/writer/models/' + encodeURIComponent(providerId));
+		if (res.success && res.data) {
+			this.providerModels = { ...this.providerModels, [providerId]: res.data };
+		}
+	}
+
+	modelsFor(providerId: string): string[] {
+		return this.providerModels[providerId] ?? [];
 	}
 
 	async saveSettings() {
@@ -233,6 +253,7 @@ export class WorkshopState {
 			gen_max_tokens: this.settings.gen_max_tokens
 				? parseInt(String(this.settings.gen_max_tokens))
 				: undefined,
+			worker_provider: this.settings.worker_provider ?? 'google',
 			worker_model: this.settings.worker_model ?? ''
 		});
 		this.isSavingSettings = false;

@@ -7,6 +7,16 @@
 	import { WorkshopState } from '$lib/co-writer/workshop.svelte';
 	import { ENTITY_TYPES, WorldBibleState, entityIcon } from '$lib/co-writer/world-bible.svelte';
 	import { ChronicleState } from '$lib/co-writer/chronicle.svelte';
+	import {
+		activateIndexGeneration,
+		beginIndexGeneration,
+		fetchEmbeddingCatalog,
+		listIndexGenerations,
+		type EmbeddingCatalogProvider,
+		type EmbeddingModelSpec,
+		type EmbeddingProfile,
+		type IndexGeneration
+	} from '$lib/co-writer/embedding';
 
 	// Trang này chỉ còn giữ thứ cả ba tab dùng chung: dự án đang mở, số liệu
 	// ở đầu trang, và năng lực runtime. Logic của từng tab sống trong
@@ -26,6 +36,15 @@
 	let projects = $state<CoWriterProject[]>([]);
 	let activeProjectId = $state('');
 	let isSwitchingProject = $state(false);
+	let embeddingProviders = $state<EmbeddingCatalogProvider[]>([]);
+	let indexGenerations = $state<IndexGeneration[]>([]);
+	let embeddingSelection = $state<EmbeddingProfile>({
+		provider: '',
+		model: '',
+		dimensions: 0,
+		normalized: true
+	});
+	let embeddingBusy = $state(false);
 
 	// Hai ô chọn file ở lại trang vì chúng là DOM ref, không phải trạng thái.
 	let importFileInput: HTMLInputElement;
@@ -34,7 +53,8 @@
 	const http = new CoWriterHttp();
 	const hooks: CoWriterHooks = {
 		refreshStatus: () => loadStatus(),
-		refreshChapterLogs: () => chronicle.loadChapterLogs()
+		refreshChapterLogs: () => chronicle.loadChapterLogs(),
+		refreshEmbedding: () => loadEmbeddingData()
 	};
 	const workshop = new WorkshopState(http, hooks);
 	const worldBible = new WorldBibleState(http, hooks);
@@ -85,7 +105,84 @@
 	}
 
 	async function reloadActiveProjectData() {
-		await Promise.all([loadStatus(), workshop.load(), worldBible.load(), chronicle.load()]);
+		await Promise.all([
+			loadStatus(),
+			loadEmbeddingData(),
+			workshop.load(),
+			worldBible.load(),
+			chronicle.load()
+		]);
+	}
+
+	async function loadEmbeddingData() {
+		const [catalog, generations] = await Promise.all([
+			fetchEmbeddingCatalog(),
+			listIndexGenerations()
+		]);
+		if (catalog.success && catalog.data) embeddingProviders = catalog.data;
+		if (generations.success && generations.data) {
+			indexGenerations = generations.data.generations;
+			if (generations.data.active) embeddingSelection = { ...generations.data.active };
+		}
+		if (!embeddingSelection.provider && embeddingProviders.length > 0) {
+			selectEmbeddingProvider((embeddingProviders.find((provider) => provider.enabled_key) ?? embeddingProviders[0]).id);
+		}
+	}
+
+	function selectedEmbeddingProvider(): EmbeddingCatalogProvider | undefined {
+		return embeddingProviders.find((provider) => provider.id === embeddingSelection.provider);
+	}
+
+	function selectedEmbeddingModel(): EmbeddingModelSpec | undefined {
+		return selectedEmbeddingProvider()?.models.find((model) => model.id === embeddingSelection.model);
+	}
+
+	function selectEmbeddingProvider(providerId: string) {
+		const provider = embeddingProviders.find((item) => item.id === providerId);
+		const model = provider?.models[0];
+		embeddingSelection = {
+			provider: providerId,
+			model: model?.id ?? '',
+			dimensions: model?.default_dimensions ?? 0,
+			normalized: true
+		};
+	}
+
+	function selectEmbeddingModel(modelId: string) {
+		const model = selectedEmbeddingProvider()?.models.find((item) => item.id === modelId);
+		embeddingSelection = {
+			...embeddingSelection,
+			model: modelId,
+			dimensions: model?.default_dimensions ?? 0
+		};
+	}
+
+	async function prepareEmbeddingIndex() {
+		const provider = selectedEmbeddingProvider();
+		if (!provider?.enabled_key) {
+			return toast_error('Provider embedding này chưa có API key đang bật trong Cổng AI');
+		}
+		if (!embeddingSelection.model || embeddingSelection.dimensions <= 0) {
+			return toast_error('Hãy chọn model và số chiều embedding hợp lệ');
+		}
+		if (!confirm('Tạo index generation mới và embed lại toàn bộ kho? Thao tác này dùng quota API nhưng vẫn giữ index cũ để rollback.')) return;
+		embeddingBusy = true;
+		const res = await beginIndexGeneration(embeddingSelection);
+		embeddingBusy = false;
+		if (!res.success) return toast_error(res.message || 'Không tạo được index generation');
+		toast_success('Đã tạo generation mới; bắt đầu re-index toàn bộ');
+		await loadEmbeddingData();
+		await chronicle.doRebuildIndex(true);
+	}
+
+	async function activateEmbeddingGeneration(id: number) {
+		if (!confirm('Chuyển tìm kiếm sang index generation này? Index hiện tại vẫn được giữ để rollback.')) return;
+		embeddingBusy = true;
+		const res = await activateIndexGeneration(id);
+		embeddingBusy = false;
+		if (!res.success) return toast_error(res.message || 'Không kích hoạt được index generation');
+		toast_success('Đã chuyển index embedding đang hoạt động');
+		await Promise.all([loadEmbeddingData(), loadStatus()]);
 	}
 
 	/** Đổi dự án giữa chừng một tác vụ sẽ trộn dữ liệu hai truyện vào nhau. */
@@ -200,7 +297,7 @@
 				{/if}
 				{#if status.embedding_model}
 					<div class="stat-chip" title="Model embedding đã chốt cho toàn kho">
-						🧬 {status.embedding_model}@{status.embedding_dim}
+						🧬 {status.embedding_provider || 'gemini'} · {status.embedding_model}@{status.embedding_dim}
 					</div>
 				{/if}
 				{#if status.foreign_embeddings > 0}
@@ -280,34 +377,51 @@
 
 							<!-- AI model settings -->
 							<div class="ai-settings">
-								<h4 class="sources-sub">🤖 Model AI</h4>
+								<h4 class="sources-sub">🤖 AI viết & tóm tắt</h4>
 								<div class="form-grid-2">
 									<div class="form-row">
 										<label for="cw-gen-provider">Nhà cung cấp viết chương</label>
-										<select id="cw-gen-provider" bind:value={workshop.settings.gen_provider}>
-											<option value="">Tự động (theo thứ tự)</option>
-											{#each workshop.modelProviders as p}
-												<option value={p.id}>{p.name} — {p.key_count} key</option>
+										<select id="cw-gen-provider" bind:value={workshop.settings.gen_provider}
+											onchange={() => { workshop.settings.gen_model = ''; void workshop.loadProviderModels(workshop.settings.gen_provider); }}>
+											<option value="">Tự động (theo thứ tự fallback)</option>
+											{#each workshop.modelProviders.filter((p) => p.supports_generation !== false) as p}
+												<option value={p.id}>{p.name} · {p.cost_type === 'paid' ? 'Trả phí' : 'Có miễn phí'} · {p.key_count} key</option>
 											{/each}
 										</select>
 									</div>
 									<div class="form-row">
-										<label for="cw-gen-model">Model (trống = mặc định)</label>
-										<input id="cw-gen-model" type="text" bind:value={workshop.settings.gen_model}
+										<label for="cw-gen-model">Model viết (trống = mặc định)</label>
+										<input id="cw-gen-model" type="text" list="cw-gen-model-options" bind:value={workshop.settings.gen_model}
 											placeholder={workshop.modelProviders.find((p) => p.id === workshop.settings.gen_provider)?.default_model || 'mặc định của provider'} />
+										<datalist id="cw-gen-model-options">
+											{#each workshop.modelsFor(workshop.settings.gen_provider) as model}<option value={model}></option>{/each}
+										</datalist>
 									</div>
 								</div>
 								<div class="form-grid-2">
 									<div class="form-row">
-										<label for="cw-gen-max-tokens">Max tokens viết chương</label>
-										<input id="cw-gen-max-tokens" type="number" bind:value={workshop.settings.gen_max_tokens} placeholder="16384" min="1024" step="1024" />
+										<label for="cw-worker-provider">Nhà cung cấp tóm tắt / chọn nguồn</label>
+										<select id="cw-worker-provider" bind:value={workshop.settings.worker_provider}
+											onchange={() => { workshop.settings.worker_model = ''; void workshop.loadProviderModels(workshop.settings.worker_provider); }}>
+											{#each workshop.modelProviders.filter((p) => p.supports_generation !== false) as p}
+												<option value={p.id}>{p.name} · {p.cost_type === 'paid' ? 'Trả phí' : 'Có miễn phí'}</option>
+											{/each}
+										</select>
 									</div>
 									<div class="form-row">
-										<label for="cw-worker-model">Model phụ (tóm tắt / chọn nguồn)</label>
-										<input id="cw-worker-model" type="text" bind:value={workshop.settings.worker_model}
-											placeholder={workshop.settings.default_worker_model || 'gemini-2.5-flash'} />
+										<label for="cw-worker-model">Model tóm tắt / chọn nguồn</label>
+										<input id="cw-worker-model" type="text" list="cw-worker-model-options" bind:value={workshop.settings.worker_model}
+											placeholder={workshop.modelProviders.find((p) => p.id === workshop.settings.worker_provider)?.default_model || workshop.settings.default_worker_model || 'mặc định của provider'} />
+										<datalist id="cw-worker-model-options">
+											{#each workshop.modelsFor(workshop.settings.worker_provider) as model}<option value={model}></option>{/each}
+										</datalist>
 									</div>
 								</div>
+								<div class="form-row">
+									<label for="cw-gen-max-tokens">Max tokens viết chương</label>
+									<input id="cw-gen-max-tokens" type="number" bind:value={workshop.settings.gen_max_tokens} placeholder="16384" min="1024" step="1024" />
+								</div>
+								<p class="text-muted" style="font-size: 0.75rem; margin: 0 0 0.75rem;">Voyage chỉ dùng embedding; Anthropic và Moonshot dùng viết/tóm tắt, không xuất vector.</p>
 								<button class="btn" onclick={workshop.saveSettings} disabled={workshop.isSavingSettings}>
 									{workshop.isSavingSettings ? '⏳ Đang lưu...' : '💾 Lưu cài đặt AI'}
 								</button>
@@ -634,6 +748,64 @@
 						Thư mục cha sẽ quét luôn tất cả thư mục con.
 					</p>
 
+					<div class="embedding-panel">
+						<h4 class="sources-sub">🧬 Embedding local</h4>
+						<p class="text-muted" style="margin: 0 0 0.75rem; font-size: 0.75rem;">
+							Gemini, OpenAI và Voyage tạo vector. Đổi provider sẽ tạo generation mới; index đang dùng vẫn được giữ để rollback.
+						</p>
+						<div class="form-grid-2">
+							<div class="form-row">
+								<label for="cw-embedding-provider">Nhà cung cấp embedding</label>
+								<select id="cw-embedding-provider" bind:value={embeddingSelection.provider}
+									onchange={() => selectEmbeddingProvider(embeddingSelection.provider)}>
+									{#each embeddingProviders as provider}
+										<option value={provider.id}>{provider.name} · {provider.cost_type === 'paid' ? 'Trả phí' : 'Có miễn phí'} · {provider.enabled_key ? 'đã có key' : 'chưa có key'}</option>
+									{/each}
+								</select>
+							</div>
+							<div class="form-row">
+								<label for="cw-embedding-model">Model embedding</label>
+								<select id="cw-embedding-model" bind:value={embeddingSelection.model}
+									onchange={() => selectEmbeddingModel(embeddingSelection.model)}>
+									{#each selectedEmbeddingProvider()?.models ?? [] as model}
+										<option value={model.id}>{model.id}</option>
+									{/each}
+								</select>
+							</div>
+						</div>
+						<div class="form-grid-2">
+							<div class="form-row">
+								<label for="cw-embedding-dimensions">Số chiều vector</label>
+								<select id="cw-embedding-dimensions" bind:value={embeddingSelection.dimensions}>
+									{#each selectedEmbeddingModel()?.supported_dimensions ?? [selectedEmbeddingModel()?.default_dimensions ?? 0] as dimensions}
+										{#if dimensions > 0}<option value={dimensions}>{dimensions}</option>{/if}
+									{/each}
+								</select>
+							</div>
+							<div class="form-row embedding-action">
+								<button class="btn btn-primary" onclick={prepareEmbeddingIndex} disabled={embeddingBusy || chronicle.isScanning}>
+									{embeddingBusy ? '⏳ Đang chuẩn bị...' : 'Tạo generation & re-index'}
+								</button>
+							</div>
+						</div>
+						{#if indexGenerations.length > 0}
+							<div class="generation-list">
+								{#each indexGenerations as generation}
+									<div class="generation-item">
+										<span><strong>{generation.profile.provider}</strong> · {generation.profile.model}@{generation.profile.dimensions} · {generation.vector_count} vector</span>
+										{#if generation.status === 'active'}
+											<span class="category-badge">đang dùng</span>
+										{:else if generation.vector_count > 0}
+											<button class="btn btn-sm" onclick={() => activateEmbeddingGeneration(generation.id)} disabled={embeddingBusy || chronicle.isScanning}>Kích hoạt</button>
+										{:else}
+											<span class="text-muted">chưa có vector</span>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
+
 					<!-- Scan Sources List -->
 					<div class="sources-list">
 						{#each chronicle.scanSources as src}
@@ -715,7 +887,7 @@
 						<button class="btn btn-primary" onclick={chronicle.doScanIndex} disabled={chronicle.isScanning}>
 							{chronicle.isScanning ? '⏳ Đang quét...' : '🔄 Scan & Index Tất Cả'}
 						</button>
-						<button class="btn" onclick={chronicle.doRebuildIndex} disabled={chronicle.isScanning}
+						<button class="btn" onclick={() => chronicle.doRebuildIndex()} disabled={chronicle.isScanning}
 							title="Xóa toàn bộ index và embed lại từ đầu (khi đổi model embedding)">
 							🧨 Re-index Toàn Bộ
 						</button>
@@ -1241,6 +1413,22 @@
 	.scan-badge.unchanged { background: rgba(148,163,184,0.15); color: #94a3b8; }
 	.scan-badge.chunks { background: rgba(99,102,241,0.15); color: #818cf8; }
 	.scan-badge.errors { background: rgba(239,68,68,0.15); color: #f87171; }
+
+	.embedding-panel {
+		margin-bottom: 1rem;
+		padding: 1rem;
+		border: 1px solid rgba(99, 102, 241, 0.25);
+		border-radius: var(--radius-md);
+		background: rgba(99, 102, 241, 0.06);
+	}
+	.embedding-action { justify-content: flex-end; }
+	.embedding-action .btn { margin-top: auto; }
+	.generation-list { display: flex; flex-direction: column; gap: 0.375rem; margin-top: 0.75rem; }
+	.generation-item {
+		display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+		padding: 0.5rem 0.75rem; border-radius: var(--radius-sm);
+		background: var(--color-surface-200); font-size: 0.75rem;
+	}
 
 	/* Scan Sources */
 	.sources-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
