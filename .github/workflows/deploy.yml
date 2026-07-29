@@ -1,6 +1,7 @@
 name: Deploy Frontend to Cloudflare Pages
 
 on:
+  workflow_dispatch:
   workflow_run:
     workflows: ["Frontend CI Check"]
     types: [completed]
@@ -16,13 +17,13 @@ permissions:
 jobs:
   deploy:
     name: 🚀 Deploy to Cloudflare Pages
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -51,7 +52,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy .svelte-kit/cloudflare --project-name=selorson-frontend-v3
+          command: pages deploy .svelte-kit/cloudflare --project-name=selorson-frontend-v3 --branch=main --commit-hash=${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Verify public web routes
         run: |
