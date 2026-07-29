@@ -2,9 +2,16 @@ name: Frontend CI Check
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, dev, qa]
   push:
-    branches: [main, "cowriter/**", "release/**"]
+    branches:
+      - main
+      - dev
+      - qa
+      - "feature/**"
+      - "fix/**"
+      - "cowriter/**"
+      - "release/**"
 
 concurrency:
   group: check-frontend-${{ github.head_ref || github.ref }}
