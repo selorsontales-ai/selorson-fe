@@ -1,22 +1,18 @@
-# Co-Writer agent bootstrap
+# Co-Writer maintenance
 
-Canonical Co-Writer planning and handoff live in the sibling backend:
+The five-phase Co-Writer upgrade is complete. Maintain the shipped system;
+do not recreate phase boards, handoff logs, or task-claim workflows.
 
-1. `..\backend-v3\docs\co-writer\MASTER_PLAN.md`
-2. `..\backend-v3\docs\co-writer\WORK_BOARD.md`
-3. `..\backend-v3\docs\co-writer\HANDOFF.md`
-4. `..\backend-v3\docs\co-writer\RELEASE_MATRIX.yaml`
-
-Read all four, then run `rtk git status --short --branch` in both repositories
-and claim one task ID before editing.
+Before changing Co-Writer code, inspect the affected contracts in
+..\backend-v3\docs\co-writer\contracts\ and, when release compatibility
+matters, ..\backend-v3\docs\co-writer\RELEASE_MATRIX.yaml. Preserve all
+existing uncommitted work in both repositories.
 
 Mandatory rules:
 
-- Prefix shell commands with `rtk`.
+- Prefix shell commands with tk.
 - Prefer codebase-memory for structural discovery.
-- Follow Karpathy guidelines and make surgical, verified changes.
-- Preserve all existing uncommitted work.
+- Make surgical, verified changes.
 - Keep Playwright, CDP, account profiles, and runner processes inside Tauri;
   web builds and Fly deploy must not contain them.
 - NeuroForge is reference-only.
-- Update the backend work board and handoff before pausing.

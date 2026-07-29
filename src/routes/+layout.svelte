@@ -17,6 +17,7 @@
 	} from "$lib/stores/auth.svelte";
 	import { initTheme, toggleTheme, isDark } from "$lib/stores/theme.svelte";
 	import { initSupportUI } from "$lib/stores/support.svelte";
+	import { supportsAdminPanel } from "$lib/app-flavor";
 	import * as m from "$lib/paraglide/messages";
 	import { onMount } from "svelte";
 	import { page } from "$app/stores";
@@ -146,7 +147,7 @@
 									onclick={() => (showUserMenu = false)}
 									>⚙️ {m.nav_settings()}</a
 								>
-								{#if getUser()?.role === "admin"}
+								{#if supportsAdminPanel && getUser()?.role === "admin"}
 									<a
 										href="/admin"
 										class="dropdown-item admin-item"
@@ -211,7 +212,7 @@
 				<a href="/messages" class:active={$page.url.pathname.startsWith('/messages')} onclick={() => (showMobileMenu = false)}
 					>💬 {m.nav_messages()}</a
 				>
-				{#if getUser()?.role === "admin"}
+				{#if supportsAdminPanel && getUser()?.role === "admin"}
 					<a
 						href="/admin"
 						class="mobile-admin-link"

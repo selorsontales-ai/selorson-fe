@@ -10,10 +10,9 @@ concurrency:
   group: check-frontend-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
-# Four jobs rather than one, because they check four different targets and a
-# failure should say which. `web` and `desktop` are the two shipped builds;
-# `artifacts` and `sidecar` are code that ships inside them but is neither
-# TypeScript nor Svelte, so `svelte-check` never sees it.
+# This workflow is the public-web gate. Native desktop/Android checks are kept
+# out of it so a Cloudflare deploy never waits for a 30-40 minute Tauri build.
+# Artifacts and sidecar remain separate because svelte-check cannot inspect them.
 jobs:
   web:
     name: 🌐 Web — check, build, leakage scan
@@ -104,71 +103,3 @@ jobs:
 
       - name: Run the sidecar suite
         run: npm test --prefix src-tauri/sidecar
-
-  desktop:
-    name: 🖥 Desktop — Tauri checks
-    runs-on: windows-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          path: frontend-v3
-
-      - name: Checkout matching backend source
-        uses: actions/checkout@v4
-        with:
-          repository: selorsontales-ai/selorson-be
-          ref: ${{ github.head_ref || github.ref_name }}
-          path: backend-v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend-v3/package-lock.json
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo registry & build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            frontend-v3/src-tauri/target
-          key: ${{ runner.os }}-tauri-${{ hashFiles('frontend-v3/src-tauri/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-tauri-
-
-      - name: Install dependencies
-        run: npm ci
-        working-directory: frontend-v3
-
-      - name: Install sidecar dependencies
-        run: npm ci --prefix src-tauri/sidecar
-        working-directory: frontend-v3
-
-      - name: Stage the bundled Node runtime
-        run: npm run sidecar:runtime
-        working-directory: frontend-v3
-
-      # windows-latest, not ubuntu: the runner drives WebView2 and the
-      # bundle stages a Windows Node runtime, so a Linux check would pass
-      # while telling us nothing about the target that actually ships.
-      #
-      # One of these tests parses tauri.conf.json and fails when a
-      # repository-owned sidecar script is not declared as a bundle
-      # resource — without it, a new script only breaks on a host that has
-      # no developer checkout.
-      - name: Run Tauri tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml -- --test-threads=1
-        working-directory: frontend-v3
-
-      # The full installer build and packaged-app navigation smoke test run in
-      # release-desktop.yml. Keeping them off every push avoids repeatedly
-      # staging the bundled Node runtime and generating MSI/NSIS artifacts.
-      - name: Check the Tauri crate compiles for release
-        run: cargo check --manifest-path src-tauri/Cargo.toml --release
-        working-directory: frontend-v3

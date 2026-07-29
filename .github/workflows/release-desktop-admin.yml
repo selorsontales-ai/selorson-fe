@@ -1,0 +1,283 @@
+name: Desktop Admin Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_ref:
+        description: Exact backend commit/tag to compile into the desktop app
+        required: false
+        type: string
+  push:
+    tags:
+      - "desktop-admin-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-desktop-admin-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  shared-user-gate:
+    name: Validate shared code and public-user bundles
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout frontend source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies once
+        run: npm ci
+
+      - name: Check shared Svelte and runtime code
+        run: |
+          npm run check
+          npm run test:runtime
+
+      - name: Build desktop-user bundle
+        run: npm run build:desktop:user
+
+      - name: Build android-user bundle
+        run: npm run build:mobile:user
+
+  windows-installer:
+    needs: shared-user-gate
+    name: Build signed desktop-admin updater
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      CARGO_BUILD_JOBS: "1"
+
+    steps:
+      - name: Checkout frontend source
+        uses: actions/checkout@v4
+        with:
+          path: frontend-v3
+
+      - name: Resolve pinned backend revision
+        id: backend
+        shell: pwsh
+        env:
+          INPUT_BACKEND_REF: ${{ inputs.backend_ref }}
+          DEFAULT_BACKEND_REF: ${{ vars.DESKTOP_BACKEND_REF }}
+        run: |
+          $ref = $env:INPUT_BACKEND_REF
+          if ([string]::IsNullOrWhiteSpace($ref)) {
+            $ref = $env:DEFAULT_BACKEND_REF
+          }
+          if ([string]::IsNullOrWhiteSpace($ref)) {
+            throw "Set repository variable DESKTOP_BACKEND_REF to an exact backend commit SHA."
+          }
+          "ref=$ref" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Checkout pinned backend source
+        uses: actions/checkout@v4
+        with:
+          repository: selorsontales-ai/selorson-be
+          ref: ${{ steps.backend.outputs.ref }}
+          path: backend-v3
+          token: ${{ secrets.BACKEND_REPO_TOKEN || github.token }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend-v3/package-lock.json
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            frontend-v3/src-tauri/target
+          key: ${{ runner.os }}-desktop-admin-${{ hashFiles('frontend-v3/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-desktop-admin-
+            ${{ runner.os }}-tauri-
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend-v3
+
+      - name: Install sidecar dependencies
+        run: npm ci --prefix src-tauri/sidecar
+        working-directory: frontend-v3
+
+      - name: Prepare signed updater configuration
+        id: release
+        if: startsWith(github.ref, 'refs/tags/desktop-admin-v')
+        shell: pwsh
+        working-directory: frontend-v3
+        env:
+          RELEASE_REPOSITORY: ${{ vars.DESKTOP_ADMIN_RELEASE_REPOSITORY }}
+          UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+          SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^desktop-admin-v(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$') {
+            throw "Desktop tag must match desktop-admin-vX.Y.Z."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:RELEASE_REPOSITORY)) {
+            throw "Set repository variable DESKTOP_ADMIN_RELEASE_REPOSITORY."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:UPDATER_PUBLIC_KEY)) {
+            throw "Set repository variable TAURI_UPDATER_PUBLIC_KEY."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_PRIVATE_KEY)) {
+            throw "Set repository secret TAURI_SIGNING_PRIVATE_KEY."
+          }
+
+          $rawVersion = $Matches.version
+
+          $tauriConfig = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $tauriConfig.version = $rawVersion
+          $tauriConfig | ConvertTo-Json -Depth 20 | Out-File src-tauri/tauri.conf.json -Encoding utf8
+
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $package.version = $rawVersion
+          $package | ConvertTo-Json -Depth 20 | Out-File package.json -Encoding utf8
+
+          $cargo = Get-Content src-tauri/Cargo.toml -Raw
+          $cargo = $cargo -replace '(?m)^version = "[^"]+"', "version = `"$rawVersion`""
+          $cargo | Out-File src-tauri/Cargo.toml -Encoding utf8
+
+          $releaseConfig = @{
+            bundle = @{
+              createUpdaterArtifacts = $true
+            }
+            plugins = @{
+              updater = @{
+                pubkey = $env:UPDATER_PUBLIC_KEY
+                endpoints = @(
+                  "https://github.com/$($env:RELEASE_REPOSITORY)/releases/latest/download/latest.json"
+                )
+                windows = @{
+                  installMode = "passive"
+                }
+              }
+            }
+          }
+          $releaseConfig | ConvertTo-Json -Depth 20 | Out-File src-tauri/updater.release.conf.json -Encoding utf8
+          "version=$rawVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Build local gate installer
+        if: github.event_name == 'workflow_dispatch'
+        run: npm run tauri -- build
+        working-directory: frontend-v3
+        env:
+          VITE_DESKTOP_UPDATER_ENABLED: "false"
+          VITE_APP_FLAVOR: desktop-admin
+          SELORSON_APP_FLAVOR: desktop-admin
+
+      - name: Build signed release installer
+        if: startsWith(github.ref, 'refs/tags/desktop-admin-v')
+        run: npm run tauri -- build --config src-tauri/updater.release.conf.json
+        working-directory: frontend-v3
+        env:
+          VITE_DESKTOP_UPDATER_ENABLED: "true"
+          VITE_APP_FLAVOR: desktop-admin
+          SELORSON_APP_FLAVOR: desktop-admin
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Smoke-test packaged app startup
+        shell: pwsh
+        working-directory: frontend-v3
+        run: |
+          $app = Get-Item src-tauri/target/release/app.exe
+          $process = Start-Process -FilePath $app.FullName -PassThru
+          Start-Sleep -Seconds 15
+          if ($process.HasExited) {
+            throw "Packaged desktop app exited during startup smoke test."
+          }
+          Stop-Process -Id $process.Id -Force
+
+      - name: Generate signed latest.json
+        if: startsWith(github.ref, 'refs/tags/desktop-admin-v')
+        shell: pwsh
+        working-directory: frontend-v3
+        env:
+          RELEASE_REPOSITORY: ${{ vars.DESKTOP_ADMIN_RELEASE_REPOSITORY }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = "${{ steps.release.outputs.version }}"
+          $installer = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          if ($null -eq $installer) {
+            throw "NSIS installer was not generated."
+          }
+          $signaturePath = "$($installer.FullName).sig"
+          if (-not (Test-Path $signaturePath)) {
+            throw "Updater signature was not generated."
+          }
+
+          $signature = (Get-Content $signaturePath -Raw).Trim()
+          $url = "https://github.com/$($env:RELEASE_REPOSITORY)/releases/download/$tag/$($installer.Name)"
+          $notes = if (Test-Path RELEASE_NOTES.md) {
+            Get-Content RELEASE_NOTES.md -Raw
+          } else {
+            "Bản cập nhật Selorson Desktop Admin $version."
+          }
+
+          $manifest = @{
+            version = $version
+            notes = $notes.Trim()
+            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = @{
+              "windows-x86_64" = @{
+                signature = $signature
+                url = $url
+              }
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 10 | Out-File latest.json -Encoding utf8
+
+      - name: Publish signed desktop-admin release
+        if: startsWith(github.ref, 'refs/tags/desktop-admin-v')
+        shell: pwsh
+        working-directory: frontend-v3
+        env:
+          GH_TOKEN: ${{ secrets.DESKTOP_RELEASE_TOKEN }}
+          RELEASE_REPOSITORY: ${{ vars.DESKTOP_ADMIN_RELEASE_REPOSITORY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
+            throw "Set repository secret DESKTOP_RELEASE_TOKEN."
+          }
+          if (Test-Path RELEASE_NOTES.md) {
+            gh release create "${{ github.ref_name }}" `
+              --repo $env:RELEASE_REPOSITORY `
+              --title "Selorson Desktop Admin ${{ steps.release.outputs.version }}" `
+              --notes-file RELEASE_NOTES.md `
+              src-tauri/target/release/bundle/nsis/*-setup.exe `
+              src-tauri/target/release/bundle/nsis/*-setup.exe.sig `
+              latest.json
+          } else {
+            gh release create "${{ github.ref_name }}" `
+              --repo $env:RELEASE_REPOSITORY `
+              --title "Selorson Desktop Admin ${{ steps.release.outputs.version }}" `
+              --notes "Bản cập nhật tự động cho Selorson Desktop Admin." `
+              src-tauri/target/release/bundle/nsis/*-setup.exe `
+              src-tauri/target/release/bundle/nsis/*-setup.exe.sig `
+              latest.json
+          }
+
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: selorson-desktop-admin-${{ github.ref_name }}
+          if-no-files-found: error
+          path: |
+            frontend-v3/src-tauri/target/release/bundle/msi/*.msi
+            frontend-v3/src-tauri/target/release/bundle/nsis/*-setup.exe
+            frontend-v3/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+            frontend-v3/latest.json

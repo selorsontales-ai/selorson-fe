@@ -1,0 +1,17 @@
+{
+  "productName": "Selorson",
+  "identifier": "com.selorson.desktop.user",
+  "build": {
+    "beforeBuildCommand": "npm run build:desktop:user"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Selorson"
+      }
+    ]
+  },
+  "bundle": {
+    "resources": []
+  }
+}

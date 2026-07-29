@@ -5,6 +5,11 @@
 	import { onMount } from "svelte";
 	import { goto } from "$app/navigation";
 	import { page } from "$app/stores";
+	import {
+		supportsAdminPanel,
+		supportsDesktopUpdater,
+		supportsLocalAiTools,
+	} from "$lib/app-flavor";
 
 	let { children } = $props();
 	let sidebarCollapsed = $state(false);
@@ -16,7 +21,7 @@
 		const check = setInterval(() => {
 			if (!isLoading()) {
 				clearInterval(check);
-				if (!isAdmin()) {
+				if (!supportsAdminPanel || !isAdmin()) {
 					goto("/");
 				} else {
 					ready = true;
@@ -28,8 +33,19 @@
 
 	// Close mobile drawer on route change
 	$effect(() => {
-		$page.url.pathname;
+		const pathname = $page.url.pathname;
 		mobileOpen = false;
+		if (
+			ready &&
+			!supportsLocalAiTools &&
+			[
+				"/admin/co-writer",
+				"/admin/llm-gateway",
+				"/admin/claude-chat",
+			].some((prefix) => pathname.startsWith(prefix))
+		) {
+			goto("/admin");
+		}
 	});
 
 	interface NavItem {
@@ -97,18 +113,31 @@
 				{ href: "/admin/security", icon: "🛡️", label: "Bảo Mật" },
 				{ href: "/admin/reports", icon: "⚠️", label: "Báo Cáo" },
 				{ href: "/admin/support", icon: "📊", label: "Giám Sát CSKH" },
+				...(supportsDesktopUpdater
+					? [
+							{
+								href: "/admin/desktop-update",
+								icon: "⬆️",
+								label: "Cập Nhật Desktop",
+							},
+						]
+					: []),
 			],
 		},
-		{
-			title: "Công Cụ AI",
-			items: [
-				{ href: "/admin/llm-gateway", icon: "🤖", label: "Cổng AI" },
-				{ href: "/admin/claude-chat", icon: "💬", label: "Claude Chat" },
-				{ href: "/admin/co-writer", icon: "✍️", label: "Trợ Lý Sáng Tác" },
-				{ href: "/admin/co-writer/gates", icon: "🚦", label: "Cổng Duyệt Chương" },
-				{ href: "/admin/co-writer/snapshots", icon: "📦", label: "Ảnh Chụp Co-Writer" },
-			],
-		},
+		...(supportsLocalAiTools
+			? [
+					{
+						title: "Công Cụ AI",
+						items: [
+							{ href: "/admin/llm-gateway", icon: "🤖", label: "Cổng AI" },
+							{ href: "/admin/claude-chat", icon: "💬", label: "Claude Chat" },
+							{ href: "/admin/co-writer", icon: "✍️", label: "Trợ Lý Sáng Tác" },
+							{ href: "/admin/co-writer/gates", icon: "🚦", label: "Cổng Duyệt Chương" },
+							{ href: "/admin/co-writer/snapshots", icon: "📦", label: "Ảnh Chụp Co-Writer" },
+						],
+					},
+				]
+			: []),
 	];
 </script>
 

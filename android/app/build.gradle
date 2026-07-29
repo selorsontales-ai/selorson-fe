@@ -16,6 +16,18 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    flavorDimensions += "audience"
+    productFlavors {
+        admin {
+            dimension "audience"
+            applicationId "com.selorson.app"
+        }
+        user {
+            dimension "audience"
+            applicationId "com.selorson.android.user"
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false

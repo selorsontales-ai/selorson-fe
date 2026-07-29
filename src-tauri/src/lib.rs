@@ -1,25 +1,40 @@
+#[cfg(not(selorson_desktop_user))]
 mod account_rotation;
+#[cfg(not(selorson_desktop_user))]
 mod artifact_sidecar;
+#[cfg(not(selorson_desktop_user))]
 mod claude_webview;
+#[cfg(not(selorson_desktop_user))]
 mod commands;
+#[cfg(not(selorson_desktop_user))]
 pub mod runner_supervisor;
+#[cfg(not(selorson_desktop_user))]
 mod sidecar_runtime;
 
+#[cfg(not(selorson_desktop_user))]
 use claude_webview::ClaudeWindowManager;
+#[cfg(not(selorson_desktop_user))]
 use runner_supervisor::RunnerSupervisor;
+#[cfg(not(selorson_desktop_user))]
 use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
+#[cfg(not(selorson_desktop_user))]
 use tauri::Manager;
 
+#[cfg(not(selorson_desktop_user))]
 const DESKTOP_ENV_FILE: &str = "backend.env";
+#[cfg(not(selorson_desktop_user))]
 const DEFAULT_BACKEND_PORT: &str = "8001";
 /// The embedded backend starts alongside the shell, so recovery waits for it
 /// instead of failing on the first attempt.
+#[cfg(not(selorson_desktop_user))]
 const RECOVERY_ATTEMPTS: usize = 30;
+#[cfg(not(selorson_desktop_user))]
 const RECOVERY_RETRY_INTERVAL: Duration = Duration::from_secs(2);
 
+#[cfg(not(selorson_desktop_user))]
 fn desktop_env_candidates(app_data_dir: &Path, dev_manifest_dir: Option<&Path>) -> Vec<PathBuf> {
     let mut candidates = vec![app_data_dir.join(DESKTOP_ENV_FILE)];
 
@@ -30,16 +45,17 @@ fn desktop_env_candidates(app_data_dir: &Path, dev_manifest_dir: Option<&Path>) 
     candidates
 }
 
-#[cfg(debug_assertions)]
+#[cfg(all(not(selorson_desktop_user), debug_assertions))]
 fn development_manifest_dir() -> Option<&'static Path> {
     Some(Path::new(env!("CARGO_MANIFEST_DIR")))
 }
 
-#[cfg(not(debug_assertions))]
+#[cfg(all(not(selorson_desktop_user), not(debug_assertions)))]
 fn development_manifest_dir() -> Option<&'static Path> {
     None
 }
 
+#[cfg(not(selorson_desktop_user))]
 fn load_desktop_environment(app_data_dir: &Path) {
     let candidates = desktop_env_candidates(app_data_dir, development_manifest_dir());
 
@@ -59,6 +75,7 @@ fn load_desktop_environment(app_data_dir: &Path) {
     );
 }
 
+#[cfg(not(selorson_desktop_user))]
 fn desktop_backend_origin(port: &str) -> Result<String, String> {
     let port = port
         .parse::<u16>()
@@ -66,6 +83,7 @@ fn desktop_backend_origin(port: &str) -> Result<String, String> {
     Ok(format!("http://127.0.0.1:{port}"))
 }
 
+#[cfg(not(selorson_desktop_user))]
 fn spawn_embedded_backend() {
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -84,6 +102,7 @@ fn spawn_embedded_backend() {
 /// Return jobs whose lease died with the previous desktop session to a
 /// resumable state, so a restart continues checkpointed work instead of
 /// stranding it.
+#[cfg(not(selorson_desktop_user))]
 fn spawn_startup_recovery(supervisor: RunnerSupervisor) {
     tauri::async_runtime::spawn(async move {
         for _ in 0..RECOVERY_ATTEMPTS {
@@ -102,9 +121,20 @@ fn spawn_startup_recovery(supervisor: RunnerSupervisor) {
     });
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+#[cfg(selorson_desktop_user)]
+fn run_user() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .run(tauri::generate_context!())
+        .expect("error while running Tauri user application");
+}
+
+#[cfg(not(selorson_desktop_user))]
+fn run_admin() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(ClaudeWindowManager::default())
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()?;
@@ -149,10 +179,19 @@ pub fn run() {
             commands::runner_job_snapshot
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .expect("error while running Tauri admin application");
 }
 
-#[cfg(test)]
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    #[cfg(selorson_desktop_user)]
+    run_user();
+
+    #[cfg(not(selorson_desktop_user))]
+    run_admin();
+}
+
+#[cfg(all(test, not(selorson_desktop_user)))]
 mod tests {
     use super::{desktop_backend_origin, desktop_env_candidates, DESKTOP_ENV_FILE};
     use std::path::Path;

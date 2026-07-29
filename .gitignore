@@ -28,3 +28,8 @@ android/.idea/
 android/build/
 android/app/build/
 android/app/src/main/assets/public/
+
+# Desktop updater — generated config and signing material
+src-tauri/updater.release.conf.json
+src-tauri/*.key
+src-tauri/*.key.pub
