@@ -12,9 +12,9 @@ Git workflow:
 
 - `main` is the production branch.
 - `dev` is the integrated system-test branch.
-- `test` is the functional acceptance branch.
-- Create temporary `feature/*` or `fix/*` branches from `test`, then promote
-  changes in order: `test` -> `dev` -> `main`.
+- `qa` is the functional acceptance branch.
+- Create temporary `feature/*` or `fix/*` branches from `qa`, then promote
+  changes in order: `qa` -> `dev` -> `main`.
 - Web, desktop-admin, desktop-user, android-admin, and android-user are build
   targets from shared source, not permanent flavor branches.
 - Desktop Admin releases use only `desktop-admin-vX.Y.Z` tags.
@@ -27,3 +27,4 @@ Mandatory rules:
 - Keep Playwright, CDP, account profiles, and runner processes inside Tauri;
   web builds and Fly deploy must not contain them.
 - NeuroForge is reference-only.
+
