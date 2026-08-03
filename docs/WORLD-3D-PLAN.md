@@ -434,8 +434,23 @@ Nhánh `feature/world-3d` trên cả hai repo.
   trọn trong một chunk riêng 783 KB, entry chính vẫn **13,7 KB** — trang đọc
   truyện / nhạc / video không tải một byte 3D nào.
 
-**Chưa xác minh bằng mắt**: chưa có mục thư viện nào có toạ độ nên chưa chụp
-được cảnh quả cầu có marker thật. Xem §11 để biết cách nhập dữ liệu thử.
+- **Chạy thật** (backend `cargo run` + `vite dev`, mở `/world` trong trình duyệt):
+  - `GET /api/v1/world` → **200**, handler mới trả dữ liệu
+  - Canvas Threlte **mount thành công**, WebGL 2.0
+  - Thứ tự request xác nhận **dynamic import chạy đúng**: `WorldCanvas.svelte`
+    chỉ được tải **sau khi** API trả về, không nằm trong bundle ban đầu
+  - Tầng `high` tải đúng 3 texture (`color-4k`, `bump-2k`, `clouds-2k`) → **200**
+  - **Không có lỗi console nào**
+  - `/world/annamland` (vùng chưa tồn tại) → thông báo "Không tìm thấy vùng đất
+    này", không crash
+
+**Chưa xác minh được**: hình ảnh render cuối cùng. Trình duyệt trong phiên làm
+việc chạy ẩn nên không compositing frame — `requestAnimationFrame` không chạy,
+không đọc được pixel và không chụp được màn hình. Toàn bộ chuỗi khởi tạo đã
+được xác nhận (canvas + WebGL + texture tải đủ + không lỗi), nhưng **chưa ai
+nhìn thấy quả cầu bằng mắt**. Cần anh mở `/world` để xác nhận cuối cùng.
+
+Cũng chưa có mục thư viện nào có toạ độ nên chưa thấy marker thật — xem §11.
 
 **Ghi nhận về kích thước deploy**: `@threlte/extras` chỉ xuất một entry duy
 nhất (không có subpath export), nên bản build sinh kèm các chunk
