@@ -1,0 +1,75 @@
+/**
+ * Texture loading with a graceful failure path.
+ *
+ * A missing texture must never take the scene down — art is swapped often and a
+ * stale path in the database is an expected condition, not a bug. Failed loads
+ * resolve to `null` and the materials fall back to flat colour.
+ */
+
+import { SRGBColorSpace, Texture, TextureLoader, type ColorSpace } from 'three';
+
+const loader = new TextureLoader();
+const cache = new Map<string, Promise<Texture | null>>();
+
+function load(url: string, colorSpace?: ColorSpace): Promise<Texture | null> {
+	const cached = cache.get(url);
+	if (cached) return cached;
+
+	const promise = new Promise<Texture | null>((resolve) => {
+		loader.load(
+			url,
+			(texture) => {
+				if (colorSpace) texture.colorSpace = colorSpace;
+				resolve(texture);
+			},
+			undefined,
+			() => resolve(null)
+		);
+	});
+	cache.set(url, promise);
+	return promise;
+}
+
+/**
+ * Reactive holder for a set of named textures.
+ *
+ * Returns immediately with all entries `null`; each fills in as it arrives, so
+ * the globe appears as a plain sphere and gains its map a moment later rather
+ * than blocking on a 3 MB download.
+ */
+export function useTextures<K extends string>(
+	sources: Record<K, string | null>,
+	// `NoInfer` keeps this argument from narrowing K down to whatever keys
+	// happen to be listed here — K must come from `sources` alone.
+	colorKeys: NoInfer<K>[] = []
+) {
+	const state = $state({ maps: {} as Record<K, Texture | null>, ready: false });
+
+	for (const key of Object.keys(sources) as K[]) {
+		state.maps[key] = null;
+	}
+
+	const pending = (Object.entries(sources) as Array<[K, string | null]>)
+		.filter(([, url]) => !!url)
+		.map(([key, url]) =>
+			load(url as string, colorKeys.includes(key) ? SRGBColorSpace : undefined).then(
+				(texture) => {
+					state.maps[key] = texture;
+				}
+			)
+		);
+
+	Promise.all(pending).then(() => {
+		state.ready = true;
+	});
+
+	return state;
+}
+
+/** Raise anisotropy once the renderer's limit is known. */
+export function applyAnisotropy(texture: Texture | null, max: number) {
+	if (texture && texture.anisotropy !== max) {
+		texture.anisotropy = max;
+		texture.needsUpdate = true;
+	}
+}

@@ -38,6 +38,7 @@
 		<div class="hero-content">
 			<h1>{m.lib_list_title()}</h1>
 			<p class="hero-tagline">{m.lib_list_subtitle()}</p>
+			<a class="world-cta" href="/world">🌍 {m.lib_enter_world()}</a>
 		</div>
 	</section>
 
@@ -84,6 +85,8 @@
 	.hero-content{position:relative;z-index:1}
 	.page-hero h1{font-size:2.5rem;font-weight:800;color:var(--color-text-primary);margin:0 0 .375rem}
 	.hero-tagline{color:var(--color-text-muted);font-size:1.05rem;margin:0;font-weight:400}
+	.world-cta{display:inline-block;margin-top:1.25rem;padding:.6rem 1.4rem;border-radius:999px;background:linear-gradient(135deg,var(--color-brand-500),#06b6d4);color:#fff;font-size:.9rem;font-weight:600;text-decoration:none;transition:transform .2s var(--ease-spring),filter .2s}
+	.world-cta:hover{transform:translateY(-2px);filter:brightness(1.1)}
 	.hero-glow{position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 30%,rgba(12,113,61,.15),transparent),radial-gradient(ellipse 60% 50% at 80% 50%,rgba(6,182,212,.08),transparent);pointer-events:none}
 
 	.filters{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;margin-bottom:2.5rem}
