@@ -3,6 +3,7 @@
  * inherits token refresh and error shapes from the rest of the app.
  */
 
+import { PUBLIC_API_BASE } from '$env/static/public';
 import { api } from '$lib/api';
 import { REGION_GEOMETRY_URL } from './config';
 import type { Journey, LocationDetail, RegionDetail, WorldMap, WorldNode } from './types';
@@ -65,6 +66,29 @@ export interface RegionGeometry {
 
 let geometryCache: Promise<RegionGeometry | null> | null = null;
 
+async function loadGeometry(): Promise<RegionGeometry | null> {
+	// Outlines drawn in World Studio come from the published revision, so
+	// redrawing a coastline is a publish rather than a deploy.
+	try {
+		const res = await fetch(`${PUBLIC_API_BASE}/world/borders.geojson`);
+		if (res.ok) {
+			const collection = (await res.json()) as RegionGeometry;
+			if (collection?.features?.length) return collection;
+		}
+	} catch {
+		// Fall through to the bundled file.
+	}
+
+	// Static fallback: lets the world render from a hand-placed file before
+	// anything has been drawn in the studio.
+	try {
+		const res = await fetch(REGION_GEOMETRY_URL);
+		return res.ok ? ((await res.json()) as RegionGeometry) : null;
+	} catch {
+		return null;
+	}
+}
+
 /**
  * Region outlines, fetched at runtime rather than bundled.
  *
@@ -73,9 +97,7 @@ let geometryCache: Promise<RegionGeometry | null> | null = null;
  * outlines are still being drawn.
  */
 export function fetchRegionGeometry(): Promise<RegionGeometry | null> {
-	geometryCache ??= fetch(REGION_GEOMETRY_URL)
-		.then((res) => (res.ok ? (res.json() as Promise<RegionGeometry>) : null))
-		.catch(() => null);
+	geometryCache ??= loadGeometry();
 	return geometryCache;
 }
 

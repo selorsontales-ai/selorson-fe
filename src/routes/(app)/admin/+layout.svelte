@@ -104,7 +104,10 @@
 		},
 		{
 			title: "Thư Viện",
-			items: [{ href: "/admin/library", icon: "📚", label: "Library" }],
+			items: [
+				{ href: "/admin/library", icon: "📚", label: "Library" },
+				{ href: "/admin/world-studio", icon: "🌍", label: "World Studio" },
+			],
 		},
 		{
 			title: "Hệ Thống",
