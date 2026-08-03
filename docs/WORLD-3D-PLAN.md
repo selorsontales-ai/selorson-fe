@@ -380,7 +380,7 @@ mới → `main`.
 | # | Quyết định | Chốt |
 |---|---|---|
 | 1 | Mở khoá thế giới theo tiến độ đọc (§2) | ✅ Có làm |
-| 2 | Ranh giới vùng đất | ✅ Lấy GeoJSON Trái Đất rồi đổi tên; Skyland/Dragonland/Devilland dựng tay |
+| 2 | Ranh giới vùng đất | ⛔ **Đã đảo lại 03/08/2026** — không dùng GeoJSON Trái Đất. Akunalia là thế giới giả tưởng, mượn nguyên hình lục địa thật thì kỳ. Ranh giới sẽ tự vẽ sau. Xem ghi chú bên dưới. |
 | 3 | Phạm vi mốc đầu | ✅ M1 + M2 rồi dừng để xem |
 | 4 | Điểm hạ cánh mặc định | ✅ Không ép — vào là thấy toàn cảnh quả cầu (N4) |
 | 5 | Hành trình nhân vật | ✅ Tính năng hạng nhất, thiết kế thang độ chi tiết ngay từ đầu (N2) |
@@ -481,10 +481,113 @@ Vào `/admin/library`, sửa một mục bất kỳ, mở khối **🌍 Vị tr�
 Rồi mở `/library` → **Bước vào thế giới 3D**, hoặc vào thẳng `/world`.
 Thêm `?q=low` để thử ngân sách máy yếu, `?q=none` để thử đường dự phòng 2D.
 
-Skyland với `alt = 0.18` phải hiện **lơ lửng phía trên** bề mặt, có dây neo kéo
-xuống mặt đất — đó là cách kiểm tra nhanh nguyên tắc N3 đã chạy đúng.
+**Bốn đường cần đi thử:**
 
-### Chưa làm trong M1+M2 (đúng phạm vi đã chốt)
+| Đường | Xem gì |
+|---|---|
+| `/world` | Quả cầu, marker, danh sách vùng + nhân vật, % khám phá |
+| `/world/annamland` | Vùng đất; rê chuột lên địa điểm thì công trình mọc lên |
+| `/world/annamland/sindark` | **Kéo thanh "Tháo rời"** — công trình bung ra từng bộ phận, bấm bộ phận để đọc lore |
+| `/world/journey/<id nhân vật>` | Hành trình; bấm ▶ để nhân vật tự đi qua từng chương |
+
+Hai phép thử nhanh cho hai nguyên tắc:
+
+- Skyland với `alt = 0.18` phải hiện **lơ lửng phía trên** bề mặt, có dây neo
+  kéo xuống mặt đất → nguyên tắc N3 chạy đúng.
+- Một địa điểm **không khai báo `parts` gì cả** vẫn phải tháo lắp được, mái bay
+  lên cao hơn nền móng → hướng bung ra suy từ hình học chạy đúng.
+
+**Trước khi thử hành trình**, chạy migration lên Neon để có bảng ghi nhận lượt
+khám phá (thiếu bảng thì thế giới vẫn chạy, chỉ mất huy hiệu "đã khám phá"):
+
+```bash
+psql "$DATABASE_URL" -f E:/Selorson/backend-v3/migrations/20260803000001_world_visits.sql
+```
+
+---
+
+## 12. Trạng thái triển khai — M3 + M4
+
+### M3 — Địa điểm & tháo lắp
+
+| File | Nội dung |
+|---|---|
+| `backend: migrations/20260803000001_world_visits.sql` | Bảng `user_world_visits` — **phải chạy tay lên Neon** (repo này không có migration runner cho Postgres) |
+| `backend: entity/user_world_visits.rs` | Entity + đăng ký `mod`/`prelude` |
+| `backend: handlers/world.rs` | `GET /world/locations/{key}` (nhận **id hoặc slug**, nên `/world/annamland/sindark` giải quyết trong một request); `POST /world/visited`; trạng thái thứ tư **`explored`** |
+| `builders/kit.ts` | `Kit.add()` nhận thêm tham số **tên bộ phận**; `build()` trả về Group có các Group con theo bộ phận; `describeParts()` **suy hướng bung ra từ hình học** |
+| `builders/index.ts` | 8 builder gắn tên bộ phận (`roof`, `towers`, `foundation`, `veins`…) + `PART_LABELS` tiếng Việt |
+| `engine/models.svelte.ts` | Nạp `.glb` qua dynamic import (GLTFLoader chỉ tải khi có mô hình thật) |
+| `engine/LocationScene.svelte` | Exploded view, chọn bộ phận bằng raycast, X-ray, chuẩn hoá tỉ lệ mô hình |
+| `ui/LocationHud.svelte` | Thanh trượt tháo rời, danh sách bộ phận, panel lore, link chương |
+| `routes/(app)/world/[region]/[slug]/` | Route địa điểm; vào là **tự động ghi nhận đã khám phá** |
+
+**Hướng bung ra suy từ hình học, không cần khai báo.** Bộ phận càng cao thì bay
+lên càng xa, bộ phận lệch tâm thì dạt ra ngoài, nền móng gần như đứng yên. Nghĩa
+là **mọi địa điểm tháo lắp được ngay từ đầu**, trước khi ai kịp viết một dòng
+`parts` nào. Khai báo `parts` trong admin về sau chỉ để **thêm tên, thêm lore,
+thêm link chương** và chỉnh lại hướng nếu muốn.
+
+### M4 — Hành trình nhân vật
+
+| File | Nội dung |
+|---|---|
+| `engine/Avatar.svelte` | Thang độ chi tiết chạy thật: model → sprite sheet (cắt đúng khung theo hướng) → billboard chân dung → chấm sáng |
+| `engine/JourneyScene.svelte` | Quả cầu ngừng quay, đường bay từng chặng, camera bám nhân vật, chặng đã đi thì sáng |
+| `ui/JourneyHud.svelte` | Timeline theo chương, panel "chặng này xảy ra gì", vật phẩm tìm được, link đọc chương |
+| `routes/(app)/world/journey/[id]/` | Route hành trình, có nút chạy tự động |
+| `ui/WorldHud.svelte` | Danh sách nhân vật trên quả cầu — lối vào hành trình |
+
+**Hai quyết định thiết kế đáng ghi lại:**
+
+- *Chương không có địa điểm mới thì nhân vật đứng yên tại chỗ cũ*, chứ không bị
+  bỏ khỏi timeline. Đó mới đúng với truyện, và nhờ vậy chỉ số chặng trên
+  timeline khớp 1:1 với chỉ số vị trí trong cảnh 3D — không có lớp ánh xạ nào ở
+  giữa để sai.
+- *Avatar tải song song cả model lẫn ảnh chân dung.* Tốn thêm một ảnh nhỏ, đổi
+  lại nhân vật hiện ra ngay lập tức thay vì chờ vài MB, và model hỏng đường dẫn
+  thì rơi về chân dung đã có sẵn trong tay chứ không rơi thẳng xuống chấm sáng.
+
+### Ghi chú: ranh giới vùng đất (quyết định đảo lại)
+
+Ban đầu chốt lấy GeoJSON Trái Đất rồi đổi tên. Anh đã đảo lại: Akunalia là thế
+giới giả tưởng, mượn nguyên hình lục địa thật thì kỳ. **Ranh giới sẽ tự vẽ sau.**
+
+Kiến trúc không phải sửa gì cho việc này — đó chính là điểm của nguyên tắc N1:
+`regions.geojson` nạp lúc chạy, thiếu thì cảnh vùng đất hiện nền đĩa tròn và các
+địa điểm vẫn đứng đúng vị trí tương đối. Vẽ xong thả file vào là có ngay.
+
+### Kiểm tra M3 + M4
+
+- `cargo check` — sạch
+- `npm run check` — **0 lỗi, 0 cảnh báo / 2984 file**
+- `npm run build` — entry chính **14,1 KB**; Three.js gói riêng 708 KB;
+  **GLTFLoader tách thành chunk riêng 46,9 KB**, chỉ tải khi địa điểm thật sự có
+  file `.glb`
+
+**Chạy thật với dữ liệu đầy đủ.** Vì database chưa có mục nào đặt lên bản đồ,
+tôi nạp một bộ dữ liệu mẫu vào trình duyệt qua stub `fetch` (không ghi gì vào
+database production) rồi đi qua cả bốn tầng:
+
+| Kiểm tra | Kết quả |
+|---|---|
+| `/world` — HUD quả cầu | Hiện đúng Annamland, Skyland, nhân vật Aria, "Đã khám phá 80% (4/5)" |
+| `/world/annamland` — vùng đất | Liệt kê **2** địa điểm chứ không phải 3 — địa điểm `hidden` bị loại đúng; mục "Nhân vật từng qua đây" hiện Aria |
+| `/world/annamland/sindark` — tháo lắp | Danh sách bộ phận **3/3**, nhãn tự đặt trong `parts` **đè lên** nhãn mặc định của builder, dấu ✦ đánh dấu bộ phận có lore, chương 34 có link còn chương 41 bị khoá |
+| Chọn bộ phận | Hiện đúng lore + nút "Đọc chương 34" + nút tháo |
+| Tháo một bộ phận | Bộ đếm 3/3 → **2/3**, mũi tên ↑ → ↓, nút đổi thành "Lắp lại" |
+| Kéo thanh tháo rời | "Tháo rời 0%" → **100%** |
+| `/world/journey/9` — hành trình | Timeline **4 chặng mở + 1 chặng khoá "?"** — chương 55 chưa đọc bị giữ lại đúng |
+| Bước sang chặng 2 | Chương 34, địa điểm Sindark, khối **"TÌM ĐƯỢC → Đèn lồng xanh"** |
+| Console | **Không lỗi nào ở bất kỳ tầng nào** |
+
+**Vẫn chưa xác minh được**: hình ảnh render. Trình duyệt trong phiên làm việc
+chạy ẩn nên không compositing frame, `requestAnimationFrame` không chạy — mà đó
+chính là thứ điều khiển chuyển động bung ra và nhân vật đi trên bản đồ. Toàn bộ
+máy móc trạng thái điều khiển chúng đã chứng minh chạy đúng, nhưng **chuyển động
+3D thì chưa ai nhìn thấy**. Cần anh mở bằng mắt.
+
+### Chưa làm (đúng phạm vi đã chốt)
 
 - Tầng L3 tháo lắp công trình → M3
 - Hành trình nhân vật dựng hình → M4 (API `/world/journey` đã sẵn sàng)

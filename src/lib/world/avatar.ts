@@ -82,25 +82,6 @@ export function resolveAvatar(node: WorldNode): AvatarSpec {
 	return { tier: 'dot', color, url: null, directions: 1, scale, anim };
 }
 
-/**
- * Step down one tier. Used when an asset fails to load at runtime, so a broken
- * model URL costs the reader a nicer avatar rather than the whole scene.
- */
-export function degrade(spec: AvatarSpec, node: WorldNode): AvatarSpec {
-	if (spec.tier === 'model' && node.sprite_sheet) {
-		return {
-			...spec,
-			tier: 'sprite',
-			url: assetUrl(node.sprite_sheet, node.v),
-			directions: node.sprite_dirs ?? 8
-		};
-	}
-	if ((spec.tier === 'model' || spec.tier === 'sprite') && node.image_url) {
-		return { ...spec, tier: 'billboard', url: assetUrl(node.image_url, node.v), directions: 1 };
-	}
-	return { ...spec, tier: 'dot', url: null, directions: 1 };
-}
-
 /** Which sprite column faces `heading` radians, for `tier === 'sprite'`. */
 export function spriteFrame(heading: number, directions: number): number {
 	const step = (Math.PI * 2) / directions;

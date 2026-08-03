@@ -5,7 +5,7 @@
 
 import { api } from '$lib/api';
 import { REGION_GEOMETRY_URL } from './config';
-import type { Journey, RegionDetail, WorldMap, WorldNode } from './types';
+import type { Journey, LocationDetail, RegionDetail, WorldMap, WorldNode } from './types';
 
 /** The whole map in one request — regions, places, characters, reveal state. */
 export async function fetchWorld(): Promise<WorldMap> {
@@ -18,9 +18,30 @@ export async function fetchRegion(slug: string): Promise<RegionDetail> {
 	return res.data;
 }
 
+/** `key` is the slug from the URL, or the numeric id when one is to hand. */
+export async function fetchLocation(key: string | number): Promise<LocationDetail> {
+	const res = await api<LocationDetail>(`/world/locations/${encodeURIComponent(String(key))}`);
+	return res.data;
+}
+
 export async function fetchJourney(characterId: number): Promise<Journey> {
 	const res = await api<Journey>(`/world/journey/${characterId}`);
 	return res.data;
+}
+
+/**
+ * Record that the reader walked into a place, upgrading it to `explored`.
+ *
+ * Best-effort: a guest, an expired session or an un-migrated database all mean
+ * the badge is not awarded, which must never interrupt the visit itself.
+ */
+export async function markVisited(libraryItemId: number): Promise<boolean> {
+	try {
+		await api('/world/visited', { method: 'POST', body: { library_item_id: libraryItemId } });
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 /**

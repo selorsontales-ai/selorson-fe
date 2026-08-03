@@ -85,6 +85,35 @@ export interface WorldMap {
 	progress: WorldProgress;
 }
 
+/**
+ * A removable piece as the scene and the HUD both see it: the geometry's own
+ * part tag, joined with whatever the author wrote in `extra_data.world.parts`.
+ */
+export interface ScenePart {
+	id: string;
+	label: string;
+	lore: string | null;
+	chapter: number | null;
+}
+
+/** A chapter this place is tagged in. */
+export interface PlaceChapterRef {
+	chapter_number: number;
+	chapter_id: number;
+	/** Null when the reader has not reached it. */
+	title: string | null;
+	role: string;
+	locked: boolean;
+}
+
+export interface LocationDetail {
+	place: WorldNode;
+	region: WorldNode | null;
+	/** Other places in the same region, for the "where next" strip. */
+	neighbours: WorldNode[];
+	chapters: PlaceChapterRef[];
+}
+
 export interface RegionDetail {
 	region: WorldNode;
 	places: WorldNode[];

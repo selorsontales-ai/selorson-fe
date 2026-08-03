@@ -74,6 +74,9 @@
 				{#if selected.chapters?.length}
 					<p class="detail-meta">{m.world_appears_in()} {selected.chapters.join(', ')}</p>
 				{/if}
+				<a class="enter-btn" href="/world/{region.slug}/{selected.slug}">
+					{m.world_enter_place()}
+				</a>
 				{#if selected.story_link}
 					<a class="chapter-link" href={selected.story_link}>{m.world_read_chapter()}</a>
 				{/if}
@@ -240,6 +243,22 @@
 	.chapter-link {
 		font-size: 0.8rem;
 		color: var(--color-brand-300, #4ade80);
+	}
+	.enter-btn {
+		display: block;
+		width: 100%;
+		margin: 0.5rem 0 0.6rem;
+		padding: 0.6rem;
+		border-radius: 6px;
+		background: var(--color-brand-500, #0c713d);
+		color: #fff;
+		font-size: 0.85rem;
+		font-weight: 600;
+		text-align: center;
+		text-decoration: none;
+	}
+	.enter-btn:hover {
+		filter: brightness(1.15);
 	}
 
 	@media (max-width: 900px) {

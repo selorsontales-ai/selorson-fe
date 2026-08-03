@@ -11,6 +11,7 @@
  */
 
 import {
+	Box3,
 	BoxGeometry,
 	BufferGeometry,
 	Color,
@@ -55,11 +56,26 @@ interface Placement {
 /**
  * Accumulates primitives per material and merges them at the end, so a diorama
  * of thirty blocks costs three or four draw calls instead of thirty.
+ *
+ * Primitives are also tagged with a *part* — the roof, the towers, the moat.
+ * Parts survive the merge as named child groups, which is what makes a diorama
+ * take apart: the exploded view moves whole parts, not individual blocks.
  */
 export class Kit {
-	private buckets = new Map<string, { spec: MaterialSpec; geometries: BufferGeometry[] }>();
+	private buckets = new Map<
+		string,
+		{ part: string; material: string; spec: MaterialSpec; geometries: BufferGeometry[] }
+	>();
+	/** Insertion order, so a castle disassembles roof-first rather than at random. */
+	private partOrder: string[] = [];
 
-	add(geometry: BufferGeometry, materialKey: string, spec: MaterialSpec, at: Placement = {}) {
+	add(
+		geometry: BufferGeometry,
+		materialKey: string,
+		spec: MaterialSpec,
+		at: Placement = {},
+		part = 'body'
+	) {
 		const geo = geometry.clone();
 		const scale =
 			typeof at.scale === 'number'
@@ -72,19 +88,32 @@ export class Kit {
 		);
 		geo.applyMatrix4(matrix);
 
-		let bucket = this.buckets.get(materialKey);
+		const key = `${part}::${materialKey}`;
+		let bucket = this.buckets.get(key);
 		if (!bucket) {
-			bucket = { spec, geometries: [] };
-			this.buckets.set(materialKey, bucket);
+			bucket = { part, material: materialKey, spec, geometries: [] };
+			this.buckets.set(key, bucket);
+			if (!this.partOrder.includes(part)) this.partOrder.push(part);
 		}
 		bucket.geometries.push(geo);
 		return this;
 	}
 
 	build(): Group {
-		const group = new Group();
-		for (const [key, bucket] of this.buckets) {
+		const root = new Group();
+		const parts = new Map<string, Group>();
+
+		for (const part of this.partOrder) {
+			const group = new Group();
+			group.name = part;
+			group.userData.part = part;
+			parts.set(part, group);
+			root.add(group);
+		}
+
+		for (const bucket of this.buckets.values()) {
 			const merged = mergeGeometries(bucket.geometries, false);
+			for (const geo of bucket.geometries) geo.dispose();
 			if (!merged) continue;
 			merged.computeVertexNormals();
 			const material = new MeshStandardMaterial({
@@ -95,14 +124,56 @@ export class Kit {
 				emissiveIntensity: bucket.spec.emissiveIntensity ?? 1
 			});
 			const mesh = new Mesh(merged, material);
-			mesh.name = key;
+			mesh.name = `${bucket.part}:${bucket.material}`;
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
-			group.add(mesh);
-			for (const geo of bucket.geometries) geo.dispose();
+			parts.get(bucket.part)?.add(mesh);
 		}
-		return group;
+
+		return root;
 	}
+}
+
+/** One named, separable piece of a diorama. */
+export interface DioramaPart {
+	id: string;
+	group: Group;
+	/** Offset applied at full disassembly. */
+	dir: Vector3;
+	/** Local centre, used to anchor the label callout. */
+	center: Vector3;
+}
+
+/**
+ * Read the parts back off a built diorama and work out how each should fly
+ * apart.
+ *
+ * Directions are derived from geometry rather than authored, so every place
+ * takes apart sensibly the moment it exists — a roof rises clear of the keep it
+ * sits on, side towers drift outward, the foundation barely moves. An author
+ * who wants a specific motion overrides it in `extra_data.world.parts`.
+ */
+export function describeParts(root: Group): DioramaPart[] {
+	const rootBox = new Box3().setFromObject(root);
+	const rootCenter = rootBox.getCenter(new Vector3());
+	const baseY = rootBox.min.y;
+
+	return root.children
+		.filter((child): child is Group => child instanceof Group)
+		.map((group) => {
+			const box = new Box3().setFromObject(group);
+			const center = box.getCenter(new Vector3());
+			const dx = center.x - rootCenter.x;
+			const dz = center.z - rootCenter.z;
+			return {
+				id: group.userData.part ?? group.name,
+				group,
+				center,
+				// Height above the base dominates: the piece that sits on top is
+				// the piece that has to come off first.
+				dir: new Vector3(dx * 0.6, (center.y - baseY) * 1.9 + 0.45, dz * 0.6)
+			};
+		});
 }
 
 /** Free every geometry and material under a built diorama. */

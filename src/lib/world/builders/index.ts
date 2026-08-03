@@ -5,6 +5,10 @@
  * and one to three tall, standing on y = 0. Adding a new landscape type means
  * adding one function here and typing its name into `terrain` in admin —
  * no other file changes.
+ *
+ * Primitives are tagged with a part name (`roof`, `towers`, `foundation`…).
+ * Those become the pieces the exploded view takes apart, and the ids an author
+ * writes into `extra_data.world.parts` to hang a scrap of lore on each one.
  */
 
 import { Group } from 'three';
@@ -34,18 +38,24 @@ const castle: Builder = ({ seed, colors }) => {
 	const [stone, roof, accent] = palette(colors, ['#cbd5e1', '#0f766e', '#ffb703']);
 	const kit = new Kit();
 
-	kit.add(UNIT.box, 'stone', mat(stone), { position: [0, 0.18, 0], scale: [2.2, 0.36, 2.2] });
+	kit.add(UNIT.box, 'stone', mat(stone), { position: [0, 0.18, 0], scale: [2.2, 0.36, 2.2] }, 'foundation');
 
 	const towers = 3 + Math.floor(rnd() * 3);
 	const keepHeight = 1.1 + rnd() * 0.8;
-	kit.add(UNIT.box, 'stone', mat(stone), {
-		position: [0, 0.36 + keepHeight / 2, 0],
-		scale: [0.9, keepHeight, 0.9]
-	});
-	kit.add(UNIT.coneSharp, 'roof', mat(roof, { roughness: 0.5 }), {
-		position: [0, 0.36 + keepHeight + 0.34, 0],
-		scale: [1.35, 0.7, 1.35]
-	});
+	kit.add(
+		UNIT.box,
+		'stone',
+		mat(stone),
+		{ position: [0, 0.36 + keepHeight / 2, 0], scale: [0.9, keepHeight, 0.9] },
+		'keep'
+	);
+	kit.add(
+		UNIT.coneSharp,
+		'roof',
+		mat(roof, { roughness: 0.5 }),
+		{ position: [0, 0.36 + keepHeight + 0.34, 0], scale: [1.35, 0.7, 1.35] },
+		'roof'
+	);
 
 	for (let i = 0; i < towers; i++) {
 		const angle = (i / towers) * Math.PI * 2 + rnd() * 0.4;
@@ -53,21 +63,30 @@ const castle: Builder = ({ seed, colors }) => {
 		const height = 0.6 + rnd() * 0.55;
 		const x = Math.cos(angle) * radius;
 		const z = Math.sin(angle) * radius;
-		kit.add(UNIT.cylinder, 'stone', mat(stone), {
-			position: [x, 0.36 + height / 2, z],
-			scale: [0.34, height, 0.34]
-		});
-		kit.add(UNIT.coneSharp, 'roof', mat(roof, { roughness: 0.5 }), {
-			position: [x, 0.36 + height + 0.22, z],
-			scale: [0.5, 0.45, 0.5]
-		});
+		kit.add(
+			UNIT.cylinder,
+			'stone',
+			mat(stone),
+			{ position: [x, 0.36 + height / 2, z], scale: [0.34, height, 0.34] },
+			'towers'
+		);
+		kit.add(
+			UNIT.coneSharp,
+			'roof',
+			mat(roof, { roughness: 0.5 }),
+			{ position: [x, 0.36 + height + 0.22, z], scale: [0.5, 0.45, 0.5] },
+			'towers'
+		);
 	}
 
 	// Banner finial — the one bright note that reads at globe distance.
-	kit.add(UNIT.sphere, 'accent', mat(accent, { metalness: 0.5, roughness: 0.3 }), {
-		position: [0, 0.36 + keepHeight + 0.75, 0],
-		scale: 0.16
-	});
+	kit.add(
+		UNIT.sphere,
+		'accent',
+		mat(accent, { metalness: 0.5, roughness: 0.3 }),
+		{ position: [0, 0.36 + keepHeight + 0.75, 0], scale: 0.16 },
+		'finial'
+	);
 
 	return kit.build();
 };
@@ -78,7 +97,7 @@ const forest: Builder = ({ seed, colors }) => {
 	const [leaf, trunk, ground] = palette(colors, ['#2f7d32', '#5b4636', '#3f6b3a']);
 	const kit = new Kit();
 
-	kit.add(UNIT.cylinder, 'ground', mat(ground), { position: [0, 0.06, 0], scale: [2.2, 0.12, 2.2] });
+	kit.add(UNIT.cylinder, 'ground', mat(ground), { position: [0, 0.06, 0], scale: [2.2, 0.12, 2.2] }, 'ground');
 
 	const trees = 14 + Math.floor(rnd() * 10);
 	for (let i = 0; i < trees; i++) {
@@ -87,19 +106,28 @@ const forest: Builder = ({ seed, colors }) => {
 		const x = Math.cos(angle) * radius;
 		const z = Math.sin(angle) * radius;
 		const height = 0.45 + rnd() * 0.5;
-		kit.add(UNIT.cylinder, 'trunk', mat(trunk), {
-			position: [x, 0.12 + height * 0.3, z],
-			scale: [0.075, height * 0.6, 0.075]
-		});
+		kit.add(
+			UNIT.cylinder,
+			'trunk',
+			mat(trunk),
+			{ position: [x, 0.12 + height * 0.3, z], scale: [0.075, height * 0.6, 0.075] },
+			'trunks'
+		);
 		// Two stacked cones give a conifer silhouette for the price of two boxes.
-		kit.add(UNIT.cone, 'leaf', mat(leaf), {
-			position: [x, 0.12 + height * 0.72, z],
-			scale: [0.46, height * 0.72, 0.46]
-		});
-		kit.add(UNIT.cone, 'leaf', mat(leaf), {
-			position: [x, 0.12 + height * 1.05, z],
-			scale: [0.34, height * 0.55, 0.34]
-		});
+		kit.add(
+			UNIT.cone,
+			'leaf',
+			mat(leaf),
+			{ position: [x, 0.12 + height * 0.72, z], scale: [0.46, height * 0.72, 0.46] },
+			'canopy'
+		);
+		kit.add(
+			UNIT.cone,
+			'leaf',
+			mat(leaf),
+			{ position: [x, 0.12 + height * 1.05, z], scale: [0.34, height * 0.55, 0.34] },
+			'canopy'
+		);
 	}
 	return kit.build();
 };
@@ -110,10 +138,13 @@ const deadForest: Builder = ({ seed, colors }) => {
 	const [bark, ground, glow] = palette(colors, ['#1b1b1f', '#14161a', '#2fe36b']);
 	const kit = new Kit();
 
-	kit.add(UNIT.cylinder, 'ground', mat(ground, { roughness: 0.95 }), {
-		position: [0, 0.06, 0],
-		scale: [2.2, 0.12, 2.2]
-	});
+	kit.add(
+		UNIT.cylinder,
+		'ground',
+		mat(ground, { roughness: 0.95 }),
+		{ position: [0, 0.06, 0], scale: [2.2, 0.12, 2.2] },
+		'ground'
+	);
 
 	const trees = 10 + Math.floor(rnd() * 8);
 	for (let i = 0; i < trees; i++) {
@@ -124,23 +155,35 @@ const deadForest: Builder = ({ seed, colors }) => {
 		const height = 0.6 + rnd() * 0.7;
 		// Leaning, branching, leafless — the shape carries the mood, not the colour.
 		const lean = (rnd() - 0.5) * 0.5;
-		kit.add(UNIT.taper, 'bark', mat(bark, { roughness: 0.95 }), {
-			position: [x, 0.12 + height / 2, z],
-			rotation: [lean * 0.3, angle, lean],
-			scale: [0.09, height, 0.09]
-		});
+		kit.add(
+			UNIT.taper,
+			'bark',
+			mat(bark, { roughness: 0.95 }),
+			{
+				position: [x, 0.12 + height / 2, z],
+				rotation: [lean * 0.3, angle, lean],
+				scale: [0.09, height, 0.09]
+			},
+			'trees'
+		);
 		const branches = 2 + Math.floor(rnd() * 3);
 		for (let b = 0; b < branches; b++) {
 			const ba = rnd() * Math.PI * 2;
-			kit.add(UNIT.taper, 'bark', mat(bark, { roughness: 0.95 }), {
-				position: [
-					x + Math.cos(ba) * 0.13,
-					0.12 + height * (0.6 + rnd() * 0.35),
-					z + Math.sin(ba) * 0.13
-				],
-				rotation: [Math.PI / 2.6, ba, 0],
-				scale: [0.045, 0.3 + rnd() * 0.2, 0.045]
-			});
+			kit.add(
+				UNIT.taper,
+				'bark',
+				mat(bark, { roughness: 0.95 }),
+				{
+					position: [
+						x + Math.cos(ba) * 0.13,
+						0.12 + height * (0.6 + rnd() * 0.35),
+						z + Math.sin(ba) * 0.13
+					],
+					rotation: [Math.PI / 2.6, ba, 0],
+					scale: [0.045, 0.3 + rnd() * 0.2, 0.045]
+				},
+				'trees'
+			);
 		}
 	}
 
@@ -148,11 +191,17 @@ const deadForest: Builder = ({ seed, colors }) => {
 	const veins = 3 + Math.floor(rnd() * 3);
 	for (let i = 0; i < veins; i++) {
 		const angle = rnd() * Math.PI * 2;
-		kit.add(UNIT.box, 'glow', mat(glow, { emissive: glow, emissiveIntensity: 2.2, roughness: 1 }), {
-			position: [Math.cos(angle) * 0.4, 0.125, Math.sin(angle) * 0.4],
-			rotation: [0, angle, 0],
-			scale: [0.06, 0.01, 0.9 + rnd() * 0.6]
-		});
+		kit.add(
+			UNIT.box,
+			'glow',
+			mat(glow, { emissive: glow, emissiveIntensity: 2.2, roughness: 1 }),
+			{
+				position: [Math.cos(angle) * 0.4, 0.125, Math.sin(angle) * 0.4],
+				rotation: [0, angle, 0],
+				scale: [0.06, 0.01, 0.9 + rnd() * 0.6]
+			},
+			'veins'
+		);
 	}
 	return kit.build();
 };
@@ -163,7 +212,7 @@ const ruins: Builder = ({ seed, colors }) => {
 	const [stone, ground] = palette(colors, ['#9aa3ad', '#4b5563']);
 	const kit = new Kit();
 
-	kit.add(UNIT.cylinder, 'ground', mat(ground), { position: [0, 0.06, 0], scale: [2.1, 0.12, 2.1] });
+	kit.add(UNIT.cylinder, 'ground', mat(ground), { position: [0, 0.06, 0], scale: [2.1, 0.12, 2.1] }, 'ground');
 
 	const columns = 5 + Math.floor(rnd() * 5);
 	for (let i = 0; i < columns; i++) {
@@ -171,18 +220,26 @@ const ruins: Builder = ({ seed, colors }) => {
 		const radius = 0.6 + rnd() * 0.25;
 		// Broken columns: each snapped at a different height.
 		const height = 0.3 + rnd() * 0.85;
-		kit.add(UNIT.cylinder, 'stone', mat(stone), {
-			position: [Math.cos(angle) * radius, 0.12 + height / 2, Math.sin(angle) * radius],
-			rotation: [(rnd() - 0.5) * 0.12, 0, (rnd() - 0.5) * 0.12],
-			scale: [0.16, height, 0.16]
-		});
+		kit.add(
+			UNIT.cylinder,
+			'stone',
+			mat(stone),
+			{
+				position: [Math.cos(angle) * radius, 0.12 + height / 2, Math.sin(angle) * radius],
+				rotation: [(rnd() - 0.5) * 0.12, 0, (rnd() - 0.5) * 0.12],
+				scale: [0.16, height, 0.16]
+			},
+			'columns'
+		);
 	}
 	// A fallen lintel across the middle.
-	kit.add(UNIT.box, 'stone', mat(stone), {
-		position: [0, 0.19, 0],
-		rotation: [0, rnd() * Math.PI, 0.08],
-		scale: [1.1, 0.13, 0.22]
-	});
+	kit.add(
+		UNIT.box,
+		'stone',
+		mat(stone),
+		{ position: [0, 0.19, 0], rotation: [0, rnd() * Math.PI, 0.08], scale: [1.1, 0.13, 0.22] },
+		'lintel'
+	);
 	return kit.build();
 };
 
@@ -193,15 +250,21 @@ const volcano: Builder = ({ seed, colors }) => {
 	const kit = new Kit();
 	const height = 1.5 + rnd() * 0.7;
 
-	kit.add(UNIT.cone, 'rock', mat(rock, { roughness: 0.95 }), {
-		position: [0, height / 2, 0],
-		scale: [2.4, height, 2.4]
-	});
+	kit.add(
+		UNIT.cone,
+		'rock',
+		mat(rock, { roughness: 0.95 }),
+		{ position: [0, height / 2, 0], scale: [2.4, height, 2.4] },
+		'cone'
+	);
 	// Crater glow sits just below the truncated tip.
-	kit.add(UNIT.cylinder, 'lava', mat(lava, { emissive: lava, emissiveIntensity: 2.6, roughness: 1 }), {
-		position: [0, height * 0.95, 0],
-		scale: [0.3, 0.08, 0.3]
-	});
+	kit.add(
+		UNIT.cylinder,
+		'lava',
+		mat(lava, { emissive: lava, emissiveIntensity: 2.6, roughness: 1 }),
+		{ position: [0, height * 0.95, 0], scale: [0.3, 0.08, 0.3] },
+		'crater'
+	);
 	const flows = 2 + Math.floor(rnd() * 3);
 	for (let i = 0; i < flows; i++) {
 		const angle = rnd() * Math.PI * 2;
@@ -213,7 +276,8 @@ const volcano: Builder = ({ seed, colors }) => {
 				position: [Math.cos(angle) * 0.4, height * 0.5, Math.sin(angle) * 0.4],
 				rotation: [0.55, angle, 0],
 				scale: [0.09, 0.02, height * 0.95]
-			}
+			},
+			'flows'
 		);
 	}
 	return kit.build();
@@ -232,16 +296,28 @@ const icePeak: Builder = ({ seed, colors }) => {
 		const height = (i === 0 ? 1.7 : 0.8) + rnd() * 0.6;
 		const x = Math.cos(angle) * radius;
 		const z = Math.sin(angle) * radius;
-		kit.add(UNIT.coneSharp, 'ice', mat(ice, { roughness: 0.35, metalness: 0.1 }), {
-			position: [x, height / 2, z],
-			rotation: [0, rnd() * Math.PI, 0],
-			scale: [1.1 - i * 0.12, height, 1.1 - i * 0.12]
-		});
-		kit.add(UNIT.coneSharp, 'snow', mat(snow, { roughness: 0.55 }), {
-			position: [x, height * 0.86, z],
-			rotation: [0, rnd() * Math.PI, 0],
-			scale: [(1.1 - i * 0.12) * 0.34, height * 0.3, (1.1 - i * 0.12) * 0.34]
-		});
+		kit.add(
+			UNIT.coneSharp,
+			'ice',
+			mat(ice, { roughness: 0.35, metalness: 0.1 }),
+			{
+				position: [x, height / 2, z],
+				rotation: [0, rnd() * Math.PI, 0],
+				scale: [1.1 - i * 0.12, height, 1.1 - i * 0.12]
+			},
+			'peaks'
+		);
+		kit.add(
+			UNIT.coneSharp,
+			'snow',
+			mat(snow, { roughness: 0.55 }),
+			{
+				position: [x, height * 0.86, z],
+				rotation: [0, rnd() * Math.PI, 0],
+				scale: [(1.1 - i * 0.12) * 0.34, height * 0.3, (1.1 - i * 0.12) * 0.34]
+			},
+			'snowcaps'
+		);
 	}
 	return kit.build();
 };
@@ -254,39 +330,54 @@ const floatingIsle: Builder = ({ seed, colors }) => {
 
 	// Grass cap and the tapering underside — the underside is the whole point,
 	// it is what tells the eye the island is airborne.
-	kit.add(UNIT.cylinder, 'grass', mat(grass), { position: [0, 0, 0], scale: [2.1, 0.22, 2.1] });
-	kit.add(UNIT.cone, 'rock', mat(rock, { roughness: 0.9 }), {
-		position: [0, -0.62, 0],
-		rotation: [Math.PI, 0, 0],
-		scale: [2.0, 1.1, 2.0]
-	});
+	kit.add(UNIT.cylinder, 'grass', mat(grass), { position: [0, 0, 0], scale: [2.1, 0.22, 2.1] }, 'cap');
+	kit.add(
+		UNIT.cone,
+		'rock',
+		mat(rock, { roughness: 0.9 }),
+		{ position: [0, -0.62, 0], rotation: [Math.PI, 0, 0], scale: [2.0, 1.1, 2.0] },
+		'underside'
+	);
 	const shards = 3 + Math.floor(rnd() * 3);
 	for (let i = 0; i < shards; i++) {
 		const angle = rnd() * Math.PI * 2;
 		const radius = 0.5 + rnd() * 0.5;
-		kit.add(UNIT.coneSharp, 'rock', mat(rock, { roughness: 0.9 }), {
-			position: [Math.cos(angle) * radius, -0.35 - rnd() * 0.4, Math.sin(angle) * radius],
-			rotation: [Math.PI, rnd() * Math.PI, 0],
-			scale: [0.3, 0.5 + rnd() * 0.5, 0.3]
-		});
+		kit.add(
+			UNIT.coneSharp,
+			'rock',
+			mat(rock, { roughness: 0.9 }),
+			{
+				position: [Math.cos(angle) * radius, -0.35 - rnd() * 0.4, Math.sin(angle) * radius],
+				rotation: [Math.PI, rnd() * Math.PI, 0],
+				scale: [0.3, 0.5 + rnd() * 0.5, 0.3]
+			},
+			'underside'
+		);
 	}
 	// A waterfall spilling off the rim into open air.
 	const fallAngle = rnd() * Math.PI * 2;
-	kit.add(UNIT.box, 'fall', mat(fall, { roughness: 0.2, metalness: 0.1 }), {
-		position: [Math.cos(fallAngle) * 0.95, -0.7, Math.sin(fallAngle) * 0.95],
-		scale: [0.22, 1.5, 0.08]
-	});
+	kit.add(
+		UNIT.box,
+		'fall',
+		mat(fall, { roughness: 0.2, metalness: 0.1 }),
+		{
+			position: [Math.cos(fallAngle) * 0.95, -0.7, Math.sin(fallAngle) * 0.95],
+			scale: [0.22, 1.5, 0.08]
+		},
+		'waterfall'
+	);
 
 	const trees = 4 + Math.floor(rnd() * 4);
 	for (let i = 0; i < trees; i++) {
 		const angle = rnd() * Math.PI * 2;
 		const radius = rnd() * 0.8;
-		const x = Math.cos(angle) * radius;
-		const z = Math.sin(angle) * radius;
-		kit.add(UNIT.cone, 'grass', mat(grass), {
-			position: [x, 0.38, z],
-			scale: [0.34, 0.55, 0.34]
-		});
+		kit.add(
+			UNIT.cone,
+			'grass',
+			mat(grass),
+			{ position: [Math.cos(angle) * radius, 0.38, Math.sin(angle) * radius], scale: [0.34, 0.55, 0.34] },
+			'grove'
+		);
 	}
 	return kit.build();
 };
@@ -297,17 +388,23 @@ const harbor: Builder = ({ seed, colors }) => {
 	const [wood, sail, water] = palette(colors, ['#8b6b4a', '#f4f1e8', '#1f6f8b']);
 	const kit = new Kit();
 
-	kit.add(UNIT.cylinder, 'water', mat(water, { roughness: 0.25, metalness: 0.2 }), {
-		position: [0, 0.04, 0],
-		scale: [2.3, 0.08, 2.3]
-	});
+	kit.add(
+		UNIT.cylinder,
+		'water',
+		mat(water, { roughness: 0.25, metalness: 0.2 }),
+		{ position: [0, 0.04, 0], scale: [2.3, 0.08, 2.3] },
+		'water'
+	);
 	// Pier out from the centre.
-	kit.add(UNIT.box, 'wood', mat(wood), { position: [0, 0.14, 0.4], scale: [0.28, 0.08, 1.5] });
+	kit.add(UNIT.box, 'wood', mat(wood), { position: [0, 0.14, 0.4], scale: [0.28, 0.08, 1.5] }, 'pier');
 	for (let i = 0; i < 5; i++) {
-		kit.add(UNIT.cylinder, 'wood', mat(wood), {
-			position: [0.11 * (i % 2 ? 1 : -1), 0.08, -0.25 + i * 0.32],
-			scale: [0.05, 0.16, 0.05]
-		});
+		kit.add(
+			UNIT.cylinder,
+			'wood',
+			mat(wood),
+			{ position: [0.11 * (i % 2 ? 1 : -1), 0.08, -0.25 + i * 0.32], scale: [0.05, 0.16, 0.05] },
+			'pier'
+		);
 	}
 
 	const boats = 2 + Math.floor(rnd() * 3);
@@ -317,20 +414,21 @@ const harbor: Builder = ({ seed, colors }) => {
 		const x = Math.cos(angle) * radius;
 		const z = Math.sin(angle) * radius;
 		const heading = rnd() * Math.PI;
-		kit.add(UNIT.box, 'wood', mat(wood), {
-			position: [x, 0.12, z],
-			rotation: [0, heading, 0],
-			scale: [0.16, 0.09, 0.42]
-		});
-		kit.add(UNIT.cylinder, 'wood', mat(wood), {
-			position: [x, 0.32, z],
-			scale: [0.02, 0.42, 0.02]
-		});
-		kit.add(UNIT.cone, 'sail', mat(sail, { roughness: 0.6 }), {
-			position: [x, 0.34, z],
-			rotation: [0, heading, 0],
-			scale: [0.26, 0.38, 0.06]
-		});
+		kit.add(
+			UNIT.box,
+			'wood',
+			mat(wood),
+			{ position: [x, 0.12, z], rotation: [0, heading, 0], scale: [0.16, 0.09, 0.42] },
+			'boats'
+		);
+		kit.add(UNIT.cylinder, 'wood', mat(wood), { position: [x, 0.32, z], scale: [0.02, 0.42, 0.02] }, 'boats');
+		kit.add(
+			UNIT.cone,
+			'sail',
+			mat(sail, { roughness: 0.6 }),
+			{ position: [x, 0.34, z], rotation: [0, heading, 0], scale: [0.26, 0.38, 0.06] },
+			'boats'
+		);
 	}
 	return kit.build();
 };
@@ -360,3 +458,36 @@ export function buildLandmark(terrain: string | null, options: BuildOptions): Gr
 	if (options.scale && options.scale !== 1) group.scale.setScalar(options.scale);
 	return group;
 }
+
+/**
+ * Vietnamese labels for the parts each builder emits, used when an author has
+ * not written their own. Admin pages are not localized; these surface in the
+ * reader-facing scene too, which is why they read as prose rather than as ids.
+ */
+export const PART_LABELS: Record<string, string> = {
+	foundation: 'Nền móng',
+	keep: 'Thân tháp chính',
+	roof: 'Mái tháp',
+	towers: 'Tháp canh',
+	finial: 'Chóp đỉnh',
+	ground: 'Nền đất',
+	trunks: 'Thân cây',
+	canopy: 'Tán lá',
+	trees: 'Rừng cây',
+	veins: 'Mạch sáng',
+	columns: 'Hàng cột',
+	lintel: 'Rầm đá đổ',
+	cone: 'Thân núi',
+	crater: 'Miệng núi lửa',
+	flows: 'Dòng dung nham',
+	peaks: 'Đỉnh băng',
+	snowcaps: 'Mũ tuyết',
+	cap: 'Mặt đảo',
+	underside: 'Đáy đảo',
+	waterfall: 'Thác nước',
+	grove: 'Rặng cây',
+	water: 'Mặt nước',
+	pier: 'Cầu tàu',
+	boats: 'Thuyền bè',
+	body: 'Khối chính'
+};

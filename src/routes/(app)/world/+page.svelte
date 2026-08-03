@@ -89,6 +89,7 @@
 				<WorldHud
 					regions={world.regions}
 					locations={world.locations}
+					characters={world.characters}
 					progress={world.progress}
 					{selected}
 					onselect={(node) => (selected = node)}
@@ -132,11 +133,6 @@
 		padding: 2rem;
 		color: var(--color-text-secondary, #cbd5e1);
 	}
-	.world-msg .muted {
-		color: var(--color-text-muted, #94a3b8);
-		font-size: 0.88rem;
-	}
-
 	.empty-note {
 		position: absolute;
 		left: 50%;

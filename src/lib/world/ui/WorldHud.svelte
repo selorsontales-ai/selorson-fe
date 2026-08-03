@@ -10,13 +10,15 @@
 	interface Props {
 		regions: WorldNode[];
 		locations: WorldNode[];
+		/** Characters whose journeys the reader may follow. */
+		characters: WorldNode[];
 		progress: WorldProgress;
 		selected: WorldNode | null;
 		onselect: (node: WorldNode | null) => void;
 		onenter: (node: WorldNode) => void;
 	}
 
-	let { regions, locations, progress, selected, onselect, onenter }: Props = $props();
+	let { regions, locations, characters, progress, selected, onselect, onenter }: Props = $props();
 
 	/** Places belonging to the selected region, so the panel can list them. */
 	let childPlaces = $derived(
@@ -56,6 +58,25 @@
 				</li>
 			{/each}
 		</ul>
+
+		{#if characters.length}
+			<h2 class="panel-head journeys-head">{m.world_journeys()}</h2>
+			<ul class="node-list">
+				{#each characters as person (person.id)}
+					<li>
+						<a class="journey-link" href="/world/journey/{person.id}">
+							{#if person.image_url}
+								<img src={person.image_url} alt={label(person)} />
+							{:else}
+								<span class="journey-dot" style="background:{person.color ?? '#2fe36b'}"></span>
+							{/if}
+							<span class="journey-name">{label(person)}</span>
+							<span class="journey-go">›</span>
+						</a>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 	</aside>
 
 	{#if selected}
@@ -208,6 +229,45 @@
 	.node-btn.dim {
 		opacity: 0.55;
 		border-left-color: #475569;
+	}
+
+	.journeys-head {
+		margin-top: 1.4rem;
+	}
+	.journey-link {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.4rem 0.5rem;
+		border-radius: 6px;
+		background: rgba(255, 255, 255, 0.04);
+		color: inherit;
+		font-size: 0.82rem;
+		text-decoration: none;
+		transition: background 0.18s, transform 0.18s;
+	}
+	.journey-link:hover {
+		background: rgba(255, 255, 255, 0.09);
+		transform: translateX(3px);
+	}
+	.journey-link img {
+		width: 1.6rem;
+		height: 1.6rem;
+		border-radius: 50%;
+		object-fit: cover;
+		flex: none;
+	}
+	.journey-dot {
+		width: 0.75rem;
+		height: 0.75rem;
+		border-radius: 50%;
+		flex: none;
+	}
+	.journey-name {
+		flex: 1;
+	}
+	.journey-go {
+		color: var(--color-text-muted, #94a3b8);
 	}
 
 	.node-name {
