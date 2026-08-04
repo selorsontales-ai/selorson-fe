@@ -12,6 +12,24 @@ export type RevealState = 'hidden' | 'rumored' | 'revealed';
 /** Which scene a location opens into when the reader arrives. */
 export type SceneKind = 'orbit' | 'assembly' | 'fps';
 
+/** An asset the server has already resolved to a loadable file. */
+export interface ResolvedAsset {
+	url: string;
+	format: string | null;
+	/**
+	 * Correction baked in at import: scale for models authored in centimetres,
+	 * rotation for Z-up exports, offset for origins that are not at the feet.
+	 * Applying it here means the author fixes it once, not at every use.
+	 */
+	transform: {
+		scale?: number;
+		rotation?: [number, number, number];
+		offset?: [number, number, number];
+	} | null;
+	/** Asset `updated_at` — re-exporting a model beats the CDN cache. */
+	v: number;
+}
+
 /** One removable piece of a landmark in an exploded view. */
 export interface WorldPart {
 	id: string;
@@ -54,6 +72,15 @@ export interface WorldNode {
 	story_link?: string | null;
 	/** Published chapter numbers this node appears in. */
 	chapters?: number[];
+
+	/**
+	 * Production assets bound to this node, resolved server-side from slugs into
+	 * URLs. A character's `head` stands on the map where a whole figure would be
+	 * an unreadable speck; `body` walks their journey. The client never sees a
+	 * slug — a binding to a retired asset simply does not arrive, and the
+	 * renderer falls back a tier.
+	 */
+	assets?: Record<string, ResolvedAsset>;
 
 	// ── Presentation, all optional; the engine picks the highest tier present ──
 	model?: string | null;

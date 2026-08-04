@@ -205,10 +205,13 @@
 	{/each}
 
 	{#if waypoints.length}
+		<!-- Full figure here: the reader is watching them travel, not scanning a
+		     map, so the body slot is the one that suits. -->
 		<Avatar
 			node={character}
 			position={[avatarPosition.x, avatarPosition.y, avatarPosition.z]}
 			size={0.6}
+			variant="body"
 			highlighted
 		/>
 	{/if}

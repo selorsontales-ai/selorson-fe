@@ -107,6 +107,7 @@
 			items: [
 				{ href: "/admin/library", icon: "📚", label: "Library" },
 				{ href: "/admin/world-studio", icon: "🌍", label: "World Studio" },
+				{ href: "/admin/world-assets", icon: "🧰", label: "Asset 3D" },
 			],
 		},
 		{

@@ -51,11 +51,16 @@
 	const TARGET_SIZE = 6;
 
 	// Read once: opening a different place remounts the route, so the model URL
-	// cannot change under a live scene.
-	function initialModelUrl() {
-		return node.model ? assetUrl(node.model, node.v) : null;
+	// cannot change under a live scene. A bound production asset outranks the
+	// raw path on the item — it was made for the world and carries its own
+	// scale and orientation correction.
+	function initialModel() {
+		const bound = node.assets?.model;
+		if (bound) return { url: `${bound.url}?v=${bound.v}`, transform: bound.transform };
+		return { url: node.model ? assetUrl(node.model, node.v) : null, transform: null };
 	}
-	const model = useModel(initialModelUrl());
+	const source = initialModel();
+	const model = useModel(source.url);
 
 	/** Kit-bash stand-in, built immediately so the place is never empty. */
 	let fallback = $state<Group | null>(null);
@@ -83,10 +88,21 @@
 			return;
 		}
 
+		// Orientation first: a Z-up export must be turned upright *before* it is
+		// measured, or the bounding box normalises the wrong axis.
+		const deg = Math.PI / 180;
+		const spin = source.transform?.rotation;
+		root.rotation.set(
+			(spin?.[0] ?? 0) * deg,
+			(spin?.[1] ?? 0) * deg,
+			(spin?.[2] ?? 0) * deg
+		);
+
 		// Normalise scale so a glTF authored in metres and a two-unit kit-bash
 		// diorama both arrive at the same on-screen size.
 		root.scale.setScalar(1);
 		root.position.set(0, 0, 0);
+		root.updateMatrixWorld(true);
 		const box = new Box3().setFromObject(root);
 		const size = box.getSize(new Vector3());
 		const largest = Math.max(size.x, size.y, size.z) || 1;

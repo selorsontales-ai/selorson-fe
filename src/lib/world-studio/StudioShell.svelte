@@ -8,7 +8,9 @@
 	import { SvelteFlowProvider } from '@xyflow/svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import { toast_error, toast_success } from '$lib/stores/admin.svelte';
-	import type { WorldNode } from '$lib/world/types';
+	import { fetchAssets } from '$lib/world-assets/api';
+	import type { WorldAsset } from '$lib/world-assets/types';
+	import type { ResolvedAsset, WorldNode } from '$lib/world/types';
 	import { fetchRevisions, publishWorld, restoreRevision } from './api';
 	import Inspector from './Inspector.svelte';
 	import StudioCanvas from './StudioCanvas.svelte';
@@ -44,10 +46,37 @@
 	/** Focus mode earns its keep above this many nodes; below it, hiding confuses. */
 	const FOCUS_AUTO_THRESHOLD = 80;
 
+	/**
+	 * Asset catalogue, kept here so the 3D preview can resolve slot bindings the
+	 * same way the server does for readers. Without it the author would bind a
+	 * model and see no change, which reads as the binding not working.
+	 */
+	let assetsBySlug = $state(new Map<string, WorldAsset>());
+
 	onMount(async () => {
 		await studio.load();
 		if (studio.entries.length > FOCUS_AUTO_THRESHOLD) focus = true;
+		const catalogue = await fetchAssets();
+		assetsBySlug = new Map(catalogue.assets.map((a) => [a.slug, a]));
 	});
+
+	function resolveBindings(
+		bindings: Record<string, string> | undefined
+	): Record<string, ResolvedAsset> | undefined {
+		if (!bindings) return undefined;
+		const out: Record<string, ResolvedAsset> = {};
+		for (const [slot, slug] of Object.entries(bindings)) {
+			const asset = assetsBySlug.get(slug);
+			if (!asset) continue;
+			out[slot] = {
+				url: asset.file_url,
+				format: asset.file_format,
+				transform: asset.transform,
+				v: Math.floor(new Date(asset.updated_at).getTime() / 1000)
+			};
+		}
+		return Object.keys(out).length ? out : undefined;
+	}
 
 	let filtered = $derived(
 		studio.entries.filter((e) => {
@@ -159,7 +188,8 @@
 				description: entry.item.description,
 				image_url: entry.item.image_url,
 				chapters: [],
-				palette: layout.palette as string[] | undefined
+				palette: layout.palette as string[] | undefined,
+				assets: resolveBindings(layout.assets as Record<string, string> | undefined)
 			} as WorldNode & { lat: number; lng: number };
 		})
 	);

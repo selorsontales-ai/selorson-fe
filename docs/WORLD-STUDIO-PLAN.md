@@ -314,6 +314,33 @@ Nhánh `feature/world-studio` trên cả hai repo.
 
 ---
 
+## 10. Thư viện Asset 3D (bổ sung 03/08/2026)
+
+Xưởng cần nguyên liệu. Nguyên liệu đó **không thể là ảnh trong thư viện độc
+giả**: một bức chân dung đẹp trên trang sách thường sai trong 3D — phẳng, sai
+tỉ lệ, hoặc lệch phong cách.
+
+Nên có **thư viện thứ hai**, `/admin/world-assets`, độc giả không thấy:
+
+| | Thư viện (`/admin/library`) | Asset 3D (`/admin/world-assets`) |
+|---|---|---|
+| Ai thấy | Độc giả | Chỉ tác giả |
+| Chứa | Tên, lore, tranh 2D | `.glb`, sprite sheet, texture |
+| Nhịp | Theo nội dung truyện | Theo lúc làm xong model |
+
+Nối bằng **slot**: `assets: { head: "aria-head-chibi", body: "aria-full" }`.
+
+**Vì sao slot chứ không phải một trường `model`:** một file hiếm khi đúng ở mọi
+chỗ. Trên bản đồ toàn cảnh, cả người là hạt bụi — cái đầu mới đọc được. Trên
+hành trình thì phải thấy dáng đi. Slot cho phép cả hai cùng đúng, và nâng cấp
+cái này không đụng cái kia. Binding lưu **slug** nên đổi tên hay xuất lại file
+đều không gãy.
+
+Chi tiết quy trình tạo asset, nguồn miễn phí, và cách tận dụng phần mềm sẵn có:
+[ASSET-PIPELINE.md](ASSET-PIPELINE.md).
+
+---
+
 ## Phụ lục — tra cứu
 
 - Svelte Flow: https://svelteflow.dev — `@xyflow/svelte` 1.6.2, peer `svelte ^5.25`

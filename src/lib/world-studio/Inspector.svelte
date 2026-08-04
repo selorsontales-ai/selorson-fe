@@ -13,6 +13,7 @@
 		TERRAIN_KINDS,
 		TERRAIN_LABELS
 	} from '$lib/world/terrains';
+	import AssetSlots from './AssetSlots.svelte';
 	import { slugify, type Studio } from './studio.svelte';
 	import { EDGE_RULES, KIND_ICONS, KIND_LABELS } from './types';
 
@@ -190,6 +191,13 @@
 				<button type="button" onclick={placeAtCentre}>Đặt lên bản đồ</button>
 			{/if}
 		</section>
+
+		<AssetSlots
+			kind={entry.kind}
+			bindings={(layout.assets as Record<string, string>) ?? {}}
+			onchange={(assets) =>
+				patch({ assets: Object.keys(assets).length ? assets : undefined })}
+		/>
 
 		{#if entry.kind !== 'character'}
 			<section class="group">

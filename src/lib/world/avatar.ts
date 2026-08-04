@@ -38,6 +38,25 @@ export interface AvatarSpec {
 const PALETTE = ['#2fe36b', '#00f0ff', '#ffb703', '#ff75c3', '#a855f7', '#ff5c39', '#5cc8ff'];
 
 /**
+ * Which production asset should stand in for a character in a given context.
+ *
+ * `head` on the map, where a whole figure is an unreadable speck; `body` on a
+ * journey, where the reader is watching them travel. Falls through to the other
+ * slot rather than to nothing, because one good asset is better than a pin.
+ */
+export function avatarAsset(node: WorldNode, slot: 'head' | 'body') {
+	const assets = node.assets;
+	if (!assets) return null;
+	const other = slot === 'head' ? 'body' : 'head';
+	return assets[slot] ?? assets[other] ?? null;
+}
+
+/** Sprite sheet or icon bound as an asset, preferred over the library portrait. */
+export function avatarFlat(node: WorldNode) {
+	return node.assets?.sprite ?? node.assets?.icon ?? null;
+}
+
+/**
  * Pick the richest representation the data supports.
  *
  * Order matters: a character with both a model and a portrait should render as
