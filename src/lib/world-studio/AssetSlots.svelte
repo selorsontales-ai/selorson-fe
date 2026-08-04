@@ -38,10 +38,10 @@
 	let slots = $derived(slotsFor(kind));
 	let bySlug = $derived(new Map(assets.map((a) => [a.slug, a])));
 
-	function candidatesFor(slotKind: string) {
+	function candidatesFor(slotKinds: string[]) {
 		const needle = search.trim().toLowerCase();
 		return assets
-			.filter((a) => a.kind === slotKind)
+			.filter((a) => slotKinds.includes(a.kind))
 			.filter((a) => !needle || a.name.toLowerCase().includes(needle) || a.slug.includes(needle));
 	}
 
@@ -108,7 +108,7 @@
 				<p class="slot-hint">{def.hint}</p>
 
 				{#if openSlot === def.slot}
-					{@const list = candidatesFor(def.kind)}
+					{@const list = candidatesFor(def.kinds)}
 					<div class="picker">
 						<input placeholder="Tìm asset…" bind:value={search} />
 						{#if list.length === 0}

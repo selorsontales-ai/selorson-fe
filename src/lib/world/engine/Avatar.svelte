@@ -18,6 +18,7 @@
 	import { T } from '@threlte/core';
 	import { Billboard } from '@threlte/extras';
 	import { DoubleSide, RepeatWrapping, type Group, type Texture } from 'three';
+	import { isModelFormat } from '$lib/world-assets/types';
 	import { avatarAsset, avatarFlat, resolveAvatar, spriteFrame } from '../avatar';
 	import { assetUrl } from '../config';
 	import type { WorldNode } from '../types';
@@ -61,21 +62,31 @@
 		const flat = avatarFlat(node);
 		const transform = bound?.transform ?? null;
 
+		// A slot may hold geometry or a flat render. At marker size the two read
+		// almost the same, so the author is free to start with a render and swap
+		// in a model later; the format decides which path is taken, not the slot.
+		const boundIsModel = isModelFormat(bound?.format);
+		const boundUrl = bound ? `${bound.url}?v=${bound.v}` : null;
+
+		const fallbackPortrait = flat
+			? `${flat.url}?v=${flat.v}`
+			: node.sprite_sheet
+				? assetUrl(node.sprite_sheet, node.v)
+				: node.image_url
+					? assetUrl(node.image_url, node.v)
+					: null;
+
 		return {
 			color: spec.color,
 			scale: (transform?.scale ?? 1) * spec.scale,
 			rotation: transform?.rotation ?? ([0, 0, 0] as [number, number, number]),
 			offset: transform?.offset ?? ([0, 0, 0] as [number, number, number]),
 			directions: spec.directions,
-			isSprite: !!node.assets?.sprite || !!node.sprite_sheet,
-			model: bound ? `${bound.url}?v=${bound.v}` : node.model ? assetUrl(node.model, node.v) : null,
-			portrait: flat
-				? `${flat.url}?v=${flat.v}`
-				: node.sprite_sheet
-					? assetUrl(node.sprite_sheet, node.v)
-					: node.image_url
-						? assetUrl(node.image_url, node.v)
-						: null
+			// Only a real sprite sheet gets frame-sliced; a single rendered bust
+			// must not be cut into columns.
+			isSprite: !!node.assets?.sprite || (!bound && !!node.sprite_sheet),
+			model: boundIsModel ? boundUrl : node.model ? assetUrl(node.model, node.v) : null,
+			portrait: !boundIsModel && boundUrl ? boundUrl : fallbackPortrait
 		};
 	}
 	const art = sources();

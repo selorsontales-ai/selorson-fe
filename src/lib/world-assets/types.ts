@@ -91,8 +91,17 @@ export interface SlotDef {
 	slot: string;
 	label: string;
 	hint: string;
-	/** Asset kind the picker filters to. */
-	kind: AssetKind;
+	/**
+	 * Asset kinds the picker offers.
+	 *
+	 * Several slots accept both a model and a flat image. A bust on a globe
+	 * marker is drawn a few dozen pixels wide; a rendered image billboarded to
+	 * face the camera reads nearly as well as geometry there, at a fraction of
+	 * the file size and of the work to produce. The renderer decides what to do
+	 * from the file's format, so the author can start with a render and swap in
+	 * a model later without changing anything else.
+	 */
+	kinds: AssetKind[];
 }
 
 export const SLOTS: Record<string, SlotDef[]> = {
@@ -100,41 +109,53 @@ export const SLOTS: Record<string, SlotDef[]> = {
 		{
 			slot: 'head',
 			label: 'Đầu / bán thân',
-			hint: 'Đại diện nhân vật trên bản đồ, nơi cả người sẽ quá nhỏ để nhìn',
-			kind: 'model'
+			hint: 'Đại diện nhân vật trên bản đồ. Ảnh render cũng được — ở cỡ này gần như không khác mô hình',
+			kinds: ['model', 'icon']
 		},
 		{
 			slot: 'body',
 			label: 'Toàn thân',
-			hint: 'Dùng khi nhân vật đi trên hành trình',
-			kind: 'model'
+			hint: 'Dùng khi nhân vật đi trên hành trình — chỗ mô hình 3D thật sự đáng công',
+			kinds: ['model', 'icon']
 		},
 		{
 			slot: 'sprite',
 			label: 'Sprite nhiều hướng',
 			hint: 'Ảnh render sẵn theo 8 hướng — nhẹ hơn mô hình, dùng cho máy yếu',
-			kind: 'sprite'
+			kinds: ['sprite']
 		},
-		{ slot: 'icon', label: 'Biểu tượng', hint: 'Ảnh nhỏ trên HUD và timeline', kind: 'icon' }
+		{ slot: 'icon', label: 'Biểu tượng', hint: 'Ảnh nhỏ trên HUD và timeline', kinds: ['icon'] }
 	],
 	region: [
-		{ slot: 'model', label: 'Mô hình vùng', hint: 'Thay cho địa hình tự dựng', kind: 'model' }
+		{ slot: 'model', label: 'Mô hình vùng', hint: 'Thay cho địa hình tự dựng', kinds: ['model'] }
 	],
 	place: [
 		{
 			slot: 'model',
 			label: 'Mô hình công trình',
 			hint: 'Thay cho bộ dựng tự động. Đặt tên node trong Blender để tháo lắp được',
-			kind: 'model'
+			kinds: ['model']
 		},
-		{ slot: 'icon', label: 'Biểu tượng', hint: 'Ảnh nhỏ trên danh sách', kind: 'icon' }
+		{ slot: 'icon', label: 'Biểu tượng', hint: 'Ảnh nhỏ trên danh sách', kinds: ['icon'] }
 	],
 	item: [
-		{ slot: 'model', label: 'Mô hình vật phẩm', hint: 'Hiện khi nhân vật tìm được', kind: 'model' },
-		{ slot: 'icon', label: 'Biểu tượng', hint: 'Ảnh nhỏ trong ô "Tìm được"', kind: 'icon' }
+		{
+			slot: 'model',
+			label: 'Mô hình vật phẩm',
+			hint: 'Hiện khi nhân vật tìm được',
+			kinds: ['model']
+		},
+		{ slot: 'icon', label: 'Biểu tượng', hint: 'Ảnh nhỏ trong ô "Tìm được"', kinds: ['icon'] }
 	],
-	lore: [{ slot: 'icon', label: 'Biểu tượng', hint: 'Ảnh nhỏ cạnh truyền thuyết', kind: 'icon' }]
+	lore: [{ slot: 'icon', label: 'Biểu tượng', hint: 'Ảnh nhỏ cạnh truyền thuyết', kinds: ['icon'] }]
 };
+
+/** File formats the renderer treats as geometry rather than as a flat image. */
+const MODEL_FORMATS = new Set(['glb', 'gltf']);
+
+export function isModelFormat(format: string | null | undefined): boolean {
+	return !!format && MODEL_FORMATS.has(format.toLowerCase());
+}
 
 export function slotsFor(kind: string): SlotDef[] {
 	return SLOTS[kind] ?? [];
