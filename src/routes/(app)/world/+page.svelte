@@ -31,28 +31,24 @@
 	);
 
 	onMount(async () => {
-		quality = resolveQuality(new URLSearchParams(location.search));
+		const resolvedQuality = resolveQuality(new URLSearchParams(location.search));
+		quality = resolvedQuality;
+		const canvasPromise =
+			resolvedQuality.tier !== 'none'
+				? import('$lib/world/engine/WorldCanvas.svelte')
+						.then((module) => module.default)
+						.catch(() => null)
+				: Promise.resolve(null);
 
 		try {
-			world = await fetchWorld();
+			const [loadedWorld, canvas] = await Promise.all([fetchWorld(), canvasPromise]);
+			world = loadedWorld;
+			CanvasComponent = canvas;
 		} catch {
 			failed = true;
+		} finally {
 			loading = false;
-			return;
 		}
-
-		// Only pay for the engine once we know the device can run it. An empty
-		// map still gets a globe — seeing the world exist is the point; the
-		// "nothing placed yet" note rides on top of it.
-		if (quality.tier !== 'none') {
-			try {
-				CanvasComponent = (await import('$lib/world/engine/WorldCanvas.svelte')).default;
-			} catch {
-				// Engine failed to load — the list view below still works.
-				CanvasComponent = null;
-			}
-		}
-		loading = false;
 	});
 
 	function enterRegion(node: WorldNode) {

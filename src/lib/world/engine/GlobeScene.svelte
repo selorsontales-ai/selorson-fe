@@ -83,16 +83,19 @@
 		flyTarget = HOME.clone();
 	}
 
-	useTask((delta) => {
-		if (!camera || !flyTarget) return;
-		// Frame-rate independent easing — same curve at 30fps and 144fps.
-		const t = 1 - Math.pow(0.0015, delta);
-		camera.position.lerp(flyTarget, t);
-		if (camera.position.distanceTo(flyTarget) < 0.02) {
-			camera.position.copy(flyTarget);
-			flyTarget = null;
-		}
-	});
+	useTask(
+		(delta) => {
+			if (!camera || !flyTarget) return;
+			// Frame-rate independent easing — same curve at 30fps and 144fps.
+			const t = 1 - Math.pow(0.0015, delta);
+			camera.position.lerp(flyTarget, t);
+			if (camera.position.distanceTo(flyTarget) < 0.02) {
+				camera.position.copy(flyTarget);
+				flyTarget = null;
+			}
+		},
+		{ running: () => !!camera && !!flyTarget }
+	);
 </script>
 
 <T.PerspectiveCamera

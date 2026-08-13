@@ -22,24 +22,24 @@
 	let hovered = $state<WorldNode | null>(null);
 
 	onMount(async () => {
-		quality = resolveQuality(new URLSearchParams(location.search));
+		const resolvedQuality = resolveQuality(new URLSearchParams(location.search));
+		quality = resolvedQuality;
+		const canvasPromise =
+			resolvedQuality.tier !== 'none'
+				? import('$lib/world/engine/RegionCanvas.svelte')
+						.then((module) => module.default)
+						.catch(() => null)
+				: Promise.resolve(null);
 
 		try {
-			detail = await fetchRegion(slug);
+			const [loadedDetail, canvas] = await Promise.all([fetchRegion(slug), canvasPromise]);
+			detail = loadedDetail;
+			CanvasComponent = canvas;
 		} catch {
 			notFound = true;
+		} finally {
 			loading = false;
-			return;
 		}
-
-		if (quality.tier !== 'none') {
-			try {
-				CanvasComponent = (await import('$lib/world/engine/RegionCanvas.svelte')).default;
-			} catch {
-				CanvasComponent = null;
-			}
-		}
-		loading = false;
 	});
 </script>
 

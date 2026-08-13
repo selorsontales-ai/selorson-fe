@@ -12,6 +12,7 @@
 		BufferGeometry,
 		Group,
 		Mesh,
+		MeshStandardMaterial,
 		ShaderMaterial
 	} from 'three';
 	import { GLOBE_TEXTURES, GLOBE_RADIUS } from '../config';
@@ -48,7 +49,7 @@
 		['color']
 	);
 
-	const { renderer } = useThrelte();
+	const { invalidate, renderer } = useThrelte();
 	let maxAnisotropy = renderer?.capabilities.getMaxAnisotropy() ?? 1;
 
 	$effect(() => {
@@ -57,13 +58,38 @@
 	});
 
 	let clouds = $state<Mesh | undefined>();
+	let surfaceMaterial = $state<MeshStandardMaterial | undefined>();
 
-	useTask((delta) => {
-		if (quality.reducedMotion) return;
-		if (group && autoRotate) group.rotation.y += delta * 0.03;
-		// Clouds drift slightly faster than the ground turns.
-		if (clouds) clouds.rotation.y += delta * 0.012;
+	$effect(() => {
+		if (!surfaceMaterial) return;
+
+		const color = textures.maps.color;
+		const bump = textures.maps.bump;
+		const displacement = quality.displacement ? bump : null;
+		const needsRecompile =
+			surfaceMaterial.map !== color ||
+			surfaceMaterial.bumpMap !== bump ||
+			surfaceMaterial.displacementMap !== displacement;
+
+		surfaceMaterial.map = color;
+		surfaceMaterial.color.set(color ? '#ffffff' : '#1d3b4d');
+		surfaceMaterial.bumpMap = bump;
+		surfaceMaterial.bumpScale = bump ? 0.18 : 0;
+		surfaceMaterial.displacementMap = displacement;
+		surfaceMaterial.displacementScale = displacement ? 0.05 : 0;
+
+		if (needsRecompile) surfaceMaterial.needsUpdate = true;
+		invalidate();
 	});
+
+	useTask(
+		(delta) => {
+			if (group && autoRotate) group.rotation.y += delta * 0.03;
+			// Clouds drift slightly faster than the ground turns.
+			if (clouds) clouds.rotation.y += delta * 0.012;
+		},
+		{ running: () => !quality.reducedMotion && ((!!group && autoRotate) || !!clouds) }
+	);
 
 	/** Fresnel rim — brightest where the sphere turns away from the camera. */
 	const atmosphere = new ShaderMaterial({
@@ -118,12 +144,8 @@
 	<T.Mesh>
 		<T.SphereGeometry args={[GLOBE_RADIUS, quality.sphereSegments, quality.sphereSegments]} />
 		<T.MeshStandardMaterial
-			map={textures.maps.color}
-			color={textures.maps.color ? '#ffffff' : '#1d3b4d'}
-			bumpMap={textures.maps.bump}
-			bumpScale={textures.maps.bump ? 0.18 : 0}
-			displacementMap={quality.displacement ? textures.maps.bump : null}
-			displacementScale={quality.displacement && textures.maps.bump ? 0.05 : 0}
+			bind:ref={surfaceMaterial}
+			color="#1d3b4d"
 			roughness={0.62}
 			metalness={0.05}
 		/>

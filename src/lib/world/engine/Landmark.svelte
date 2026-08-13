@@ -50,12 +50,15 @@
 		};
 	});
 
-	useTask((delta) => {
-		const target = wanted ? 1 : 0;
-		if (rise === target) return;
-		const step = delta * 3.2;
-		rise = rise < target ? Math.min(target, rise + step) : Math.max(target, rise - step);
-	});
+	useTask(
+		(delta) => {
+			const target = wanted ? 1 : 0;
+			if (rise === target) return;
+			const step = delta * 3.2;
+			rise = rise < target ? Math.min(target, rise + step) : Math.max(target, rise - step);
+		},
+		{ running: () => rise !== (wanted ? 1 : 0) }
+	);
 
 	// Ease-out-back: the diorama overshoots slightly then settles, which reads as
 	// "growing" rather than "sliding".

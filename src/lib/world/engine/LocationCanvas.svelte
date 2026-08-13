@@ -1,7 +1,7 @@
 <script lang="ts">
 	/** Dynamic-import boundary for the location scene — see `WorldCanvas.svelte`. */
 	import { Canvas } from '@threlte/core';
-	import { ACESFilmicToneMapping, PCFSoftShadowMap } from 'three';
+	import { ACESFilmicToneMapping, PCFSoftShadowMap, WebGLRenderer } from 'three';
 	import type { QualitySettings } from '../quality';
 	import type { ScenePart, WorldNode } from '../types';
 	import LocationScene from './LocationScene.svelte';
@@ -30,6 +30,13 @@
 </script>
 
 <Canvas
+	createRenderer={(canvas) =>
+		new WebGLRenderer({
+			canvas,
+			powerPreference: 'high-performance',
+			antialias: quality.antialias,
+			alpha: true
+		})}
 	toneMapping={ACESFilmicToneMapping}
 	shadows={quality.shadows ? PCFSoftShadowMap : false}
 	dpr={Math.min(typeof window === 'undefined' ? 1 : window.devicePixelRatio, quality.pixelRatio)}

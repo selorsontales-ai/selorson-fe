@@ -30,27 +30,26 @@
 	let xray = $state(false);
 
 	onMount(async () => {
-		quality = resolveQuality(new URLSearchParams(location.search));
+		const resolvedQuality = resolveQuality(new URLSearchParams(location.search));
+		quality = resolvedQuality;
+		const canvasPromise =
+			resolvedQuality.tier !== 'none'
+				? import('$lib/world/engine/LocationCanvas.svelte')
+						.then((module) => module.default)
+						.catch(() => null)
+				: Promise.resolve(null);
 
 		try {
-			detail = await fetchLocation(slug);
+			const [loadedDetail, canvas] = await Promise.all([fetchLocation(slug), canvasPromise]);
+			detail = loadedDetail;
+			CanvasComponent = canvas;
+			// Fire and forget: failing to earn a badge must not block the scene.
+			void markVisited(loadedDetail.place.id);
 		} catch {
 			notFound = true;
+		} finally {
 			loading = false;
-			return;
 		}
-
-		// Fire and forget: failing to earn a badge must not block the scene.
-		markVisited(detail.place.id);
-
-		if (quality.tier !== 'none') {
-			try {
-				CanvasComponent = (await import('$lib/world/engine/LocationCanvas.svelte')).default;
-			} catch {
-				CanvasComponent = null;
-			}
-		}
-		loading = false;
 	});
 
 	function toggleDetach(id: string) {

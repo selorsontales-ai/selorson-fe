@@ -28,6 +28,10 @@ android/.idea/
 android/build/
 android/app/build/
 android/app/src/main/assets/public/
+android/app/src/*/assets/
+
+# AI memory cache
+.codebase-memory/
 
 # Desktop updater — generated config and signing material
 src-tauri/updater.release.conf.json

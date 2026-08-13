@@ -132,6 +132,7 @@
 
 	/** Live offset per part, eased toward its target every frame. */
 	let progress = new Map<string, number>();
+	let partsMoving = $state(false);
 
 	function targetFor(part: DioramaPart): number {
 		return Math.max(explode, detached.includes(part.id) ? 1 : 0);
@@ -142,21 +143,31 @@
 		return override ? new Vector3(override[0], override[1], override[2]) : part.dir;
 	}
 
-	useTask((delta) => {
-		if (parts.length === 0) return;
-		const step = delta * 4;
-		for (const part of parts) {
-			const target = targetFor(part);
-			const current = progress.get(part.id) ?? 0;
-			const next =
-				current < target ? Math.min(target, current + step) : Math.max(target, current - step);
-			if (next === current && current === target) continue;
-			progress.set(part.id, next);
-
-			const dir = directionFor(part);
-			part.group.position.set(dir.x * next, dir.y * next, dir.z * next);
-		}
+	$effect(() => {
+		for (const part of parts) targetFor(part);
+		partsMoving = parts.length > 0;
 	});
+
+	useTask(
+		(delta) => {
+			const step = delta * 4;
+			let moving = false;
+			for (const part of parts) {
+				const target = targetFor(part);
+				const current = progress.get(part.id) ?? 0;
+				const next =
+					current < target ? Math.min(target, current + step) : Math.max(target, current - step);
+				if (next !== current) {
+					progress.set(part.id, next);
+					const dir = directionFor(part);
+					part.group.position.set(dir.x * next, dir.y * next, dir.z * next);
+				}
+				if (next !== target) moving = true;
+			}
+			partsMoving = moving;
+		},
+		{ running: () => partsMoving }
+	);
 
 	/**
 	 * X-ray and selection both restyle the same materials, so they are applied

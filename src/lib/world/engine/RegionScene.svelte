@@ -92,15 +92,18 @@
 		flyTarget = new Vector3(p.x + 3.5, p.y + 5, p.z + 6.5);
 	});
 
-	useTask((delta) => {
-		if (!camera || !flyTarget) return;
-		const t = 1 - Math.pow(0.0015, delta);
-		camera.position.lerp(flyTarget, t);
-		if (camera.position.distanceTo(flyTarget) < 0.05) {
-			camera.position.copy(flyTarget);
-			flyTarget = null;
-		}
-	});
+	useTask(
+		(delta) => {
+			if (!camera || !flyTarget) return;
+			const t = 1 - Math.pow(0.0015, delta);
+			camera.position.lerp(flyTarget, t);
+			if (camera.position.distanceTo(flyTarget) < 0.05) {
+				camera.position.copy(flyTarget);
+				flyTarget = null;
+			}
+		},
+		{ running: () => !!camera && !!flyTarget }
+	);
 
 	let groundColor = $derived(region.palette?.[0] ?? (hasOutline ? '#3f5f4a' : '#243244'));
 </script>

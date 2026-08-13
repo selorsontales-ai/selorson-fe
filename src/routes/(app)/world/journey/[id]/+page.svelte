@@ -32,24 +32,27 @@
 	let lockedCount = $derived(journey?.stops.filter((s) => s.locked).length ?? 0);
 
 	onMount(async () => {
-		quality = resolveQuality(new URLSearchParams(location.search));
+		const resolvedQuality = resolveQuality(new URLSearchParams(location.search));
+		quality = resolvedQuality;
+		const canvasPromise =
+			resolvedQuality.tier !== 'none'
+				? import('$lib/world/engine/JourneyCanvas.svelte')
+						.then((module) => module.default)
+						.catch(() => null)
+				: Promise.resolve(null);
 
 		try {
-			journey = await fetchJourney(characterId);
+			const [loadedJourney, canvas] = await Promise.all([
+				fetchJourney(characterId),
+				canvasPromise
+			]);
+			journey = loadedJourney;
+			if (loadedJourney.stops.some((stop) => !stop.locked)) CanvasComponent = canvas;
 		} catch {
 			notFound = true;
+		} finally {
 			loading = false;
-			return;
 		}
-
-		if (quality.tier !== 'none' && unlocked.length > 0) {
-			try {
-				CanvasComponent = (await import('$lib/world/engine/JourneyCanvas.svelte')).default;
-			} catch {
-				CanvasComponent = null;
-			}
-		}
-		loading = false;
 	});
 
 	/** Auto-advance stops one at a time; stops itself at the end of the road. */

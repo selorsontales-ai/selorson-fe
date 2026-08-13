@@ -99,15 +99,24 @@
 	/** Smoothed travel, so scrubbing the timeline glides rather than jumps. */
 	let travelled = $state(0);
 
-	useTask((delta) => {
-		const max = Math.max(waypoints.length - 1, 0);
-		const target = Math.max(0, Math.min(position, max));
-		if (Math.abs(travelled - target) < 0.001) {
-			travelled = target;
-			return;
+	useTask(
+		(delta) => {
+			const max = Math.max(waypoints.length - 1, 0);
+			const target = Math.max(0, Math.min(position, max));
+			if (Math.abs(travelled - target) < 0.001) {
+				travelled = target;
+				return;
+			}
+			travelled += (target - travelled) * Math.min(1, delta * 4);
+		},
+		{
+			running: () => {
+				const max = Math.max(waypoints.length - 1, 0);
+				const target = Math.max(0, Math.min(position, max));
+				return Math.abs(travelled - target) >= 0.001;
+			}
 		}
-		travelled += (target - travelled) * Math.min(1, delta * 4);
-	});
+	);
 
 	let avatarPosition = $derived.by(() => {
 		if (waypoints.length === 0) return new Vector3(0, GLOBE_RADIUS + 0.2, 0);
@@ -129,20 +138,33 @@
 	// ── camera ──
 	let camera = $state<PerspectiveCamera | undefined>();
 	let globeGroup = $state<Group | undefined>();
+	let cameraMoving = $state(true);
 	const FOLLOW_DISTANCE = GLOBE_RADIUS * 2.6;
 
-	useTask((delta) => {
-		if (!camera || waypoints.length === 0) return;
-		// The path rides inside the globe frame, so the follow target has to be
-		// read through it even though the globe is not spinning here.
-		const local = avatarPosition.clone();
-		if (globeGroup) {
-			globeGroup.updateMatrixWorld();
-			local.applyMatrix4(globeGroup.matrixWorld);
-		}
-		const want = local.normalize().multiplyScalar(FOLLOW_DISTANCE);
-		camera.position.lerp(want, Math.min(1, delta * 1.6));
+	$effect(() => {
+		avatarPosition;
+		cameraMoving = waypoints.length > 0;
 	});
+
+	useTask(
+		(delta) => {
+			if (!camera || waypoints.length === 0) return;
+			// The path rides inside the globe frame, so the follow target has to be
+			// read through it even though the globe is not spinning here.
+			const local = avatarPosition.clone();
+			if (globeGroup) {
+				globeGroup.updateMatrixWorld();
+				local.applyMatrix4(globeGroup.matrixWorld);
+			}
+			const want = local.normalize().multiplyScalar(FOLLOW_DISTANCE);
+			camera.position.lerp(want, Math.min(1, delta * 1.6));
+			if (camera.position.distanceTo(want) < 0.02) {
+				camera.position.copy(want);
+				cameraMoving = false;
+			}
+		},
+		{ running: () => cameraMoving && !!camera && waypoints.length > 0 }
+	);
 
 	let currentIndex = $derived(Math.round(travelled));
 
