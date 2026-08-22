@@ -23,8 +23,12 @@ async function load(url: string): Promise<Group | null> {
 		const loader = new GLTFLoader();
 		// Draco-compressed meshes are the norm for web glTF; the decoder itself
 		// is only fetched by the loader if a model actually uses it.
+		//
+		// Served from `static/draco/` rather than gstatic.com: the packaged
+		// desktop app is built to work with no network, and a decoder behind a
+		// CDN would leave every Draco-compressed model unopenable offline.
 		const draco = new DRACOLoader();
-		draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+		draco.setDecoderPath('/draco/');
 		loader.setDRACOLoader(draco);
 
 		const gltf = await loader.loadAsync(url);
