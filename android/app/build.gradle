@@ -4,6 +4,13 @@ def releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
 def releaseKeystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
 def releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
 def releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+// Resolved before the android block, not inline in it. Groovy reads
+// `versionCode (expr).toInteger()` as `versionCode(expr).toInteger()`: the
+// parentheses become the argument list, the String reaches versionCode, and
+// the sync fails on a value Gradle cannot use.
+def releaseVersionCode = Integer.parseInt(System.getenv("ANDROID_VERSION_CODE") ?: "1")
+def releaseVersionName = System.getenv("ANDROID_VERSION_NAME") ?: "1.0.0"
+
 def hasReleaseSigning = [
     releaseKeystorePath,
     releaseKeystorePassword,
@@ -18,8 +25,8 @@ android {
         applicationId "com.selorson.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode (System.getenv("ANDROID_VERSION_CODE") ?: "1").toInteger()
-        versionName System.getenv("ANDROID_VERSION_NAME") ?: "1.0.0"
+        versionCode releaseVersionCode
+        versionName releaseVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

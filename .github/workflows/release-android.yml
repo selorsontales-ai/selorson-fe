@@ -86,12 +86,15 @@ jobs:
           # A signed APK, not an App Bundle: these builds are installed directly
           # on the device they are meant for. An .aab cannot be installed — it is
           # an upload format for Google Play, which neither audience ships to.
+          # APK output nests flavor and build type as separate directories
+          # (apk/admin/release), unlike the bundle task's single adminRelease
+          # folder. Verified against a local assembleAdminDebug.
           if [ "$audience" = "admin" ]; then
             task="assembleAdminRelease"
-            output="android/app/build/outputs/apk/adminRelease/app-admin-release.apk"
+            output="android/app/build/outputs/apk/admin/release/app-admin-release.apk"
           else
             task="assembleUserRelease"
-            output="android/app/build/outputs/apk/userRelease/app-user-release.apk"
+            output="android/app/build/outputs/apk/user/release/app-user-release.apk"
           fi
 
           echo "audience=$audience" >> "$GITHUB_OUTPUT"
