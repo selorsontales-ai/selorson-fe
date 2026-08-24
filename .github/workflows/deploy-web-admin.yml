@@ -69,6 +69,23 @@ jobs:
     env:
       ADMIN_PROJECT_NAME: ${{ vars.CLOUDFLARE_ADMIN_PROJECT_NAME }}
     steps:
+      # Same reason as the public deploy: wrangler bundles _worker.js here and
+      # that bundle resolves bare specifiers from node_modules. --ignore-scripts
+      # installs the dependencies without executing any project code on the
+      # runner that holds the Cloudflare credentials.
+      - name: Checkout dependency manifests
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies without running project code
+        run: npm ci --ignore-scripts
+
       - name: Download verified web-admin artifact
         uses: actions/download-artifact@v4
         with:

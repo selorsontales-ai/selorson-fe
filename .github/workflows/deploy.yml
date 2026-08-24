@@ -68,6 +68,26 @@ jobs:
     runs-on: ubuntu-latest
     environment: web-user-production
     steps:
+      # wrangler bundles _worker.js on this runner, and that bundle pulls in
+      # @sveltejs/kit/internal, devalue, clsx and set-cookie-parser by bare
+      # specifier. Without node_modules here the bundle fails after every file
+      # has already uploaded. --ignore-scripts keeps the promise this split
+      # exists for: dependencies are placed on disk, no project code runs on
+      # the runner that holds the Cloudflare credentials.
+      - name: Checkout dependency manifests
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies without running project code
+        run: npm ci --ignore-scripts
+
       - name: Download verified web-user artifact
         uses: actions/download-artifact@v4
         with:
