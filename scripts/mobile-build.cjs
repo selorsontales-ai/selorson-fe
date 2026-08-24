@@ -2,6 +2,8 @@
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
+const { prepareFlavorRoutes } = require("./flavor-routes.cjs");
+const { verifyFlavorBundle } = require("./verify-flavor-bundle.cjs");
 
 const ROOT = path.join(__dirname, "..");
 const svelteKitDir = path.join(ROOT, ".svelte-kit");
@@ -12,6 +14,7 @@ if (!["admin", "user"].includes(audience)) {
 }
 
 const appFlavor = `android-${audience}`;
+const routesDir = prepareFlavorRoutes(appFlavor);
 
 if (fs.existsSync(svelteKitDir)) {
 	fs.rmSync(svelteKitDir, { recursive: true, force: true });
@@ -23,6 +26,7 @@ const env = {
 	BUILD_TARGET: "mobile",
 	VITE_BUILD_TARGET: "mobile",
 	VITE_APP_FLAVOR: appFlavor,
+	SELORSON_ROUTES_DIR: routesDir ?? "",
 	PUBLIC_API_BASE:
 		process.env.PUBLIC_API_BASE ??
 		"https://selorson-v3-api.fly.dev/api/v1",
@@ -38,4 +42,5 @@ execSync("npx vite build --mode mobile", {
 	env,
 });
 
+verifyFlavorBundle(appFlavor, path.join(svelteKitDir, "output"));
 console.log(`\n${appFlavor} build successful!\n`);

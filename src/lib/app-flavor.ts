@@ -1,14 +1,16 @@
 import { isDesktop, isMobile } from "$lib/platform";
 
 export type AppFlavor =
-	| "web"
+	| "web-admin"
+	| "web-user"
 	| "desktop-admin"
 	| "desktop-user"
 	| "android-admin"
 	| "android-user";
 
 const validFlavors = new Set<AppFlavor>([
-	"web",
+	"web-admin",
+	"web-user",
 	"desktop-admin",
 	"desktop-user",
 	"android-admin",
@@ -24,9 +26,9 @@ export function resolveAppFlavor(
 	if (explicitFlavor && validFlavors.has(explicitFlavor as AppFlavor)) {
 		return explicitFlavor as AppFlavor;
 	}
-	if (buildTarget === "desktop" || runsInDesktop) return "desktop-admin";
-	if (buildTarget === "mobile" || runsInMobile) return "android-admin";
-	return "web";
+	if (buildTarget === "desktop" || runsInDesktop) return "desktop-user";
+	if (buildTarget === "mobile" || runsInMobile) return "android-user";
+	return "web-user";
 }
 
 export const appFlavor = resolveAppFlavor(
@@ -37,7 +39,7 @@ export const appFlavor = resolveAppFlavor(
 );
 
 export const supportsAdminPanel =
-	appFlavor === "web" ||
+	appFlavor === "web-admin" ||
 	appFlavor === "desktop-admin" ||
 	appFlavor === "android-admin";
 

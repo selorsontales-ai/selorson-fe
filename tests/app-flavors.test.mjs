@@ -1,109 +1,245 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const require = createRequire(import.meta.url);
+const { includesRoute } = require("../scripts/flavor-routes.cjs");
 
 async function source(...parts) {
-	return readFile(join(root, ...parts), "utf8");
+  return readFile(join(root, ...parts), "utf8");
 }
 
 test("local AI tools are gated by the desktop-admin flavor", async () => {
-	const flavor = await source("src", "lib", "app-flavor.ts");
-	const adminLayout = await source(
-		"src",
-		"routes",
-		"(app)",
-		"admin",
-		"+layout.svelte",
-	);
+  const flavor = await source("src", "lib", "app-flavor.ts");
+  const adminLayout = await source(
+    "src",
+    "routes",
+    "(app)",
+    "admin",
+    "+layout.svelte"
+  );
 
-	assert.match(
-		flavor,
-		/supportsLocalAiTools = appFlavor === "desktop-admin"/,
-	);
-	assert.match(adminLayout, /supportsLocalAiTools/);
-	assert.match(adminLayout, /\/admin\/co-writer/);
-	assert.doesNotMatch(
-		flavor,
-		/appFlavor === "desktop-user"[\s\S]*supportsAdminPanel/,
-	);
+  assert.match(flavor, /supportsLocalAiTools = appFlavor === "desktop-admin"/);
+  assert.match(adminLayout, /supportsLocalAiTools/);
+  assert.match(adminLayout, /\/admin\/co-writer/);
+  assert.doesNotMatch(
+    flavor,
+    /appFlavor === "desktop-user"[\s\S]*supportsAdminPanel/
+  );
+});
+
+test("user flavors exclude every admin route at build time", () => {
+  for (const flavor of ["web-user", "desktop-user", "android-user"]) {
+    assert.equal(includesRoute(flavor, "(app)/admin/+page.svelte"), false);
+    assert.equal(includesRoute(flavor, "(app)/stories/+page.svelte"), true);
+  }
+});
+
+test("non-desktop admin flavors exclude local desktop tools", () => {
+  for (const flavor of ["web-admin", "android-admin"]) {
+    assert.equal(includesRoute(flavor, "(app)/admin/+page.svelte"), true);
+    assert.equal(
+      includesRoute(flavor, "(app)/admin/co-writer/+page.svelte"),
+      false
+    );
+    assert.equal(
+      includesRoute(flavor, "(app)/admin/desktop-update/+page.svelte"),
+      false
+    );
+  }
+  assert.equal(
+    includesRoute("desktop-admin", "(app)/admin/co-writer/+page.svelte"),
+    true
+  );
+});
+
+test("public web defaults to the user flavor and has an explicit admin build", async () => {
+  const packageJson = JSON.parse(await source("package.json"));
+  const flavor = await source("src", "lib", "app-flavor.ts");
+
+  assert.equal(packageJson.scripts.build, "npm run build:web:user");
+  assert.match(packageJson.scripts["dev:web:user"], /flavor-dev\.cjs web user/);
+  assert.match(
+    packageJson.scripts["dev:web:admin"],
+    /flavor-dev\.cjs web admin/
+  );
+  assert.match(
+    packageJson.scripts["dev:desktop:user"],
+    /flavor-dev\.cjs desktop user/
+  );
+  assert.match(
+    packageJson.scripts["dev:mobile:user"],
+    /flavor-dev\.cjs android user/
+  );
+  assert.match(packageJson.scripts["build:web:user"], /web-build\.cjs user/);
+  assert.match(packageJson.scripts["build:web:admin"], /web-build\.cjs admin/);
+  assert.match(flavor, /return "web-user"/);
+  assert.match(flavor, /appFlavor === "web-admin"/);
+  assert.doesNotMatch(flavor, /appFlavor === "web"/);
+});
+
+test("flavor dev launches Vite without spawning a Windows cmd shim", async () => {
+  const devScript = await source("scripts", "flavor-dev.cjs");
+
+  assert.match(devScript, /require\.resolve\("vite\/package\.json"\)/);
+  assert.match(devScript, /spawn\(process\.execPath, viteArgs/);
+  assert.doesNotMatch(devScript, /npx\.cmd/);
 });
 
 test("desktop releases use only the dedicated admin tag family", async () => {
-	const workflow = await source(
-		".github",
-		"workflows",
-		"release-desktop-admin.yml",
-	);
+  const workflow = await source(
+    ".github",
+    "workflows",
+    "release-desktop-admin.yml"
+  );
 
-	assert.match(workflow, /- "desktop-admin-v\*"/);
-	assert.doesNotMatch(workflow, /- "v\*"/);
-	assert.doesNotMatch(workflow, /- "desktop-v\*"/);
-	assert.doesNotMatch(workflow, /- "selorson-v\*"/);
-	assert.match(workflow, /DESKTOP_BACKEND_REF/);
-	assert.match(workflow, /shared-user-gate:/);
-	assert.match(workflow, /needs: shared-user-gate/);
-	assert.match(workflow, /npm run build:desktop:user/);
-	assert.match(workflow, /npm run build:mobile:user/);
-	assert.doesNotMatch(workflow, /DESKTOP_ADMIN_UPDATER_ENABLED/);
-	assert.match(workflow, /VITE_DESKTOP_UPDATER_ENABLED: "true"/);
-	assert.match(workflow, /cache: npm/);
-	assert.match(workflow, /uses: actions\/cache@v4/);
-	assert.match(workflow, /frontend-v3\/src-tauri\/target/);
-	assert.match(
-		workflow,
-		/hashFiles\('frontend-v3\/src-tauri\/Cargo\.lock'\)/,
-	);
-	assert.match(workflow, /restore-keys:/);
+  assert.match(workflow, /- "desktop-admin-v\*"/);
+  assert.doesNotMatch(workflow, /- "v\*"/);
+  assert.doesNotMatch(workflow, /- "desktop-v\*"/);
+  assert.doesNotMatch(workflow, /- "selorson-v\*"/);
+  assert.match(workflow, /DESKTOP_BACKEND_REF/);
+  assert.match(workflow, /shared-user-gate:/);
+  assert.match(workflow, /needs: shared-user-gate/);
+  assert.match(workflow, /npm run build:desktop:user/);
+  assert.match(workflow, /npm run build:mobile:user/);
+  assert.doesNotMatch(workflow, /DESKTOP_ADMIN_UPDATER_ENABLED/);
+  assert.match(workflow, /VITE_DESKTOP_UPDATER_ENABLED: "true"/);
+  assert.match(workflow, /cache: npm/);
+  assert.match(workflow, /uses: actions\/cache@v4/);
+  assert.match(workflow, /frontend-v3\/src-tauri\/target/);
+  assert.match(workflow, /hashFiles\('frontend-v3\/src-tauri\/Cargo\.lock'\)/);
+  assert.match(workflow, /restore-keys:/);
+  assert.match(workflow, /npm run build:web:admin/);
+  assert.match(workflow, /npm run build:web:user/);
+  assert.match(workflow, /npm run build:mobile:admin/);
 });
 
 test("public web CI never waits for a native desktop build", async () => {
-	const workflow = await source(".github", "workflows", "check.yml");
+  const workflow = await source(".github", "workflows", "check.yml");
 
-	assert.doesNotMatch(workflow, /^  desktop:/m);
-	assert.doesNotMatch(workflow, /cargo check/);
-	assert.match(workflow, /^  web:/m);
+  assert.doesNotMatch(workflow, /^  desktop:/m);
+  assert.doesNotMatch(workflow, /cargo check/);
+  assert.match(workflow, /^  web:/m);
 });
 
 test("desktop-user has a separate shell without admin bridge resources", async () => {
-	const packageJson = JSON.parse(await source("package.json"));
-	const config = JSON.parse(
-		await source("src-tauri", "tauri.user.conf.json"),
-	);
-	const rust = await source("src-tauri", "src", "lib.rs");
-	const buildScript = await source("src-tauri", "build.rs");
-	const desktopBuild = await source("scripts", "desktop-build.cjs");
+  const packageJson = JSON.parse(await source("package.json"));
+  const config = JSON.parse(await source("src-tauri", "tauri.user.conf.json"));
+  const rust = await source("src-tauri", "src", "lib.rs");
+  const buildScript = await source("src-tauri", "build.rs");
+  const desktopBuild = await source("scripts", "desktop-build.cjs");
 
-	assert.match(packageJson.scripts["build:desktop:user"], /desktop-build\.cjs user/);
-	assert.match(packageJson.scripts["tauri:build:user"], /tauri\.user\.conf\.json/);
-	assert.equal(config.identifier, "com.selorson.desktop.user");
-	assert.deepEqual(config.bundle.resources, []);
-	assert.match(buildScript, /SELORSON_APP_FLAVOR/);
-	assert.match(desktopBuild, /https:\/\/selorson-v3-api\.fly\.dev\/api\/v1/);
-	assert.match(desktopBuild, /audience === "user"/);
-	assert.match(rust, /cfg\(selorson_desktop_user\)/);
-	assert.match(rust, /fn run_user\(\)/);
-	assert.match(rust, /fn run_admin\(\)/);
+  assert.match(
+    packageJson.scripts["build:desktop:user"],
+    /desktop-build\.cjs user/
+  );
+  assert.match(
+    packageJson.scripts["tauri:build:user"],
+    /tauri\.user\.conf\.json/
+  );
+  assert.equal(config.identifier, "com.selorson.desktop.user");
+  assert.equal(config.productName, "Selorson");
+  assert.deepEqual(config.bundle.resources, []);
+  assert.match(buildScript, /SELORSON_APP_FLAVOR/);
+  assert.match(desktopBuild, /https:\/\/selorson-v3-api\.fly\.dev\/api\/v1/);
+  assert.match(desktopBuild, /audience === "user"/);
+  assert.match(rust, /cfg\(selorson_desktop_user\)/);
+  assert.match(rust, /fn run_user\(\)/);
+  assert.match(rust, /fn run_admin\(\)/);
+});
+
+test("desktop-admin has a visibly separate installer identity", async () => {
+  const config = JSON.parse(await source("src-tauri", "tauri.conf.json"));
+  assert.equal(config.productName, "Selorson Admin");
+  assert.equal(config.app.windows[0].title, "Selorson Admin");
 });
 
 test("Android admin and user builds have separate flavors and assets", async () => {
-	const packageJson = JSON.parse(await source("package.json"));
-	const gradle = await source("android", "app", "build.gradle");
-	const syncScript = await source("scripts", "android-sync-flavor.cjs");
+  const packageJson = JSON.parse(await source("package.json"));
+  const gradle = await source("android", "app", "build.gradle");
+  const syncScript = await source("scripts", "android-sync-flavor.cjs");
 
-	assert.equal(
-		packageJson.scripts["android:sync:admin"],
-		"node scripts/android-sync-flavor.cjs admin",
-	);
-	assert.equal(
-		packageJson.scripts["android:sync:user"],
-		"node scripts/android-sync-flavor.cjs user",
-	);
-	assert.match(gradle, /productFlavors/);
-	assert.match(gradle, /applicationId "com\.selorson\.app"/);
-	assert.match(gradle, /applicationId "com\.selorson\.android\.user"/);
-	assert.match(syncScript, /src["'],\s*audience,\s*["']assets/s);
+  assert.equal(
+    packageJson.scripts["android:sync:admin"],
+    "node scripts/android-sync-flavor.cjs admin"
+  );
+  assert.equal(
+    packageJson.scripts["android:sync:user"],
+    "node scripts/android-sync-flavor.cjs user"
+  );
+  assert.match(gradle, /productFlavors/);
+  assert.match(gradle, /applicationId "com\.selorson\.app"/);
+  assert.match(gradle, /applicationId "com\.selorson\.android\.user"/);
+  assert.match(syncScript, /src["'],\s*audience,\s*["']assets/s);
+  assert.match(gradle, /ANDROID_VERSION_CODE/);
+  assert.match(gradle, /ANDROID_KEYSTORE_PATH/);
+});
+
+test("CI builds every platform-audience boundary without delaying public deploy", async () => {
+  const boundaries = await source(
+    ".github",
+    "workflows",
+    "flavor-boundaries.yml"
+  );
+  const deploy = await source(".github", "workflows", "deploy.yml");
+  const verifier = await source("scripts", "verify-flavor-bundle.cjs");
+
+  for (const command of [
+    "build:web:user",
+    "build:web:admin",
+    "build:desktop:user",
+    "build:desktop:admin",
+    "build:mobile:user",
+    "build:mobile:admin",
+  ]) {
+    assert.match(boundaries, new RegExp(`npm run ${command}`));
+  }
+  assert.match(deploy, /npm run build:web:user/);
+  assert.doesNotMatch(deploy, /npm run build:web:admin/);
+  assert.match(deploy, /^  build:/m);
+  assert.match(deploy, /^  deploy:/m);
+  assert.match(deploy, /needs: build/);
+  assert.match(deploy, /actions\/upload-artifact@v4/);
+  assert.match(deploy, /include-hidden-files: true/);
+  assert.match(verifier, /flavor !== "desktop-admin"/);
+});
+
+test("release channels and credentials are isolated by audience", async () => {
+  const webAdmin = await source(".github", "workflows", "deploy-web-admin.yml");
+  const desktopUser = await source(
+    ".github",
+    "workflows",
+    "release-desktop-user.yml"
+  );
+  const desktopAdmin = await source(
+    ".github",
+    "workflows",
+    "release-desktop-admin.yml"
+  );
+  const android = await source(".github", "workflows", "release-android.yml");
+
+  assert.match(webAdmin, /CLOUDFLARE_ADMIN_PROJECT_NAME/);
+  assert.match(webAdmin, /npm run build:web:admin/);
+  assert.match(webAdmin, /^  build:/m);
+  assert.match(webAdmin, /^  deploy:/m);
+  assert.match(webAdmin, /needs: build/);
+  assert.match(webAdmin, /include-hidden-files: true/);
+  assert.match(desktopUser, /- "desktop-user-v\*"/);
+  assert.match(desktopUser, /\^\[0-9a-fA-F\]\{40\}\$/);
+  assert.match(desktopUser, /^  publish:/m);
+  assert.match(desktopUser, /needs: build/);
+  assert.match(desktopAdmin, /^  publish:/m);
+  assert.match(desktopAdmin, /needs: windows-installer/);
+  assert.match(android, /- "android-admin-v\*"/);
+  assert.match(android, /- "android-user-v\*"/);
+  assert.match(android, /ANDROID_ADMIN_KEYSTORE_BASE64/);
+  assert.match(android, /ANDROID_USER_KEYSTORE_BASE64/);
+  assert.match(android, /major \* 1000000/);
+  assert.doesNotMatch(android, /github\.run_number/);
+  assert.match(android, /^  publish:/m);
+  assert.match(android, /needs: bundle/);
 });
