@@ -54,10 +54,13 @@ export async function disable2FA(code: string) {
 	} finally { isLoading2FA = false; }
 }
 
-export async function generateBackupCodes() {
+export async function generateBackupCodes(code: string) {
 	isLoading2FA = true;
 	try {
-		const res = await api<any>('/auth/2fa/backup-codes', { method: 'POST' });
+		const res = await api<any>('/auth/2fa/backup-codes', {
+			method: 'POST',
+			body: { code }
+		});
 		if (res.success) backupCodes = res.data.backup_codes;
 		return res;
 	} finally { isLoading2FA = false; }

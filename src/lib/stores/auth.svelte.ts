@@ -202,7 +202,20 @@ export function initAuth() {
 	const token = loadToken();
 	if (token) {
 		state.token = token;
-		fetchMe();
+		void fetchMe();
+	} else if (typeof window !== 'undefined') {
+		state.loading = true;
+		void import('../api')
+			.then(async ({ restoreSession }) => {
+				if (await restoreSession()) {
+					await fetchMe();
+				} else {
+					state.loading = false;
+				}
+			})
+			.catch(() => {
+				state.loading = false;
+			});
 	} else {
 		state.loading = false;
 	}

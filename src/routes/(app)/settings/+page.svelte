@@ -67,6 +67,7 @@
 	let showDeleteConfirm = $state(false);
 	let deletePassword = $state("");
 	let deleteConfirmText = $state("");
+	let deleteTotpCode = $state("");
 
 	async function apiFetch(endpoint: string, options: RequestInit = {}) {
 		const headers: Record<string, string> = {
@@ -195,6 +196,7 @@
 				body: JSON.stringify({
 					password: deletePassword,
 					confirmation: deleteConfirmText,
+					code: deleteTotpCode,
 				}),
 			});
 			if (r.success) {
@@ -389,7 +391,8 @@
 					<div class="tfa-actions">
 						<button
 							class="btn-export"
-							onclick={() => generateBackupCodes()}
+							onclick={() => generateBackupCodes(totpCode)}
+							disabled={is2FALoading() || totpCode.length !== 6}
 							>{m.settings_btn_backup()}</button
 						>
 						<div class="tfa-disable">
@@ -536,6 +539,17 @@
 							>
 						</div></label
 					>
+					{#if getUser()?.two_factor_enabled}
+						<label
+							>{m.settings_placeholder_6_code()}<input
+								type="text"
+								inputmode="numeric"
+								bind:value={deleteTotpCode}
+								maxlength="6"
+								placeholder="123456"
+							/></label
+						>
+					{/if}
 					<label
 						>{m.settings_delete_confirm_label()}<input
 							bind:value={deleteConfirmText}
@@ -545,7 +559,9 @@
 					<div class="delete-actions">
 						<button
 							class="btn-danger"
-							disabled={deleteConfirmText !== "DELETE"}
+							disabled={deleteConfirmText !== "DELETE" ||
+								(getUser()?.has_password && deletePassword.length === 0) ||
+								(getUser()?.two_factor_enabled && deleteTotpCode.length !== 6)}
 							onclick={deleteAccount}
 							>{m.settings_btn_delete_forever()}</button
 						>
