@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   shared-user-gate:
-    name: Validate shared code and public-user bundles
+    name: Validate shared code and all sibling bundles
     runs-on: ubuntu-latest
     steps:
       - name: Checkout frontend source
@@ -39,6 +39,7 @@ jobs:
         run: |
           npm run check
           npm run test:runtime
+          npm run artifacts:test
         env:
           PUBLIC_API_BASE: http://localhost:8001/api/v1
           PUBLIC_APP_NAME: Selorson
@@ -47,9 +48,16 @@ jobs:
 
       - name: Build desktop-user bundle
         run: npm run build:desktop:user
+      - name: Build web-user bundle
+        run: npm run build:web:user
+
+      - name: Build web-admin bundle
+        run: npm run build:web:admin
 
       - name: Build android-user bundle
         run: npm run build:mobile:user
+      - name: Build android-admin bundle
+        run: npm run build:mobile:admin
 
   windows-installer:
     needs: shared-user-gate
@@ -64,6 +72,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: frontend-v3
+          persist-credentials: false
 
       - name: Resolve pinned backend revision
         id: backend
@@ -76,8 +85,8 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($ref)) {
             $ref = $env:DEFAULT_BACKEND_REF
           }
-          if ([string]::IsNullOrWhiteSpace($ref)) {
-            throw "Set repository variable DESKTOP_BACKEND_REF to an exact backend commit SHA."
+          if ($ref -notmatch '^[0-9a-fA-F]{40}$') {
+            throw "backend_ref/DESKTOP_BACKEND_REF must be an immutable 40-character commit SHA."
           }
           "ref=$ref" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
@@ -88,6 +97,7 @@ jobs:
           ref: ${{ steps.backend.outputs.ref }}
           path: backend-v3
           token: ${{ secrets.BACKEND_REPO_TOKEN || github.token }}
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -117,6 +127,18 @@ jobs:
 
       - name: Install sidecar dependencies
         run: npm ci --prefix src-tauri/sidecar
+        working-directory: frontend-v3
+
+      # The pinned backend is compiled here, never tested here. Its integration
+      # suite needs a PostgreSQL service and a Windows runner cannot start one,
+      # so `cargo test` on that manifest fails before it reaches an assertion.
+      # The backend repository's own CI gates that SHA against Postgres, and the
+      # installer build below links selorson-backend as a dependency — a pinned
+      # revision that does not compile still fails this job.
+      - name: Test the desktop runtime
+        run: |
+          cargo test --manifest-path src-tauri/Cargo.toml
+          npm run sidecar:test
         working-directory: frontend-v3
 
       - name: Prepare signed updater configuration
@@ -255,35 +277,6 @@ jobs:
           }
           $manifest | ConvertTo-Json -Depth 10 | Out-File latest.json -Encoding utf8
 
-      - name: Publish signed desktop-admin release
-        if: startsWith(github.ref, 'refs/tags/desktop-admin-v')
-        shell: pwsh
-        working-directory: frontend-v3
-        env:
-          GH_TOKEN: ${{ secrets.DESKTOP_RELEASE_TOKEN }}
-          RELEASE_REPOSITORY: ${{ vars.DESKTOP_ADMIN_RELEASE_REPOSITORY }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
-            throw "Set repository secret DESKTOP_RELEASE_TOKEN."
-          }
-          if (Test-Path RELEASE_NOTES.md) {
-            gh release create "${{ github.ref_name }}" `
-              --repo $env:RELEASE_REPOSITORY `
-              --title "Selorson Desktop Admin ${{ steps.release.outputs.version }}" `
-              --notes-file RELEASE_NOTES.md `
-              src-tauri/target/release/bundle/nsis/*-setup.exe `
-              src-tauri/target/release/bundle/nsis/*-setup.exe.sig `
-              latest.json
-          } else {
-            gh release create "${{ github.ref_name }}" `
-              --repo $env:RELEASE_REPOSITORY `
-              --title "Selorson Desktop Admin ${{ steps.release.outputs.version }}" `
-              --notes "Bản cập nhật tự động cho Selorson Desktop Admin." `
-              src-tauri/target/release/bundle/nsis/*-setup.exe `
-              src-tauri/target/release/bundle/nsis/*-setup.exe.sig `
-              latest.json
-          }
-
       - name: Upload Windows installers
         uses: actions/upload-artifact@v4
         with:
@@ -294,3 +287,58 @@ jobs:
             frontend-v3/src-tauri/target/release/bundle/nsis/*-setup.exe
             frontend-v3/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
             frontend-v3/latest.json
+            frontend-v3/RELEASE_NOTES.md
+
+  publish:
+    name: Publish signed desktop-admin artifact
+    if: startsWith(github.ref, 'refs/tags/desktop-admin-v')
+    needs: windows-installer
+    runs-on: windows-latest
+    steps:
+      - name: Download verified build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: selorson-desktop-admin-${{ github.ref_name }}
+          path: installers
+
+      - name: Publish from a clean runner
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.DESKTOP_RELEASE_TOKEN }}
+          RELEASE_REPOSITORY: ${{ vars.DESKTOP_ADMIN_RELEASE_REPOSITORY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
+            throw "Set repository secret DESKTOP_RELEASE_TOKEN."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:RELEASE_REPOSITORY)) {
+            throw "Set repository variable DESKTOP_ADMIN_RELEASE_REPOSITORY."
+          }
+
+          $installer = Get-ChildItem installers -Recurse -Filter *-setup.exe | Select-Object -First 1
+          $manifest = Get-ChildItem installers -Recurse -Filter latest.json | Select-Object -First 1
+          if ($null -eq $installer -or $null -eq $manifest) {
+            throw "Signed installer or latest.json is missing."
+          }
+          $signaturePath = "$($installer.FullName).sig"
+          if (-not (Test-Path $signaturePath)) {
+            throw "Updater signature is missing."
+          }
+          $signature = Get-Item $signaturePath
+          $notes = Get-ChildItem installers -Recurse -Filter RELEASE_NOTES.md | Select-Object -First 1
+
+          $version = "${{ github.ref_name }}" -replace '^desktop-admin-v', ''
+          $arguments = @(
+            "release", "create", "${{ github.ref_name }}",
+            "--repo", $env:RELEASE_REPOSITORY,
+            "--title", "Selorson Desktop Admin $version"
+          )
+          if ($null -ne $notes) {
+            $arguments += @("--notes-file", $notes.FullName)
+          } else {
+            $arguments += @("--notes", "Automatic update for Selorson Desktop Admin.")
+          }
+          $arguments += @($installer.FullName, $signature.FullName, $manifest.FullName)
+          & gh @arguments
+          if ($LASTEXITCODE -ne 0) {
+            throw "gh release create failed with exit code $LASTEXITCODE."
+          }

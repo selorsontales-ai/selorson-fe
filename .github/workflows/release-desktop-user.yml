@@ -1,0 +1,190 @@
+name: Desktop User Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend_ref:
+        description: Exact 40-character backend commit SHA
+        required: false
+        type: string
+  push:
+    tags:
+      - "desktop-user-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-desktop-user-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build isolated desktop-user installer
+    runs-on: windows-latest
+    timeout-minutes: 75
+    env:
+      CARGO_BUILD_JOBS: "1"
+      SELORSON_APP_FLAVOR: desktop-user
+      VITE_APP_FLAVOR: desktop-user
+      VITE_DESKTOP_UPDATER_ENABLED: "false"
+      PUBLIC_API_BASE: https://selorson-v3-api.fly.dev/api/v1
+      PUBLIC_APP_NAME: Selorson
+      PUBLIC_APP_VERSION: 3.0.0
+      PUBLIC_WS_URL: wss://selorson-v3-api.fly.dev/ws
+    steps:
+      - name: Checkout frontend source without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          path: frontend-v3
+          persist-credentials: false
+
+      - name: Resolve immutable backend revision
+        id: backend
+        shell: pwsh
+        env:
+          INPUT_BACKEND_REF: ${{ inputs.backend_ref }}
+          DEFAULT_BACKEND_REF: ${{ vars.DESKTOP_BACKEND_REF }}
+        run: |
+          $ref = $env:INPUT_BACKEND_REF
+          if ([string]::IsNullOrWhiteSpace($ref)) {
+            $ref = $env:DEFAULT_BACKEND_REF
+          }
+          if ($ref -notmatch '^[0-9a-fA-F]{40}$') {
+            throw "backend_ref/DESKTOP_BACKEND_REF must be an immutable 40-character commit SHA."
+          }
+          "ref=$ref" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Checkout pinned backend without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          repository: selorsontales-ai/selorson-be
+          ref: ${{ steps.backend.outputs.ref }}
+          path: backend-v3
+          token: ${{ secrets.BACKEND_REPO_TOKEN || github.token }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend-v3/package-lock.json
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and user build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            frontend-v3/src-tauri/target
+          key: ${{ runner.os }}-desktop-user-${{ hashFiles('frontend-v3/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-desktop-user-
+            ${{ runner.os }}-tauri-
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend-v3
+
+      - name: Test desktop-user target
+        working-directory: frontend-v3
+        run: |
+          npm run test:runtime
+          cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Apply tagged version to the user config
+        id: release
+        if: startsWith(github.ref, 'refs/tags/desktop-user-v')
+        shell: pwsh
+        working-directory: frontend-v3
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^desktop-user-v(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$') {
+            throw "Desktop user tag must match desktop-user-vX.Y.Z."
+          }
+          $version = $Matches.version
+
+          $config = Get-Content src-tauri/tauri.user.conf.json -Raw | ConvertFrom-Json
+          $config | Add-Member -NotePropertyName version -NotePropertyValue $version -Force
+          $config | ConvertTo-Json -Depth 20 | Out-File src-tauri/tauri.user.release.conf.json -Encoding utf8
+
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $package.version = $version
+          $package | ConvertTo-Json -Depth 20 | Out-File package.json -Encoding utf8
+
+          $cargo = Get-Content src-tauri/Cargo.toml -Raw
+          $cargo = $cargo -replace '(?m)^version = "[^"]+"', "version = `"$version`""
+          $cargo | Out-File src-tauri/Cargo.toml -Encoding utf8
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Build manual user installer gate
+        if: github.event_name == 'workflow_dispatch'
+        run: npm run tauri:build:user
+        working-directory: frontend-v3
+
+      - name: Build tagged user installer
+        if: startsWith(github.ref, 'refs/tags/desktop-user-v')
+        run: npm run tauri -- build --config src-tauri/tauri.user.release.conf.json
+        working-directory: frontend-v3
+
+      - name: Smoke-test packaged user app startup
+        shell: pwsh
+        working-directory: frontend-v3
+        run: |
+          $app = Get-Item src-tauri/target/release/app.exe
+          $process = Start-Process -FilePath $app.FullName -PassThru
+          Start-Sleep -Seconds 15
+          if ($process.HasExited) {
+            throw "Packaged desktop-user app exited during startup smoke test."
+          }
+          Stop-Process -Id $process.Id -Force
+
+      - name: Upload desktop-user installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: selorson-desktop-user-${{ github.ref_name }}
+          if-no-files-found: error
+          path: |
+            frontend-v3/src-tauri/target/release/bundle/msi/*.msi
+            frontend-v3/src-tauri/target/release/bundle/nsis/*-setup.exe
+
+  publish:
+    name: Publish tagged desktop-user artifact
+    if: startsWith(github.ref, 'refs/tags/desktop-user-v')
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: selorson-desktop-user-${{ github.ref_name }}
+          path: installers
+
+      - name: Publish release without executing project code
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^desktop-user-v', ''
+          $msi = Get-ChildItem installers -Recurse -Filter *.msi
+          $nsis = Get-ChildItem installers -Recurse -Filter *-setup.exe
+          if ($msi.Count -eq 0 -or $nsis.Count -eq 0) {
+            throw "MSI or NSIS desktop-user installer is missing."
+          }
+
+          $arguments = @(
+            "release", "create", "${{ github.ref_name }}",
+            "--title", "Selorson Desktop User $version",
+            "--notes", "Desktop-user installer without the admin bridge, embedded backend, or local AI runner."
+          )
+          $arguments += @($msi.FullName) + @($nsis.FullName)
+          & gh @arguments
+          if ($LASTEXITCODE -ne 0) {
+            throw "gh release create failed with exit code $LASTEXITCODE."
+          }

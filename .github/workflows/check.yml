@@ -55,8 +55,8 @@ jobs:
       - name: Run runtime target regression tests
         run: npm run test:runtime
 
-      - name: Build the web bundle
-        run: npm run build:web
+      - name: Build the public web-user bundle
+        run: npm run build:web:user
 
       # Desktop-only code must never reach the public bundle. The runner
       # drives a browser and holds a bridge token; shipping any of it to the

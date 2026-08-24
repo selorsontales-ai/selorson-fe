@@ -1,0 +1,211 @@
+name: Android Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      audience:
+        description: Android audience to package
+        required: true
+        type: choice
+        options: [admin, user]
+      version:
+        description: SemVer without a leading v
+        required: true
+        type: string
+      version_code:
+        description: Monotonically increasing Play version code
+        required: true
+        type: string
+  push:
+    tags:
+      - "android-admin-v*"
+      - "android-user-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-android-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    name: Build signed Android AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      audience: ${{ steps.release.outputs.audience }}
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Resolve release channel and version
+        id: release
+        shell: bash
+        env:
+          INPUT_AUDIENCE: ${{ inputs.audience }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${{ github.ref_name }}"
+            if [[ ! "$tag" =~ ^android-(admin|user)-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+              echo "::error::Tag must match android-admin-vX.Y.Z or android-user-vX.Y.Z."
+              exit 1
+            fi
+            audience="${BASH_REMATCH[1]}"
+            version="${BASH_REMATCH[2]}"
+            IFS='.' read -r major minor patch <<< "$version"
+            if [ "$minor" -gt 999 ] || [ "$patch" -gt 999 ]; then
+              echo "::error::Tagged minor and patch components must each be <= 999."
+              exit 1
+            fi
+            version_code=$((10#$major * 1000000 + 10#$minor * 1000 + 10#$patch))
+          else
+            audience="$INPUT_AUDIENCE"
+            version="$INPUT_VERSION"
+            version_code="$INPUT_VERSION_CODE"
+            tag="android-${audience}-v${version}"
+          fi
+
+          if [[ ! "$audience" =~ ^(admin|user)$ ]]; then
+            echo "::error::Audience must be admin or user."
+            exit 1
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Version must be valid SemVer."
+            exit 1
+          fi
+          if [[ ! "$version_code" =~ ^[1-9][0-9]*$ ]] || [ "$version_code" -gt 2100000000 ]; then
+            echo "::error::version_code must be a positive Android version code."
+            exit 1
+          fi
+
+          # A signed APK, not an App Bundle: these builds are installed directly
+          # on the device they are meant for. An .aab cannot be installed — it is
+          # an upload format for Google Play, which neither audience ships to.
+          if [ "$audience" = "admin" ]; then
+            task="assembleAdminRelease"
+            output="android/app/build/outputs/apk/adminRelease/app-admin-release.apk"
+          else
+            task="assembleUserRelease"
+            output="android/app/build/outputs/apk/userRelease/app-user-release.apk"
+          fi
+
+          echo "audience=$audience" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "task=$task" >> "$GITHUB_OUTPUT"
+          echo "output=$output" >> "$GITHUB_OUTPUT"
+
+      - name: Select isolated signing identity
+        shell: bash
+        env:
+          ADMIN_STORE: ${{ secrets.ANDROID_ADMIN_KEYSTORE_BASE64 }}
+          ADMIN_STORE_PASSWORD: ${{ secrets.ANDROID_ADMIN_KEYSTORE_PASSWORD }}
+          ADMIN_KEY_ALIAS: ${{ secrets.ANDROID_ADMIN_KEY_ALIAS }}
+          ADMIN_KEY_PASSWORD: ${{ secrets.ANDROID_ADMIN_KEY_PASSWORD }}
+          USER_STORE: ${{ secrets.ANDROID_USER_KEYSTORE_BASE64 }}
+          USER_STORE_PASSWORD: ${{ secrets.ANDROID_USER_KEYSTORE_PASSWORD }}
+          USER_KEY_ALIAS: ${{ secrets.ANDROID_USER_KEY_ALIAS }}
+          USER_KEY_PASSWORD: ${{ secrets.ANDROID_USER_KEY_PASSWORD }}
+        run: |
+          if [ "${{ steps.release.outputs.audience }}" = "admin" ]; then
+            store="$ADMIN_STORE"
+            store_password="$ADMIN_STORE_PASSWORD"
+            key_alias="$ADMIN_KEY_ALIAS"
+            key_password="$ADMIN_KEY_PASSWORD"
+          else
+            store="$USER_STORE"
+            store_password="$USER_STORE_PASSWORD"
+            key_alias="$USER_KEY_ALIAS"
+            key_password="$USER_KEY_PASSWORD"
+          fi
+
+          if [ -z "$store" ] || [ -z "$store_password" ] || [ -z "$key_alias" ] || [ -z "$key_password" ]; then
+            echo "::error::The selected audience's four Android signing secrets are required."
+            exit 1
+          fi
+
+          keystore="$RUNNER_TEMP/selorson-${{ steps.release.outputs.audience }}.jks"
+          printf '%s' "$store" | base64 --decode > "$keystore"
+          if [ ! -s "$keystore" ]; then
+            echo "::error::Decoded Android keystore is empty."
+            exit 1
+          fi
+
+          echo "ANDROID_KEYSTORE_PATH=$keystore" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PASSWORD=$store_password" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=$key_alias" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=$key_password" >> "$GITHUB_ENV"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build and sync the selected webview only
+        run: npm run "android:sync:${{ steps.release.outputs.audience }}"
+
+      - name: Build signed release bundle
+        working-directory: android
+        env:
+          ANDROID_VERSION_NAME: ${{ steps.release.outputs.version }}
+          ANDROID_VERSION_CODE: ${{ steps.release.outputs.version_code }}
+        run: ./gradlew --no-daemon ":app:${{ steps.release.outputs.task }}"
+
+      - name: Upload signed APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: selorson-android-${{ steps.release.outputs.audience }}-${{ steps.release.outputs.version }}
+          if-no-files-found: error
+          path: ${{ steps.release.outputs.output }}
+
+  publish:
+    name: Publish tagged Android artifact
+    if: github.event_name == 'push'
+    needs: bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified signed APK
+        uses: actions/download-artifact@v4
+        with:
+          name: selorson-android-${{ needs.bundle.outputs.audience }}-${{ needs.bundle.outputs.version }}
+          path: apk
+
+      - name: Rename the APK to its release identity
+        shell: bash
+        run: |
+          set -e
+          source_apk=$(find apk -name '*.apk' | head -n 1)
+          if [ -z "$source_apk" ]; then
+            echo "::error::No APK was produced."
+            exit 1
+          fi
+          mv "$source_apk" "apk/Selorson-${{ needs.bundle.outputs.audience }}-${{ needs.bundle.outputs.version }}.apk"
+
+      - name: Publish without executing project code
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ needs.bundle.outputs.tag }}" \
+            --title "Selorson Android ${{ needs.bundle.outputs.audience }} ${{ needs.bundle.outputs.version }}" \
+            --notes "Bản Android ${{ needs.bundle.outputs.audience }} đã ký. Tải file .apk và cài trực tiếp lên máy." \
+            apk/*.apk
