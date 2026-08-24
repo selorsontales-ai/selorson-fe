@@ -67,7 +67,12 @@ jobs:
     needs: shared-user-gate
     name: Build signed desktop-admin updater
     runs-on: windows-latest
-    timeout-minutes: 90
+    # 0.1.7 needed 1h30m and was killed at exactly 90 minutes — during the
+    # post-job cache save, after the installer had already been built, signed
+    # and uploaded. Everything real had succeeded and nothing was published.
+    # The release compile alone runs over an hour on a cold cargo cache, so the
+    # ceiling has to sit well clear of it.
+    timeout-minutes: 150
     env:
       CARGO_BUILD_JOBS: "1"
 
