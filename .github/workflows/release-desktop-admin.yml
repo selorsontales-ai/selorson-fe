@@ -144,10 +144,23 @@ jobs:
       # The backend repository's own CI gates that SHA against Postgres, and the
       # installer build below links selorson-backend as a dependency — a pinned
       # revision that does not compile still fails this job.
-      - name: Test the desktop runtime
-        run: |
-          cargo test --manifest-path src-tauri/Cargo.toml
-          npm run sidecar:test
+      # tauri-build validates bundle.resources, which names sidecar-runtime/
+      # node.exe. That file is staged by sidecar:runtime, normally as part of
+      # beforeBuildCommand, so a bare cargo test fails before compiling a line.
+      - name: Stage the sidecar runtime the crate declares
+        run: npm run sidecar:runtime
+        working-directory: frontend-v3
+
+      # One command per step, deliberately. Two commands in a single run block
+      # report only the last exit code: cargo test was failing here for every
+      # release while the step stayed green, so the desktop suite was reported
+      # as passing without ever running.
+      - name: Test the desktop crate
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+        working-directory: frontend-v3
+
+      - name: Test the sidecar
+        run: npm run sidecar:test
         working-directory: frontend-v3
 
       - name: Prepare signed updater configuration
@@ -266,7 +279,13 @@ jobs:
           }
 
           $signature = (Get-Content $signaturePath -Raw).Trim()
-          $url = "https://github.com/$($env:RELEASE_REPOSITORY)/releases/download/$tag/$($installer.Name)"
+          # GitHub rewrites a release asset's filename, replacing anything
+          # outside [A-Za-z0-9._-] with a dot. productName is "Selorson Admin",
+          # so the uploaded asset is Selorson.Admin_..., and a manifest naming
+          # the file as built points every installed app at a 404. Predict the
+          # rewrite here rather than discover it after publishing.
+          $assetName = $installer.Name -replace '[^A-Za-z0-9._-]', '.'
+          $url = "https://github.com/$($env:RELEASE_REPOSITORY)/releases/download/$tag/$assetName"
           $notes = if (Test-Path RELEASE_NOTES.md) {
             Get-Content RELEASE_NOTES.md -Raw
           } else {
