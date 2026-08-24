@@ -323,7 +323,7 @@
 					<input
 						type="file"
 						bind:this={fileInput}
-						accept=".glb,.gltf,.png,.jpg,.jpeg,.webp,.ktx2"
+						accept=".glb,.png,.jpg,.jpeg,.webp"
 						style="display:none"
 						onchange={handleUpload}
 					/>

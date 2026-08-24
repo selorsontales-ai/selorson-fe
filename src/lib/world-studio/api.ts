@@ -46,11 +46,13 @@ export async function saveDraft(
 	return { ok: true, updatedAt: res.data.updated_at };
 }
 
-export async function publishWorld(label?: string) {
-	return adminPost<{ revision_id: number; published_at: string; links_synced: number }>(
-		'/admin/world/publish',
-		{ label }
-	);
+export async function publishWorld(expectedUpdatedAt: string, label?: string) {
+	return adminPost<{
+		revision_id: number;
+		published_at: string;
+		draft_updated_at: string;
+		links_synced: number;
+	}>('/admin/world/publish', { label, expected_updated_at: expectedUpdatedAt });
 }
 
 export async function fetchRevisions(): Promise<RevisionSummary[]> {
@@ -58,9 +60,9 @@ export async function fetchRevisions(): Promise<RevisionSummary[]> {
 	return res.success ? res.data : [];
 }
 
-export async function restoreRevision(id: number) {
+export async function restoreRevision(id: number, expectedUpdatedAt: string) {
 	return adminPost<{ doc: WorldDoc; updated_at: string }>(
 		`/admin/world/revisions/${id}/restore`,
-		{}
+		{ expected_updated_at: expectedUpdatedAt }
 	);
 }

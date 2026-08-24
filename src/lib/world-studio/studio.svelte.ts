@@ -40,6 +40,10 @@ export class Studio {
 	selectedId = $state<number | null>(null);
 
 	private updatedAt = '';
+	get draftUpdatedAt() {
+		return this.updatedAt;
+	}
+
 	private timer: ReturnType<typeof setTimeout> | null = null;
 
 	// ── derived views ──

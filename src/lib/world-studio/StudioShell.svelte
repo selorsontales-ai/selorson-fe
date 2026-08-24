@@ -132,10 +132,11 @@
 			toast_error(studio.saveMessage ?? 'Chưa lưu được bản nháp');
 			return;
 		}
-		const res = await publishWorld();
+		const res = await publishWorld(studio.draftUpdatedAt);
 		if (res.success) {
 			toast_success(`Đã publish. Đồng bộ ${res.data.links_synced} liên kết.`);
 			studio.publishedAt = res.data.published_at;
+			studio.adoptTimestamp(res.data.draft_updated_at);
 			revisions = await fetchRevisions();
 		} else {
 			toast_error('Publish thất bại');
@@ -149,7 +150,7 @@
 
 	async function doRestore(id: number) {
 		if (!confirm('Kéo phiên bản này về bản nháp? Bản nháp hiện tại sẽ bị thay.')) return;
-		const res = await restoreRevision(id);
+		const res = await restoreRevision(id, studio.draftUpdatedAt);
 		if (res.success) {
 			studio.adoptDoc(res.data.doc, res.data.updated_at);
 			toast_success('Đã khôi phục vào bản nháp');
