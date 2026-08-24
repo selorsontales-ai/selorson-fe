@@ -48,13 +48,19 @@ jobs:
         env:
           NODE_ENV: production
 
+      # The whole .svelte-kit tree travels, not just the cloudflare folder.
+      # adapter-cloudflare writes a _worker.js that imports two siblings of that
+      # folder — ../output/server/index.js and ../cloudflare-tmp/manifest.js —
+      # and wrangler bundles the worker on the deploy runner. Shipping the
+      # folder alone leaves those imports unresolvable and the deploy fails
+      # after the files have already uploaded.
       - name: Upload immutable web-user artifact
         uses: actions/upload-artifact@v4
         with:
           name: web-user-${{ github.run_id }}
           if-no-files-found: error
           include-hidden-files: true
-          path: .svelte-kit/cloudflare
+          path: .svelte-kit
 
   deploy:
     name: Deploy web-user artifact to Cloudflare Pages
@@ -73,7 +79,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy site --project-name=selorson-frontend-v3 --branch=main --commit-hash=${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          command: pages deploy site/cloudflare --project-name=selorson-frontend-v3 --branch=main --commit-hash=${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Verify public web routes
         run: |

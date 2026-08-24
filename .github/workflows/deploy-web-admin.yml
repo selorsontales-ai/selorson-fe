@@ -56,7 +56,10 @@ jobs:
           name: web-admin-${{ github.run_id }}
           if-no-files-found: error
           include-hidden-files: true
-          path: .svelte-kit/cloudflare
+          # Whole tree, for the same reason as the public deploy: _worker.js
+          # imports ../output/server/index.js and ../cloudflare-tmp/manifest.js,
+          # and wrangler bundles it on the deploy runner.
+          path: .svelte-kit
 
   deploy:
     name: Deploy isolated web-admin artifact
@@ -85,4 +88,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy site --project-name=${{ vars.CLOUDFLARE_ADMIN_PROJECT_NAME }} --branch=main --commit-hash=${{ github.sha }}
+          command: pages deploy site/cloudflare --project-name=${{ vars.CLOUDFLARE_ADMIN_PROJECT_NAME }} --branch=main --commit-hash=${{ github.sha }}
