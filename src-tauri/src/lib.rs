@@ -80,12 +80,30 @@ fn load_desktop_environment(app_data_dir: &Path) -> DataModeStatus {
     let candidates = desktop_env_candidates(app_data_dir, status.mode, development_manifest_dir());
     match candidates.iter().find(|path| path.is_file()) {
         Some(path) => {
-            if let Err(error) = dotenvy::from_path(path) {
+            // Override, not merge. A restart inherits the previous process's
+            // environment, so the values the old mode loaded are already set —
+            // and a plain load leaves them in place, which silently keeps the
+            // app on the database it was told to leave.
+            if let Err(error) = dotenvy::from_path_override(path) {
                 eprintln!(
                     "Failed to load desktop backend configuration from {}: {error}",
                     path.display()
                 );
             }
+            // Which configuration is in force, and where it points. Without
+            // this the only way to tell the modes apart at runtime is to read
+            // the data and infer.
+            eprintln!(
+                "[mode] {} <- {} | database host: {}",
+                status.mode.as_str(),
+                path.display(),
+                std::env::var("DATABASE_URL")
+                    .ok()
+                    .and_then(|url| url.split('@').nth(1).map(|rest| {
+                        rest.split('/').next().unwrap_or("?").to_string()
+                    }))
+                    .unwrap_or_else(|| "(unset)".to_string())
+            );
         }
         None => eprintln!(
             "Desktop backend configuration not found. Expected {}",
