@@ -7,12 +7,16 @@ mod claude_webview;
 #[cfg(not(selorson_desktop_user))]
 mod commands;
 #[cfg(not(selorson_desktop_user))]
+mod data_mode;
+#[cfg(not(selorson_desktop_user))]
 pub mod runner_supervisor;
 #[cfg(not(selorson_desktop_user))]
 mod sidecar_runtime;
 
 #[cfg(not(selorson_desktop_user))]
 use claude_webview::ClaudeWindowManager;
+#[cfg(not(selorson_desktop_user))]
+use data_mode::{DataMode, DataModeStatus};
 #[cfg(not(selorson_desktop_user))]
 use runner_supervisor::RunnerSupervisor;
 #[cfg(not(selorson_desktop_user))]
@@ -24,8 +28,6 @@ use std::{
 use tauri::Manager;
 
 #[cfg(not(selorson_desktop_user))]
-const DESKTOP_ENV_FILE: &str = "backend.env";
-#[cfg(not(selorson_desktop_user))]
 const DEFAULT_BACKEND_PORT: &str = "8001";
 /// The embedded backend starts alongside the shell, so recovery waits for it
 /// instead of failing on the first attempt.
@@ -35,11 +37,20 @@ const RECOVERY_ATTEMPTS: usize = 30;
 const RECOVERY_RETRY_INTERVAL: Duration = Duration::from_secs(2);
 
 #[cfg(not(selorson_desktop_user))]
-fn desktop_env_candidates(app_data_dir: &Path, dev_manifest_dir: Option<&Path>) -> Vec<PathBuf> {
-    let mut candidates = vec![app_data_dir.join(DESKTOP_ENV_FILE)];
+fn desktop_env_candidates(
+    app_data_dir: &Path,
+    mode: DataMode,
+    dev_manifest_dir: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut candidates = vec![data_mode::env_path(app_data_dir, mode)];
 
-    if let Some(manifest_dir) = dev_manifest_dir {
-        candidates.push(manifest_dir.join("../../backend-v3/.env"));
+    // The workspace .env is a development convenience, and it points at the
+    // developer's own PostgreSQL. That is exactly the file production mode must
+    // never reach for, so the fallback exists only for local mode.
+    if mode == DataMode::Local {
+        if let Some(manifest_dir) = dev_manifest_dir {
+            candidates.push(manifest_dir.join("../../backend-v3/.env"));
+        }
     }
 
     candidates
@@ -56,23 +67,40 @@ fn development_manifest_dir() -> Option<&'static Path> {
 }
 
 #[cfg(not(selorson_desktop_user))]
-fn load_desktop_environment(app_data_dir: &Path) {
-    let candidates = desktop_env_candidates(app_data_dir, development_manifest_dir());
+fn load_desktop_environment(app_data_dir: &Path) -> DataModeStatus {
+    let status = data_mode::resolve(app_data_dir);
 
-    if let Some(path) = candidates.iter().find(|path| path.is_file()) {
-        if let Err(error) = dotenvy::from_path(path) {
-            eprintln!(
-                "Failed to load desktop backend configuration from {}: {error}",
-                path.display()
-            );
-        }
-        return;
+    if status.fell_back {
+        eprintln!(
+            "Production data was requested but {} does not exist. Running against local data.",
+            data_mode::env_path(app_data_dir, DataMode::Production).display()
+        );
     }
 
-    eprintln!(
-        "Desktop backend configuration not found. Expected {}",
-        app_data_dir.join(DESKTOP_ENV_FILE).display()
-    );
+    let candidates = desktop_env_candidates(app_data_dir, status.mode, development_manifest_dir());
+    match candidates.iter().find(|path| path.is_file()) {
+        Some(path) => {
+            if let Err(error) = dotenvy::from_path(path) {
+                eprintln!(
+                    "Failed to load desktop backend configuration from {}: {error}",
+                    path.display()
+                );
+            }
+        }
+        None => eprintln!(
+            "Desktop backend configuration not found. Expected {}",
+            data_mode::env_path(app_data_dir, status.mode).display()
+        ),
+    }
+
+    // Sending newsletters and pruning old messages belong to the deployment,
+    // which is always running. This app is open only sometimes, so against
+    // production data it stays a client and nothing more.
+    if status.mode == DataMode::Production {
+        std::env::set_var("SELORSON_BACKGROUND_WORKERS", "off");
+    }
+
+    status
 }
 
 #[cfg(not(selorson_desktop_user))]
@@ -130,6 +158,40 @@ fn run_user() {
         .expect("error while running Tauri user application");
 }
 
+/// The mode this process resolved at startup. Read once, never changes: the
+/// connection pool it selected lives as long as the process does.
+#[cfg(not(selorson_desktop_user))]
+#[tauri::command]
+fn desktop_data_mode(status: tauri::State<'_, DataModeStatus>) -> DataModeStatus {
+    status.inner().clone()
+}
+
+/// Store a new choice and restart into it. Refused when production has no
+/// configuration, so the app never restarts into a mode it cannot honour.
+#[cfg(not(selorson_desktop_user))]
+#[tauri::command]
+fn desktop_set_data_mode(app: tauri::AppHandle, mode: DataMode) -> Result<(), String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Không đọc được thư mục dữ liệu ứng dụng: {error}"))?;
+
+    if mode == DataMode::Production {
+        let path = data_mode::env_path(&app_data_dir, DataMode::Production);
+        if !path.is_file() {
+            return Err(format!(
+                "Chưa có cấu hình dữ liệu thật. Tạo tệp {} rồi thử lại.",
+                path.display()
+            ));
+        }
+    }
+
+    data_mode::write_requested(&app_data_dir, mode)
+        .map_err(|error| format!("Không ghi được lựa chọn chế độ: {error}"))?;
+
+    app.restart();
+}
+
 #[cfg(not(selorson_desktop_user))]
 fn run_admin() {
     tauri::Builder::default()
@@ -138,7 +200,7 @@ fn run_admin() {
         .manage(ClaudeWindowManager::default())
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()?;
-            load_desktop_environment(&app_data_dir);
+            app.manage(load_desktop_environment(&app_data_dir));
             let backend_origin = desktop_backend_origin(
                 &std::env::var("PORT").unwrap_or_else(|_| DEFAULT_BACKEND_PORT.to_string()),
             )
@@ -162,6 +224,8 @@ fn run_admin() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            desktop_data_mode,
+            desktop_set_data_mode,
             commands::open_claude_window,
             commands::claude_window_health,
             commands::runner_lease_next,
@@ -193,16 +257,20 @@ pub fn run() {
 
 #[cfg(all(test, not(selorson_desktop_user)))]
 mod tests {
-    use super::{desktop_backend_origin, desktop_env_candidates, DESKTOP_ENV_FILE};
+    use super::data_mode::{self, DataMode};
+    use super::{desktop_backend_origin, desktop_env_candidates};
     use std::path::Path;
 
     #[test]
     fn release_uses_only_app_data_configuration() {
         let app_data_dir = Path::new("C:/Users/example/AppData/Roaming/com.selorson.app");
 
-        let candidates = desktop_env_candidates(app_data_dir, None);
+        let candidates = desktop_env_candidates(app_data_dir, DataMode::Local, None);
 
-        assert_eq!(candidates, vec![app_data_dir.join(DESKTOP_ENV_FILE)]);
+        assert_eq!(
+            candidates,
+            vec![data_mode::env_path(app_data_dir, DataMode::Local)]
+        );
     }
 
     #[test]
@@ -210,14 +278,30 @@ mod tests {
         let app_data_dir = Path::new("C:/Users/example/AppData/Roaming/com.selorson.app");
         let manifest_dir = Path::new("D:/work/selorson/frontend-v3/src-tauri");
 
-        let candidates = desktop_env_candidates(app_data_dir, Some(manifest_dir));
+        let candidates =
+            desktop_env_candidates(app_data_dir, DataMode::Local, Some(manifest_dir));
 
         assert_eq!(
             candidates,
             vec![
-                app_data_dir.join(DESKTOP_ENV_FILE),
+                data_mode::env_path(app_data_dir, DataMode::Local),
                 manifest_dir.join("../../backend-v3/.env"),
             ]
+        );
+    }
+
+    #[test]
+    fn production_never_falls_back_to_the_developer_database() {
+        let app_data_dir = Path::new("C:/Users/example/AppData/Roaming/com.selorson.app");
+        let manifest_dir = Path::new("D:/work/selorson/frontend-v3/src-tauri");
+
+        let candidates =
+            desktop_env_candidates(app_data_dir, DataMode::Production, Some(manifest_dir));
+
+        assert_eq!(
+            candidates,
+            vec![data_mode::env_path(app_data_dir, DataMode::Production)],
+            "production must never resolve to the workspace .env"
         );
     }
 
