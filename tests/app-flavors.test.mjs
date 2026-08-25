@@ -347,11 +347,13 @@ test("local mode shares no live resource beyond the database", async () => {
   // to reach real readers through any of them.
   assert.match(tauri, /fn isolate_local_mode/);
 
-  // Cache and pub/sub: entries read from one database must never be served
-  // from another, in either direction.
+  // Scoped by database, not by instance. Production mode reads the deployment's
+  // database, so it shares its cache and its channels — a private channel there
+  // would strand realtime messages that were saved correctly. Local mode reads
+  // a different database and shares neither.
   assert.match(tauri, /SELORSON_CACHE_NAMESPACE/);
-  assert.match(tauri, /"desktop-production"/);
-  assert.match(tauri, /"desktop-local"/);
+  assert.match(tauri, /DataMode::Production => ""/);
+  assert.match(tauri, /DataMode::Local => "desktop-local"/);
 
   // Uploads land in their own scope rather than beside the live site's files.
   assert.match(tauri, /SELORSON_STORAGE_PREFIX/);

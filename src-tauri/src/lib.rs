@@ -124,14 +124,15 @@ fn load_desktop_environment(app_data_dir: &Path) -> DataModeStatus {
         },
     );
 
-    // Both configurations point at the same Redis, which the deployment also
-    // uses. Without a namespace the three instances share cache entries and
-    // pub/sub channels while reading different databases — production rows get
-    // served from the local database and local rows can reach real readers.
+    // Scoped by database, not by instance. Production mode reads the same
+    // database as the deployment, so it has to share the same cache entries and
+    // the same channels: a support reply published under a private channel
+    // would be saved correctly and never reach the reader waiting for it.
+    // Local mode reads a different database, so it must share neither.
     std::env::set_var(
         "SELORSON_CACHE_NAMESPACE",
         match status.mode {
-            DataMode::Production => "desktop-production",
+            DataMode::Production => "",
             DataMode::Local => "desktop-local",
         },
     );
