@@ -95,12 +95,67 @@ fn load_desktop_environment(app_data_dir: &Path) -> DataModeStatus {
 
     // Sending newsletters and pruning old messages belong to the deployment,
     // which is always running. This app is open only sometimes, so against
-    // production data it stays a client and nothing more.
-    if status.mode == DataMode::Production {
-        std::env::set_var("SELORSON_BACKGROUND_WORKERS", "off");
-    }
+    // production data it stays a client and nothing more. Set either way: a
+    // restart inherits the previous process's environment, and an "off" left
+    // over from production mode would silently disable the workers in local.
+    std::env::set_var(
+        "SELORSON_BACKGROUND_WORKERS",
+        match status.mode {
+            DataMode::Production => "off",
+            DataMode::Local => "on",
+        },
+    );
+
+    // Both configurations point at the same Redis, which the deployment also
+    // uses. Without a namespace the three instances share cache entries and
+    // pub/sub channels while reading different databases — production rows get
+    // served from the local database and local rows can reach real readers.
+    std::env::set_var(
+        "SELORSON_CACHE_NAMESPACE",
+        match status.mode {
+            DataMode::Production => "desktop-production",
+            DataMode::Local => "desktop-local",
+        },
+    );
+
+    isolate_local_mode(status.mode);
 
     status
+}
+
+/// Sever everything local mode still shares with the live site.
+///
+/// Separating the database is not enough on its own: one Redis, one mail
+/// account, one media bucket and one signing key serve every instance. Local
+/// mode is meant to be a place where nothing done can reach a reader, so the
+/// remaining shared resources are cut here rather than left to whoever edits
+/// the configuration files. Production mode is left exactly as configured,
+/// because there it is the same site and sharing is correct.
+#[cfg(not(selorson_desktop_user))]
+fn isolate_local_mode(mode: DataMode) {
+    if mode != DataMode::Local {
+        std::env::remove_var("SELORSON_STORAGE_PREFIX");
+        return;
+    }
+
+    // Uploads land in their own folder rather than beside the files the live
+    // site serves, where nothing would tell them apart afterwards.
+    std::env::set_var("SELORSON_STORAGE_PREFIX", "desktop-local");
+
+    // No mail account, so create_mailer falls back to the console sender and a
+    // test newsletter is written to the log instead of to real subscribers.
+    for key in ["SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD"] {
+        std::env::remove_var(key);
+    }
+
+    // A token signed here must not verify against the live site. Both modes
+    // look users up by id, and the ids overlap: user 3 locally is a different
+    // person from user 3 in production. Derived rather than configured, so the
+    // separation cannot be lost by editing a file, and deterministic, so a
+    // local session still survives a restart.
+    if let Ok(secret) = std::env::var("JWT_SECRET") {
+        std::env::set_var("JWT_SECRET", format!("{secret}::desktop-local"));
+    }
 }
 
 #[cfg(not(selorson_desktop_user))]

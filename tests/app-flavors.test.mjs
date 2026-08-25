@@ -286,10 +286,81 @@ test("production mode leaves newsletter sending to the deployment", async () => 
   const tauri = await source("src-tauri", "src", "lib.rs");
   const dataMode = await source("src-tauri", "src", "data_mode.rs");
 
-  assert.match(tauri, /SELORSON_BACKGROUND_WORKERS", "off"/);
-  assert.match(tauri, /status\.mode == DataMode::Production/);
+  // Set for both modes, not only production: a restart inherits the previous
+  // process's environment, so an "off" left over from production would
+  // silently disable the workers in local too.
+  assert.match(tauri, /SELORSON_BACKGROUND_WORKERS/);
+  assert.match(tauri, /DataMode::Production => "off"/);
+  assert.match(tauri, /DataMode::Local => "on"/);
 
   // Production is refused rather than approximated when unconfigured.
   assert.match(dataMode, /fell_back/);
   assert.match(dataMode, /unwrap_or\(DataMode::Local\)/);
+});
+
+test("the mode badge sits beside the wordmark, never inside its link", async () => {
+  const layout = await source("src", "routes", "+layout.svelte");
+
+  // A button nested in an anchor is invalid HTML, and every click on the badge
+  // would also navigate home. Sliced to the first closing tag rather than
+  // matched with a regex: a lazy match would happily run on to a later </a> in
+  // the navigation and report a leak that is not there.
+  const linkStart = layout.indexOf('class="logo-link"');
+  const linkEnd = layout.indexOf("</a>", linkStart);
+  assert.ok(linkStart > -1 && linkEnd > linkStart, "logo link not found");
+  assert.ok(
+    !layout.slice(linkStart, linkEnd).includes("dataModeBadge"),
+    "the badge must not be rendered inside the logo link"
+  );
+  assert.match(layout, /class="brand"/);
+});
+
+test("the launch gate renders outside the header", async () => {
+  const layout = await source("src", "routes", "+layout.svelte");
+  const shell = await source(
+    "src",
+    "lib",
+    "components",
+    "desktop",
+    "DesktopDataMode.svelte"
+  );
+
+  // The header carries a backdrop-filter, which makes it a containing block for
+  // fixed positioning: an overlay inside it is confined to the header strip.
+  assert.match(shell, /DataModeGate/);
+  assert.match(shell, /DataModeSwitchSheet/);
+
+  const headerStart = layout.indexOf('<header class="site-header">');
+  const headerEnd = layout.indexOf("</header>", headerStart);
+  assert.ok(headerStart > -1 && headerEnd > headerStart, "header not found");
+  assert.ok(
+    !layout.slice(headerStart, headerEnd).includes("dataModeUi"),
+    "the gate and switch prompt must not render inside the header"
+  );
+});
+
+test("local mode shares no live resource beyond the database", async () => {
+  const tauri = await source("src-tauri", "src", "lib.rs");
+
+  // One Redis, one mail account, one media bucket and one signing key serve
+  // every instance. Separating the database alone would leave local mode able
+  // to reach real readers through any of them.
+  assert.match(tauri, /fn isolate_local_mode/);
+
+  // Cache and pub/sub: entries read from one database must never be served
+  // from another, in either direction.
+  assert.match(tauri, /SELORSON_CACHE_NAMESPACE/);
+  assert.match(tauri, /"desktop-production"/);
+  assert.match(tauri, /"desktop-local"/);
+
+  // Uploads land in their own scope rather than beside the live site's files.
+  assert.match(tauri, /SELORSON_STORAGE_PREFIX/);
+
+  // No mail account, so a test newsletter reaches the log instead of real
+  // subscribers.
+  assert.match(tauri, /"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD"/);
+
+  // Both modes look users up by id and the ids overlap, so a token signed in
+  // one must not verify in the other. Derived, so editing a file cannot undo it.
+  assert.match(tauri, /JWT_SECRET.*desktop-local|desktop-local.*JWT_SECRET/s);
 });
