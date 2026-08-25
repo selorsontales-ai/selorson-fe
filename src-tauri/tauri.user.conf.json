@@ -7,7 +7,8 @@
   "app": {
     "windows": [
       {
-        "title": "Selorson"
+        "title": "Selorson",
+        "dragDropEnabled": false
       }
     ]
   },

@@ -581,7 +581,7 @@
 						{:else if block.type === 'image'}
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div class="image-block" 
-								ondragover={(e) => e.preventDefault()}
+								ondragover={(e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; }}
 								ondrop={(e) => handleDropOnImageBlock(e, i)}>
 								
 								<div class="layout-selector">
@@ -723,7 +723,7 @@
 					{#each assets as asset (asset.id)}
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div class="asset-thumb" draggable="true" ondragstart={(e) => handleDragStart(e, asset)}>
-							<img src={asset.cloudinary_url} alt={asset.filename} loading="lazy" />
+							<img src={asset.cloudinary_url} alt={asset.filename} loading="lazy" draggable="false" />
 							<button class="del-asset" onclick={() => deleteAsset(asset)}>✕</button>
 						</div>
 					{/each}

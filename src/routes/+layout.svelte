@@ -59,6 +59,16 @@
 	}
 </script>
 
+<!--
+	Chặn webview điều hướng sang file:// khi người dùng thả file ra ngoài vùng nhận.
+	Cần thiết vì cửa sổ Tauri đặt dragDropEnabled=false để bật HTML5 drag & drop.
+	Chỉ chặn drag mang theo file; drag nội bộ (text, asset trong editor) không bị ảnh hưởng.
+-->
+<svelte:window
+	ondragover={(e) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); }}
+	ondrop={(e) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); }}
+/>
+
 <svelte:head>
 	<title>{m.seo_title()}</title>
 	<meta name="description" content={m.seo_description()} />
