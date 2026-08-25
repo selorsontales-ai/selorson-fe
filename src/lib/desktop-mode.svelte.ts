@@ -65,6 +65,26 @@ export function acknowledgeProductionData(): void {
 }
 
 /**
+ * The switch prompt is opened from the badge in the header and rendered
+ * outside it. The header carries a backdrop-filter, which makes it a
+ * containing block for fixed positioning — an overlay rendered inside it would
+ * be trapped in the header strip instead of covering the window.
+ */
+let switchPrompt = $state(false);
+
+export function isSwitchPromptOpen(): boolean {
+	return switchPrompt;
+}
+
+export function openSwitchPrompt(): void {
+	switchPrompt = true;
+}
+
+export function closeSwitchPrompt(): void {
+	switchPrompt = false;
+}
+
+/**
  * Suffix for anything stored per session.
  *
  * Two modes are two databases and therefore two user tables: a token issued by

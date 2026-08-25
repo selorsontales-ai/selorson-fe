@@ -24,6 +24,13 @@
 	// It cannot be removed from a user build altogether — the mechanism that
 	// does that is route removal, and this is the shared root layout — but the
 	// components hold no admin logic, only a mode indicator and a restart.
+	//
+	// Two pieces because they belong in two places: the badge sits in the brand
+	// lockup, while the gate and the switch prompt must render outside the
+	// header, whose backdrop-filter would otherwise confine them to it.
+	const dataModeBadge = supportsDataModes
+		? import("$lib/components/desktop/DataModeBadge.svelte")
+		: null;
 	const dataModeUi = supportsDataModes
 		? import("$lib/components/desktop/DesktopDataMode.svelte")
 		: null;
@@ -74,12 +81,21 @@
 	<!-- Header -->
 	<header class="site-header">
 		<div class="header-inner">
-			<a href="/" class="logo-link">
-				<img src="/favicon.png" alt="Selorson" class="logo-image" />
-				<div class="logo-text-group">
-					<span class="logo-text">Selorson</span>
-				</div>
-			</a>
+			<div class="brand">
+				<a href="/" class="logo-link">
+					<img src="/favicon.png" alt="Selorson" class="logo-image" />
+					<div class="logo-text-group">
+						<span class="logo-text">Selorson</span>
+					</div>
+				</a>
+				<!-- Beside the wordmark, never inside the link: a button nested in
+				     an anchor is invalid, and every click would also navigate. -->
+				{#if dataModeBadge}
+					{#await dataModeBadge then module}
+						<module.default />
+					{/await}
+				{/if}
+			</div>
 
 			<nav class="main-nav">
 				<a href="/" class="nav-link" class:active={$page.url.pathname === '/'}>{m.nav_home()}</a>
@@ -359,6 +375,13 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+	}
+
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+		min-width: 0;
 	}
 
 	.logo-link {

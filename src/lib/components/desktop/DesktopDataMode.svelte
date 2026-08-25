@@ -1,13 +1,19 @@
 <script lang="ts">
-	// Rendered only by desktop-admin: every other flavor talks to the deployment
-	// and has no second database to choose between.
-	import { needsProductionAcknowledgement } from "$lib/desktop-mode.svelte";
-	import DataModeBar from "./DataModeBar.svelte";
+	// Rendered only by desktop-admin, and deliberately outside the header: both
+	// of these cover the window, and the header's backdrop-filter would trap a
+	// fixed-position child inside the header strip.
+	import {
+		isSwitchPromptOpen,
+		needsProductionAcknowledgement,
+	} from "$lib/desktop-mode.svelte";
 	import DataModeGate from "./DataModeGate.svelte";
+	import DataModeSwitchSheet from "./DataModeSwitchSheet.svelte";
 </script>
 
 {#if needsProductionAcknowledgement()}
 	<DataModeGate />
 {/if}
 
-<DataModeBar />
+{#if isSwitchPromptOpen()}
+	<DataModeSwitchSheet />
+{/if}
