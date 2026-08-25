@@ -17,7 +17,16 @@
 	} from "$lib/stores/auth.svelte";
 	import { initTheme, toggleTheme, isDark } from "$lib/stores/theme.svelte";
 	import { initSupportUI } from "$lib/stores/support.svelte";
-	import { supportsAdminPanel } from "$lib/app-flavor";
+	import { supportsAdminPanel, supportsDataModes } from "$lib/app-flavor";
+	import { initDataMode } from "$lib/desktop-mode.svelte";
+
+	// Dynamic so the mode UI stays out of the entry chunk every reader loads.
+	// It cannot be removed from a user build altogether — the mechanism that
+	// does that is route removal, and this is the shared root layout — but the
+	// components hold no admin logic, only a mode indicator and a restart.
+	const dataModeUi = supportsDataModes
+		? import("$lib/components/desktop/DesktopDataMode.svelte")
+		: null;
 	import * as m from "$lib/paraglide/messages";
 	import { onMount } from "svelte";
 	import { page } from "$app/stores";
@@ -28,9 +37,13 @@
 	let showMobileMenu = $state(false);
 
 	onMount(() => {
-		initAuth();
 		initTheme();
-		initSupportUI();
+		// The mode has to be settled before the session is read: each mode keeps
+		// its own login, so the key depends on which one is in force.
+		void initDataMode().then(() => {
+			initAuth();
+			initSupportUI();
+		});
 	});
 
 	async function handleLogout() {
@@ -53,6 +66,11 @@
 </svelte:head>
 
 <div class="app-shell">
+	{#if dataModeUi}
+		{#await dataModeUi then module}
+			<module.default />
+		{/await}
+	{/if}
 	<!-- Header -->
 	<header class="site-header">
 		<div class="header-inner">

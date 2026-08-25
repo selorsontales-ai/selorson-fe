@@ -243,3 +243,53 @@ test("release channels and credentials are isolated by audience", async () => {
   assert.match(android, /^  publish:/m);
   assert.match(android, /needs: bundle/);
 });
+
+test("two data modes exist for desktop-admin only, and default to the safe one", async () => {
+  const flavor = await source("src", "lib", "app-flavor.ts");
+  const mode = await source("src", "lib", "desktop-mode.svelte.ts");
+  const layout = await source("src", "routes", "+layout.svelte");
+
+  // Only the flavor that embeds its own backend can point it somewhere else.
+  assert.match(flavor, /supportsDataModes = appFlavor === "desktop-admin"/);
+  assert.match(mode, /if \(!supportsDataModes\) return;/);
+
+  // The mode has to be resolved before the session is read, because each mode
+  // keeps its own login under its own key.
+  assert.match(layout, /initDataMode\(\)\.then\(\(\) => \{\s*initAuth\(\);/);
+});
+
+test("the launch gate is answered per session, never remembered", async () => {
+  const mode = await source("src", "lib", "desktop-mode.svelte.ts");
+
+  // Persisting the acknowledgement would turn it back into a banner, and a
+  // banner that is always there stops being read.
+  assert.match(mode, /let acknowledged = \$state\(false\)/);
+  assert.doesNotMatch(mode, /localStorage/);
+  assert.match(mode, /status\?\.mode === "production" && !acknowledged/);
+});
+
+test("a session belongs to the mode that issued it", async () => {
+  const storage = await source("src", "lib", "session-storage.ts");
+  const auth = await source("src", "lib", "stores", "auth.svelte.ts");
+  const api = await source("src", "lib", "api.ts");
+
+  assert.match(storage, /selorson_token\$\{dataModeScope\(\)\}/);
+  // No literal key may survive: one would silently share a token between two
+  // different user tables.
+  assert.doesNotMatch(auth, /'selorson_token'/);
+  assert.doesNotMatch(api, /'selorson_token'/);
+  assert.match(auth, /tokenStorageKey\(\)/);
+  assert.match(api, /tokenStorageKey\(\)/);
+});
+
+test("production mode leaves newsletter sending to the deployment", async () => {
+  const tauri = await source("src-tauri", "src", "lib.rs");
+  const dataMode = await source("src-tauri", "src", "data_mode.rs");
+
+  assert.match(tauri, /SELORSON_BACKGROUND_WORKERS", "off"/);
+  assert.match(tauri, /status\.mode == DataMode::Production/);
+
+  // Production is refused rather than approximated when unconfigured.
+  assert.match(dataMode, /fell_back/);
+  assert.match(dataMode, /unwrap_or\(DataMode::Local\)/);
+});

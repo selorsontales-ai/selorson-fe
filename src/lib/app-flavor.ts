@@ -47,3 +47,10 @@ export const supportsAdminPanel =
 export const supportsLocalAiTools = appFlavor === "desktop-admin";
 
 export const supportsDesktopUpdater = appFlavor === "desktop-admin";
+
+/**
+ * Only desktop-admin embeds its own backend, so only it can point that backend
+ * at a different database. Every other flavor talks to the deployment and has
+ * no mode to choose.
+ */
+export const supportsDataModes = appFlavor === "desktop-admin";
