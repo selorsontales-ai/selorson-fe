@@ -366,3 +366,19 @@ test("local mode shares no live resource beyond the database", async () => {
   // one must not verify in the other. Derived, so editing a file cannot undo it.
   assert.match(tauri, /JWT_SECRET.*desktop-local|desktop-local.*JWT_SECRET/s);
 });
+
+test("a mode that could not be honoured says so instead of appearing normal", async () => {
+  const badge = await source(
+    "src",
+    "lib",
+    "components",
+    "desktop",
+    "DataModeBadge.svelte"
+  );
+
+  // Without this the app simply shows Beta and the only symptom a person sees
+  // is that the mode "changed by itself" — which is what happened.
+  assert.match(badge, /fell_back === true/);
+  assert.match(badge, /thiếu cấu hình Alpha/);
+  assert.match(badge, /class:warn=\{fellBack\}/);
+});

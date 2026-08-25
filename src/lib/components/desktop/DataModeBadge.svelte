@@ -3,6 +3,10 @@
 
 	const status = $derived(getDataMode());
 	const isAlpha = $derived(status?.mode === "production");
+	// Alpha was asked for and could not be honoured. Saying so is the whole
+	// point: without it the app just appears in Beta for no stated reason, and
+	// the only visible symptom is that the mode "changed by itself".
+	const fellBack = $derived(status?.fell_back === true);
 	// Beta can only be left when there is somewhere to go.
 	const canSwitch = $derived(isAlpha || status?.production_configured === true);
 </script>
@@ -11,18 +15,20 @@
 	<button
 		class="badge"
 		class:alpha={isAlpha}
-		class:locked={!canSwitch}
+		class:warn={fellBack}
 		type="button"
-		disabled={!canSwitch}
+		disabled={!canSwitch && !fellBack}
 		onclick={openSwitchPrompt}
 		title={isAlpha
 			? "Alpha — dữ liệu thật của trang web. Bấm để sang Beta."
-			: canSwitch
-				? "Beta — dữ liệu trên máy này. Bấm để sang Alpha."
-				: "Beta — dữ liệu trên máy này. Chưa cấu hình Alpha."}
+			: fellBack
+				? `Đã yêu cầu Alpha nhưng thiếu tệp cấu hình, đang chạy Beta.\nCần tạo: ${status.config_path.replace(/backend\.env$/, "backend.production.env")}`
+				: canSwitch
+					? "Beta — dữ liệu trên máy này. Bấm để sang Alpha."
+					: "Beta — dữ liệu trên máy này. Chưa cấu hình Alpha."}
 	>
 		<span class="dot" aria-hidden="true"></span>
-		{isAlpha ? "Alpha" : "Beta"}
+		{isAlpha ? "Alpha" : fellBack ? "Beta — thiếu cấu hình Alpha" : "Beta"}
 	</button>
 {/if}
 
@@ -88,6 +94,26 @@
 	.badge.alpha .dot {
 		background: #ffd9d1;
 		animation: dotPulse 2.8s ease-in-out infinite;
+	}
+
+	/* Neither of the two normal states: something was asked for and could not
+	   be given. Amber rather than red — nothing is at risk, but the app is not
+	   in the mode it was told to be in. */
+	.badge.warn {
+		background: rgba(240, 192, 64, 0.16);
+		border-color: rgba(240, 192, 64, 0.55);
+		color: var(--color-accent-gold);
+	}
+
+	.badge.warn:hover:not(:disabled) {
+		background: rgba(240, 192, 64, 0.26);
+		border-color: rgba(240, 192, 64, 0.8);
+		color: var(--color-accent-gold);
+	}
+
+	.badge.warn .dot {
+		background: var(--color-accent-gold);
+		animation: dotPulse 1.6s ease-in-out infinite;
 	}
 
 	@keyframes alphaPulse {
