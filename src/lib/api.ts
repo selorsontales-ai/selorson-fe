@@ -1,4 +1,5 @@
 import { PUBLIC_API_BASE } from '$env/static/public';
+import { tokenRefreshChannel, tokenStorageKey } from '$lib/session-storage';
 
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 
@@ -40,7 +41,7 @@ let waitQueue: Array<{ resolve: (token: string) => void; reject: (err: unknown) 
  */
 async function performTokenRefresh(staleToken?: string): Promise<string> {
 	const currentToken =
-		typeof localStorage !== 'undefined' ? localStorage.getItem('selorson_token') : null;
+		typeof localStorage !== 'undefined' ? localStorage.getItem(tokenStorageKey()) : null;
 	if (staleToken && currentToken && currentToken !== staleToken) {
 		return currentToken;
 	}
@@ -60,7 +61,7 @@ async function performTokenRefresh(staleToken?: string): Promise<string> {
 	updateToken(newToken);
 
 	try {
-		const bc = new BroadcastChannel('selorson_token_refresh');
+		const bc = new BroadcastChannel(tokenRefreshChannel());
 		bc.postMessage({ token: newToken });
 		bc.close();
 	} catch {
@@ -112,7 +113,7 @@ export async function restoreSession(): Promise<boolean> {
 /** Clear local state and redirect to home. */
 function forceLogout() {
 	if (typeof localStorage !== 'undefined') {
-		localStorage.removeItem('selorson_token');
+		localStorage.removeItem(tokenStorageKey());
 	}
 	if (typeof window !== 'undefined') {
 		window.location.href = '/';
@@ -140,7 +141,7 @@ export async function api<T = unknown>(
 	if (token) {
 		reqHeaders['Authorization'] = `Bearer ${token}`;
 	} else if (typeof window !== 'undefined') {
-		const stored = localStorage.getItem('selorson_token');
+		const stored = localStorage.getItem(tokenStorageKey());
 		if (stored) {
 			reqHeaders['Authorization'] = `Bearer ${stored}`;
 		}
@@ -193,7 +194,7 @@ export async function apiUpload<T = unknown>(
 	};
 
 	if (typeof window !== 'undefined') {
-		const stored = localStorage.getItem('selorson_token');
+		const stored = localStorage.getItem(tokenStorageKey());
 		if (stored) reqHeaders['Authorization'] = `Bearer ${stored}`;
 	}
 

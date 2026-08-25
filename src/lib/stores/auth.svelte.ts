@@ -1,4 +1,5 @@
 import { PUBLIC_API_BASE } from '$env/static/public';
+import { tokenRefreshChannel, tokenStorageKey } from '$lib/session-storage';
 import { sync2FAState } from './security.svelte';
 
 // ---- Types ----
@@ -47,19 +48,19 @@ let state = $state<AuthState>({
 
 function saveToken(token: string) {
 	if (typeof localStorage !== 'undefined') {
-		localStorage.setItem('selorson_token', token);
+		localStorage.setItem(tokenStorageKey(), token);
 	}
 }
 
 function clearToken() {
 	if (typeof localStorage !== 'undefined') {
-		localStorage.removeItem('selorson_token');
+		localStorage.removeItem(tokenStorageKey());
 	}
 }
 
 function loadToken(): string | null {
 	if (typeof localStorage !== 'undefined') {
-		return localStorage.getItem('selorson_token');
+		return localStorage.getItem(tokenStorageKey());
 	}
 	return null;
 }
@@ -223,7 +224,7 @@ export function initAuth() {
 	// Listen for token refresh from other tabs
 	if (typeof BroadcastChannel !== 'undefined') {
 		try {
-			const bc = new BroadcastChannel('selorson_token_refresh');
+			const bc = new BroadcastChannel(tokenRefreshChannel());
 			bc.onmessage = (event) => {
 				if (event.data?.token) {
 					state.token = event.data.token;
