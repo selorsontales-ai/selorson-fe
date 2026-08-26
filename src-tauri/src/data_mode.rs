@@ -11,6 +11,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const MODE_FILE: &str = "backend-mode";
+/// Written beside the mode whenever a switch asks for a restart, and consumed
+/// by the next startup. It is what tells a restart caused by pressing the
+/// switch apart from opening the app fresh.
+const SWITCH_FILE: &str = "backend-mode.pending";
 const LOCAL_ENV_FILE: &str = "backend.env";
 const PRODUCTION_ENV_FILE: &str = "backend.production.env";
 
@@ -84,7 +88,10 @@ pub fn read_requested(app_data_dir: &Path) -> DataMode {
 
 pub fn write_requested(app_data_dir: &Path, mode: DataMode) -> std::io::Result<()> {
     fs::create_dir_all(app_data_dir)?;
-    fs::write(mode_path(app_data_dir), mode.as_str())
+    fs::write(mode_path(app_data_dir), mode.as_str())?;
+    // The restart this switch is about to trigger has to be told apart from
+    // opening the app fresh, which always starts local.
+    fs::write(app_data_dir.join(SWITCH_FILE), mode.as_str())
 }
 
 /// Resolve the mode this process will run in.
@@ -94,6 +101,19 @@ pub fn write_requested(app_data_dir: &Path, mode: DataMode) -> std::io::Result<(
 /// work into the wrong database, which is worse than refusing to start in that
 /// mode at all.
 pub fn resolve(app_data_dir: &Path) -> DataModeStatus {
+    // Opening the app always starts local. Production is never something you
+    // arrive in without having asked for it in this session — which is what
+    // stops the app from quietly coming up on live data days after the last
+    // time anyone chose that. The one exception is the restart a switch causes,
+    // and it announces itself by leaving the marker below.
+    let switch_path = app_data_dir.join(SWITCH_FILE);
+    let switched = switch_path.is_file();
+    if switched {
+        let _ = fs::remove_file(&switch_path);
+    } else if read_requested(app_data_dir) != DataMode::Local {
+        let _ = fs::write(mode_path(app_data_dir), DataMode::Local.as_str());
+    }
+
     let requested = read_requested(app_data_dir);
     let production_configured = env_path(app_data_dir, DataMode::Production).is_file();
     let fell_back = requested == DataMode::Production && !production_configured;
@@ -166,5 +186,46 @@ mod tests {
         assert_eq!(read_requested(&dir), DataMode::Production);
         write_requested(&dir, DataMode::Local).expect("failed to store mode");
         assert_eq!(read_requested(&dir), DataMode::Local);
+    }
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::*;
+
+    fn dir(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("selorson-start-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).expect("failed to create test directory");
+        fs::write(env_path(&d, DataMode::Production), "DATABASE_URL=x").expect("write config");
+        d
+    }
+
+    #[test]
+    fn opening_the_app_always_starts_local() {
+        let d = dir("fresh-open");
+        fs::write(mode_path(&d), "production").expect("write mode");
+
+        // No switch marker: this is someone opening the app, not a switch.
+        assert_eq!(resolve(&d).mode, DataMode::Local);
+        // And the stored choice is corrected, so the next read agrees.
+        assert_eq!(read_requested(&d), DataMode::Local);
+    }
+
+    #[test]
+    fn the_restart_a_switch_causes_keeps_the_chosen_mode() {
+        let d = dir("switch");
+        write_requested(&d, DataMode::Production).expect("store mode");
+
+        assert_eq!(resolve(&d).mode, DataMode::Production);
+    }
+
+    #[test]
+    fn the_marker_is_good_for_exactly_one_startup() {
+        let d = dir("once");
+        write_requested(&d, DataMode::Production).expect("store mode");
+
+        assert_eq!(resolve(&d).mode, DataMode::Production, "the switch itself");
+        assert_eq!(resolve(&d).mode, DataMode::Local, "reopening afterwards");
     }
 }
