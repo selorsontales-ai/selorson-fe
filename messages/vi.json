@@ -235,6 +235,7 @@
   "settings_device_unavail": "⚠️ Tính năng quản lý thiết bị chưa khả dụng.",
   "settings_device_browser": "Trình duyệt",
   "settings_device_login": "Đăng nhập: ",
+  "settings_device_lastused": "Dùng gần nhất: ",
   "settings_device_current": "Hiện tại",
   "settings_btn_logout": "Đăng xuất",
   "settings_loading": "Đang tải...",

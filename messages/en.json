@@ -235,6 +235,7 @@
   "settings_device_unavail": "⚠️ Device management feature is unavailable.",
   "settings_device_browser": "Browser",
   "settings_device_login": "Login: ",
+  "settings_device_lastused": "Last used: ",
   "settings_device_current": "Current",
   "settings_btn_logout": "Logout",
   "settings_loading": "Loading...",

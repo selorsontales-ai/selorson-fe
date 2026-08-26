@@ -68,7 +68,7 @@ fn development_manifest_dir() -> Option<&'static Path> {
 
 #[cfg(not(selorson_desktop_user))]
 fn load_desktop_environment(app_data_dir: &Path) -> DataModeStatus {
-    let status = data_mode::resolve(app_data_dir);
+    let mut status = data_mode::resolve(app_data_dir);
 
     if status.fell_back {
         eprintln!(
@@ -104,11 +104,23 @@ fn load_desktop_environment(app_data_dir: &Path) -> DataModeStatus {
                     }))
                     .unwrap_or_else(|| "(unset)".to_string())
             );
+            status.config_loaded = true;
         }
-        None => eprintln!(
-            "Desktop backend configuration not found. Expected {}",
-            data_mode::env_path(app_data_dir, status.mode).display()
-        ),
+        None => {
+            // A released build is a windows-subsystem binary: this line reaches
+            // no console and no file, so on its own it tells nobody anything.
+            // The window is what has to say it, which is why the status carries
+            // the problem out to the UI instead of only printing it here.
+            let expected = data_mode::env_path(app_data_dir, status.mode);
+            eprintln!(
+                "Desktop backend configuration not found. Expected {}",
+                expected.display()
+            );
+            status.config_problem = Some(format!(
+                "Không tìm thấy tệp cấu hình:\n{}",
+                expected.display()
+            ));
+        }
     }
 
     // Sending newsletters and pruning old messages belong to the deployment,
