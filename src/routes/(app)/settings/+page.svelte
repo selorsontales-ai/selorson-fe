@@ -486,9 +486,18 @@
 										>{d.name ||
 											m.settings_device_browser()}</span
 									>
+									<!-- A device row now outlives the session that
+									     created it, so "first signed in here" and
+									     "still in use" are different facts. The
+									     second is the one that shows a session
+									     nobody remembers opening. -->
 									<span class="device-date"
-										>{m.settings_device_login()}
-										{formatDate(d.created_at)}</span
+										>{d.last_used_at
+											? m.settings_device_lastused()
+											: m.settings_device_login()}
+										{formatDate(
+											d.last_used_at ?? d.created_at,
+										)}</span
 									>
 								</div>
 								{#if d.is_current}<span class="current-badge"

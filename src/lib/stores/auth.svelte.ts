@@ -183,19 +183,53 @@ export async function logout() {
 	clearToken();
 }
 
+/** Only the server refusing the token is grounds for dropping it. */
+function isSessionRejection(error: unknown): boolean {
+	const status = (error as { status?: number } | null)?.status;
+	return status === 401 || status === 403;
+}
+
 export async function fetchMe() {
 	state.loading = true;
 	try {
-		const res: any = await authFetch('/auth/me');
-		state.user = res.data;
-		sync2FAState(res.data);
-	} catch {
-		// Token invalid — clear
-		state.user = null;
-		state.token = null;
-		clearToken();
+		await loadMe();
 	} finally {
 		state.loading = false;
+	}
+}
+
+/**
+ * Fetch the current user, and hold on to the session unless it is refused.
+ *
+ * A rate limit, a dropped connection, or a backend still starting up all fail
+ * this call while saying nothing about the token. Treating those as "token
+ * invalid" throws away credentials that are still good for weeks — which is how
+ * switching the interface language a few times ended at a login screen: each
+ * switch reloads the page, the reloads outran the rate limiter, and the 429
+ * that came back was read as a rejection.
+ *
+ * So: retry transient failures, and on giving up keep the token. A reload will
+ * try again, and the session is still there when it does.
+ */
+async function loadMe() {
+	const backoffMs = [1000, 3000, 8000];
+
+	for (let attempt = 0; ; attempt++) {
+		try {
+			const res: any = await authFetch('/auth/me');
+			state.user = res.data;
+			sync2FAState(res.data);
+			return;
+		} catch (error) {
+			if (isSessionRejection(error)) {
+				state.user = null;
+				state.token = null;
+				clearToken();
+				return;
+			}
+			if (attempt >= backoffMs.length) return;
+			await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]));
+		}
 	}
 }
 

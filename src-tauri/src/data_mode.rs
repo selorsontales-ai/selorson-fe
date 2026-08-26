@@ -67,6 +67,28 @@ pub struct DataModeStatus {
     /// Absolute path of the configuration file in force, for the UI to show
     /// when something needs fixing by hand.
     pub config_path: String,
+    /// Whether the configuration in force was actually read. False means the
+    /// app is running with no database credentials at all: the embedded backend
+    /// dies on its own thread and the window stays up in front of nothing.
+    /// Filled in by the caller that does the loading.
+    pub config_loaded: bool,
+    /// Path and reason when a configuration file could not be read. Those two
+    /// are the whole diagnosis, and nothing else in the app can show them —
+    /// a released build writes to a stderr that goes nowhere.
+    pub config_problem: Option<String>,
+}
+
+/// Present, absent, or unreadable.
+///
+/// `Path::is_file` answers false for every error alike, so a file that exists
+/// but cannot be opened reads exactly like one that was never created. Those
+/// two need different fixes, so the difference is kept rather than flattened.
+fn probe(path: &Path) -> Result<bool, std::io::Error> {
+    match fs::metadata(path) {
+        Ok(meta) => Ok(meta.is_file()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
 }
 
 pub fn env_path(app_data_dir: &Path, mode: DataMode) -> PathBuf {
@@ -115,7 +137,9 @@ pub fn resolve(app_data_dir: &Path) -> DataModeStatus {
     }
 
     let requested = read_requested(app_data_dir);
-    let production_configured = env_path(app_data_dir, DataMode::Production).is_file();
+    let production_path = env_path(app_data_dir, DataMode::Production);
+    let production = probe(&production_path);
+    let production_configured = matches!(production, Ok(true));
     let fell_back = requested == DataMode::Production && !production_configured;
     let mode = if fell_back { DataMode::Local } else { requested };
 
@@ -125,6 +149,12 @@ pub fn resolve(app_data_dir: &Path) -> DataModeStatus {
         fell_back,
         production_configured,
         config_path: env_path(app_data_dir, mode).display().to_string(),
+        // The caller loads the configuration; until it has, claiming it is
+        // loaded would be the same silent lie this field exists to prevent.
+        config_loaded: false,
+        config_problem: production.err().map(|error| {
+            format!("{} không đọc được: {error}", production_path.display())
+        }),
     }
 }
 
@@ -170,6 +200,33 @@ mod tests {
         assert_eq!(status.mode, DataMode::Production);
         assert!(!status.fell_back);
         assert!(status.config_path.ends_with(PRODUCTION_ENV_FILE));
+    }
+
+    #[test]
+    fn resolving_never_claims_the_configuration_was_loaded() {
+        let dir = temp_dir("not-loaded");
+        let status = resolve(&dir);
+        assert!(
+            !status.config_loaded,
+            "loading belongs to the caller; claiming it here is the silence this field exists to break"
+        );
+    }
+
+    #[test]
+    fn an_absent_production_file_is_not_reported_as_a_problem() {
+        let dir = temp_dir("absent");
+        let absent = resolve(&dir);
+        assert!(!absent.production_configured);
+        assert!(
+            absent.config_problem.is_none(),
+            "never created and cannot be read need different fixes, so only the second is a problem"
+        );
+
+        fs::write(env_path(&dir, DataMode::Production), "DATABASE_URL=postgres://x")
+            .expect("failed to write configuration");
+        let present = resolve(&dir);
+        assert!(present.production_configured);
+        assert!(present.config_problem.is_none());
     }
 
     #[test]

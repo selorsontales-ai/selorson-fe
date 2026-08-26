@@ -11,6 +11,10 @@ export interface DataModeStatus {
 	fell_back: boolean;
 	production_configured: boolean;
 	config_path: string;
+	/** False when the app started with no database credentials at all. */
+	config_loaded: boolean;
+	/** Which file, and why it could not be read. */
+	config_problem: string | null;
 }
 
 let status = $state<DataModeStatus | null>(null);
@@ -43,6 +47,20 @@ export function getDataMode(): DataModeStatus | null {
 
 export function getDataModeError(): string | null {
 	return loadError;
+}
+
+/**
+ * The configuration failure, when there is one.
+ *
+ * Separate from the mode itself because it is the one state the window cannot
+ * recover from on its own: with no credentials the embedded backend dies on its
+ * own thread, every page renders its empty state, and nothing says why. The
+ * message names the file, which is the only thing that leads to a fix.
+ */
+export function getConfigProblem(): string | null {
+	if (!supportsDataModes) return null;
+	if (!status || status.config_loaded) return null;
+	return status.config_problem ?? `Không tìm thấy tệp cấu hình:\n${status.config_path}`;
 }
 
 export function isProductionData(): boolean {
