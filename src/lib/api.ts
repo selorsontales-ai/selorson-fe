@@ -32,6 +32,17 @@ export interface ApiError {
 
 // ── Mutex-based token refresh (prevents thundering herd) ──
 
+/**
+ * A refresh that failed for a reason unrelated to the session.
+ *
+ * Worth its own type because the two outcomes could not be further apart:
+ * a refused refresh token means sign out, while a rate limit or an unreachable
+ * backend means wait. Collapsing them signs people out of valid sessions over
+ * a hiccup, and the session they lose is one they cannot get back without
+ * their password.
+ */
+class TransientRefreshFailure extends Error {}
+
 let isRefreshing = false;
 let waitQueue: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = [];
 
@@ -46,11 +57,24 @@ async function performTokenRefresh(staleToken?: string): Promise<string> {
 		return currentToken;
 	}
 
-	const res = await fetch(`${PUBLIC_API_BASE}/auth/refresh`, {
-		method: 'POST',
-		credentials: 'include',
-		headers: { Accept: 'application/json' }
-	});
+	let res: Response;
+	try {
+		res = await fetch(`${PUBLIC_API_BASE}/auth/refresh`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: { Accept: 'application/json' }
+		});
+	} catch {
+		throw new TransientRefreshFailure('Không kết nối được máy chủ');
+	}
+
+	// Checked before parsing: the rate limiter answers in plain text, so a 429
+	// read as JSON surfaces as a syntax error and loses the one fact that
+	// matters — that this failure is temporary and the session is still good.
+	if (res.status === 429 || res.status >= 500) {
+		throw new TransientRefreshFailure(`Máy chủ chưa trả lời được (${res.status})`);
+	}
+
 	const json = await res.json();
 	if (!res.ok || !json.success) {
 		throw new Error(json.message || 'Refresh failed');
@@ -94,7 +118,7 @@ async function acquireRefreshedToken(
 	} catch (err) {
 		waitQueue.forEach(({ reject }) => reject(err));
 		waitQueue = [];
-		if (logoutOnFailure) forceLogout();
+		if (logoutOnFailure && !(err instanceof TransientRefreshFailure)) forceLogout();
 		throw err;
 	} finally {
 		isRefreshing = false;

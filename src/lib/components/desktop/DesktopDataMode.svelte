@@ -6,9 +6,12 @@
 		isSwitchPromptOpen,
 		needsProductionAcknowledgement,
 	} from "$lib/desktop-mode.svelte";
+	import DataModeConfigAlert from "./DataModeConfigAlert.svelte";
 	import DataModeGate from "./DataModeGate.svelte";
 	import DataModeSwitchSheet from "./DataModeSwitchSheet.svelte";
 </script>
+
+<DataModeConfigAlert />
 
 {#if needsProductionAcknowledgement()}
 	<DataModeGate />
