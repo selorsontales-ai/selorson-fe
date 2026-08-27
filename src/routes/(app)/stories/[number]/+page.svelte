@@ -5,6 +5,7 @@
 	import { isAuthenticated } from '$lib/stores/auth.svelte';
 	import * as m from '$lib/paraglide/messages';
 	import CommentsSection from '$lib/components/ui/CommentsSection.svelte';
+	import StoryContent from '$lib/components/story/StoryContent.svelte';
 
 	let chapter = $state<any>(null);
 	let prevCh = $state<number | null>(null);
@@ -269,15 +270,12 @@
 			</nav>
 
 			<div class="reader-content" style:font-size="{fontSize}px" style:line-height="{lineHeight}" style:font-family="{fontFamily}" style="{getThemeStyle()}">
-				{#if chapter.content_html}
-					{@html chapter.content_html}
-				{:else if chapter.content}
-					{#each chapter.content.split('\n') as para}
-						{#if para.trim()}<p>{para}</p>{/if}
-					{/each}
-				{:else}
-					<p class="no-content">{m.reader_no_content()}</p>
-				{/if}
+				<StoryContent
+					blocks={chapter.content_blocks}
+					contentHtml={chapter.content_html}
+					content={chapter.content}
+					emptyText={m.reader_no_content()}
+				/>
 			</div>
 
 			{#if chapter.author_note}
@@ -436,16 +434,12 @@
 	.reader-content :global(h2), .reader-content :global(h3) {
 		margin: 2em 0 0.75em; font-family: var(--font-sans); font-weight: 700;
 	}
-	.reader-content :global(img) { max-width: 100%; border-radius: var(--radius-md); margin: 1.5em auto; display: block; }
-	.reader-content :global(figure) { margin: 2rem 0; text-align: center; }
-	.reader-content :global(figure img) { max-width: 100%; height: auto; border-radius: 0.75rem; }
-	.reader-content :global(figcaption) { font-size: 0.85em; color: var(--color-text-muted); margin-top: 0.5rem; font-style: italic; }
+	/* Hình, figure và bố cục ảnh do StoryContent.svelte tự lo — cả nội dung mới lẫn cũ. */
 	.reader-content :global(blockquote) {
 		border-left: 3px solid var(--color-brand-500);
 		padding-left: 1em; margin: 1.5em 0;
 		color: var(--color-text-secondary); font-style: italic;
 	}
-	.no-content { color: var(--color-text-muted); font-style: italic; text-align: center !important; text-indent: 0 !important; }
 
 	.author-note { padding: 1.25rem; margin: 2.5rem 0; }
 	.author-note h4 { font-size: .9rem; margin-bottom: .5rem; color: var(--color-text-primary); }
@@ -475,27 +469,5 @@
 		.reader-settings { flex-direction: column; gap: 0.5rem; }
 		.chapter-nav { flex-direction: column; gap: 0.75rem; }
 		.chapter-nav-top { flex-direction: column; gap: 0.5rem; align-items: stretch; text-align: center; }
-	}
-
-	/* Image layout styles */
-	.reader-content :global(.layout-single-1-1 .image-container img) { max-width: 400px; aspect-ratio: 1; object-fit: cover; }
-	.reader-content :global(.layout-single-16-9 .image-container img) { max-width: 100%; aspect-ratio: 16/9; object-fit: cover; }
-	.reader-content :global(.layout-single-9-16 .image-container img) { max-width: 320px; aspect-ratio: 9/16; object-fit: cover; }
-	.reader-content :global(.layout-combo-2 .image-container) { display: flex; gap: 0.75rem; justify-content: center; }
-	.reader-content :global(.layout-combo-2 .image-container img) { width: 48%; object-fit: cover; border-radius: 0.75rem; }
-	.reader-content :global(.layout-combo-2-overlap .image-container) { display: flex; justify-content: center; position: relative; }
-	.reader-content :global(.layout-combo-2-overlap .image-container img:first-child) { width: 55%; z-index: 1; position: relative; }
-	.reader-content :global(.layout-combo-2-overlap .image-container img:nth-child(2)) { width: 55%; margin-left: -15%; margin-top: 8%; z-index: 2; position: relative; }
-	.reader-content :global(.layout-combo-3 .image-container) { display: flex; gap: 0.5rem; justify-content: center; }
-	.reader-content :global(.layout-combo-3 .image-container img) { width: 32%; object-fit: cover; border-radius: 0.75rem; }
-
-	@media (max-width: 768px) {
-		.reader-content :global(.layout-combo-2 .image-container),
-		.reader-content :global(.layout-combo-3 .image-container) { flex-direction: column; align-items: center; }
-		.reader-content :global(.layout-combo-2 .image-container img),
-		.reader-content :global(.layout-combo-3 .image-container img) { width: 100%; max-width: 400px; }
-		.reader-content :global(.layout-combo-2-overlap .image-container) { flex-direction: column; align-items: center; }
-		.reader-content :global(.layout-combo-2-overlap .image-container img) { width: 85%; margin-left: 0; margin-top: -10%; }
-		.reader-content :global(.layout-combo-2-overlap .image-container img:first-child) { margin-top: 0; }
 	}
 </style>

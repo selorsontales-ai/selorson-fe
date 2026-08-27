@@ -100,14 +100,30 @@
 			}
 
 			// 2. Save Chapter
+			// Helper admin nuốt exception và trả về { success: false }, nên phải
+			// kiểm tra rồi mới được dừng — nếu không sẽ báo "đã lưu" cho một
+			// request đã hỏng.
 			let idToSync = chapterId;
 			if (isEdit) {
-				await adminPut(`/admin/chapters/${chapterId}`, payload);
+				const res = await adminPut<any>(
+					`/admin/chapters/${chapterId}`,
+					payload,
+				);
+				if (!res.success) {
+					toast_error(
+						`Lưu chương thất bại: ${res.message || "Không rõ nguyên nhân"}`,
+					);
+					return;
+				}
 			} else {
 				const res = await adminPost<any>("/admin/chapters", payload);
-				if (res.success && res.data && res.data.id) {
-					idToSync = res.data.id.toString();
+				if (!res.success || !res.data?.id) {
+					toast_error(
+						`Tạo chương thất bại: ${res.message || "Không rõ nguyên nhân"}`,
+					);
+					return;
 				}
+				idToSync = res.data.id.toString();
 			}
 
 			// 3. Sync Tags, Links, and Assets

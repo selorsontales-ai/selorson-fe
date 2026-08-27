@@ -2,6 +2,8 @@
 	import { tick, onMount } from 'svelte';
 	import { adminPost, adminDelete, adminGet, adminUpload, toast_success, toast_error } from '$lib/stores/admin.svelte';
 	import { fade, slide } from 'svelte/transition';
+	import StoryContent from '$lib/components/story/StoryContent.svelte';
+	import { fitScaleInTile, normalizeRotation, resolveAspect } from '$lib/story/story-blocks.js';
 
 	// ==========================================
 	// PROPS & STATE
@@ -452,19 +454,24 @@
 	// ==========================================
 	// COMPILING HTML & SAVING
 	// ==========================================
+	/**
+	 * Dựng `content_html` — bản dự phòng đã giảm chất lượng.
+	 *
+	 * Trang đọc render từ `content_blocks`, vốn giữ đủ bố cục và góc xoay. Trường
+	 * này chỉ còn dùng cho những nơi cần một khối HTML phẳng, và backend sẽ chạy
+	 * `ammonia::clean` lên nó — thứ này xoá sạch `class` lẫn `style`, nên đừng
+	 * mất công nhét bố cục hay góc xoay vào đây, chúng không sống nổi.
+	 */
 	function compileHTML() {
 		let html = '';
 		for (const b of blocks) {
 			if (b.type === 'paragraph') {
 				html += `<p>${b.content || ''}</p>\n`;
 			} else if (b.type === 'image') {
-				html += `<figure class="story-image ${b.layout}">\n`;
-				html += `  <div class="image-container">\n`;
+				html += `<figure>\n`;
 				for (const img of (b.images || [])) {
-					const rotationStyle = b.rotation ? ` style="transform: rotate(${b.rotation}deg);"` : '';
-					html += `    <img src="${img.cloudinary_url}" alt="${img.filename}"${rotationStyle} />\n`;
+					html += `  <img src="${img.cloudinary_url}" alt="${img.filename}" />\n`;
 				}
-				html += `  </div>\n`;
 				if (b.caption) {
 					html += `  <figcaption>${b.caption}</figcaption>\n`;
 				}
@@ -475,11 +482,26 @@
 	}
 
 	let showPreview = $state(false);
-	let previewHtml = $state('');
 
-	function openPreview() {
-		previewHtml = compileHTML();
-		showPreview = true;
+	/**
+	 * Tỉ lệ ô thumbnail do bố cục ép; combo thì ô ăn theo tỉ lệ gốc của ảnh.
+	 */
+	const TILE_ASPECT: Record<string, number> = {
+		'single-1-1': 1,
+		'single-16-9': 16 / 9,
+		'single-9-16': 9 / 16
+	};
+
+	/**
+	 * Thumbnail trong lưới soạn thảo có tỉ lệ cố định nên không co giãn theo góc
+	 * xoay như khung của trình đọc được. Thay vào đó thu ảnh lại vừa đủ để thấy
+	 * trọn góc nghiêng, không bị ô cắt mất.
+	 */
+	function thumbTransform(block: EditorBlock, img: ChapterAsset) {
+		const deg = normalizeRotation(block.rotation);
+		if (deg === 0) return '';
+		const tile = TILE_ASPECT[block.layout ?? ''] ?? resolveAspect('combo-2', img);
+		return `transform: rotate(${deg}deg) scale(${fitScaleInTile(tile, deg)});`;
 	}
 
 	async function handleSave() {
@@ -512,7 +534,7 @@
 					<button class="btn-back" onclick={() => window.history.back()} title="Quay lại">← Quay lại</button>
 					<input type="text" class="title-input" bind:value={title} placeholder="Tiêu đề chương..." />
 					<div class="header-actions">
-						<button class="btn-preview" onclick={openPreview}>👁️ Xem thử</button>
+						<button class="btn-preview" onclick={() => showPreview = true}>👁️ Xem thử</button>
 						<button class="btn-save" onclick={handleSave}>💾 Lưu Chương</button>
 					</div>
 				</div>
@@ -602,7 +624,7 @@
 									{:else}
 										{#each block.images as img, j}
 											<div class="img-item">
-												<img src={img.cloudinary_url} alt="preview" style="transform: rotate({block.rotation || 0}deg);" />
+												<img src={img.cloudinary_url} alt="preview" style={thumbTransform(block, img)} />
 												<button class="del-img" onclick={() => removeImageFromBlock(i, j)}>×</button>
 											</div>
 										{/each}
@@ -614,6 +636,12 @@
 										Góc xoay: {block.rotation || 0}°
 										<input type="range" bind:value={block.rotation} min="0" max="360" step="1" class="rotation-slider" />
 									</label>
+									<button
+										class="rotation-reset"
+										disabled={!block.rotation}
+										title="Về 0°"
+										onclick={() => { block.rotation = 0; snapshotHistory(); }}
+									>⟲</button>
 								</div>
 							</div>
 						{/if}
@@ -877,6 +905,13 @@
 	.image-caption-input { flex: 1; padding: 0.4rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.85rem; background: var(--color-surface-100); color: var(--color-text-primary); }
 	.rotation-label { font-size: 0.85rem; color: var(--color-text-secondary); display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; }
 	.rotation-slider { width: 100px; cursor: pointer; accent-color: var(--color-brand-500); }
+	.rotation-reset { border: 1px solid var(--color-border); background: var(--color-surface-100); color: var(--color-text-secondary); border-radius: var(--radius-sm); width: 1.75rem; height: 1.75rem; cursor: pointer; line-height: 1; flex-shrink: 0; }
+	.rotation-reset:hover:not(:disabled) { background: var(--color-surface-200); color: var(--color-brand-500); }
+	.rotation-reset:disabled { opacity: 0.35; cursor: default; }
+
+	/* BẢN XEM THỬ — dựng lại kiểu chữ của trang đọc để xem thử đúng như thật. */
+	.preview-content { padding: 1rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-50); max-height: 60vh; overflow-y: auto; font-family: var(--font-serif); line-height: 1.8; color: var(--color-text-primary); }
+	.preview-content :global(p) { margin-bottom: 1.2em; text-align: justify; text-indent: 2em; }
 
 	@media (max-width: 768px) {
 		.editor-container {
@@ -969,8 +1004,9 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="modal-card large" onclick={e => e.stopPropagation()}>
 			<h4>👁️ Bản xem thử</h4>
-			<div class="preview-content" style="padding: 1rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-50); max-height: 60vh; overflow-y: auto;">
-				{@html previewHtml}
+			<!-- Dùng đúng component của trang đọc để bản xem thử không lệch với thực tế. -->
+			<div class="preview-content">
+				<StoryContent blocks={blocks} emptyText="Chương này chưa có nội dung." />
 			</div>
 			<div class="modal-actions">
 				<button class="btn-primary" onclick={() => showPreview = false}>Đóng</button>
