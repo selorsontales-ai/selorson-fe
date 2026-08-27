@@ -7,6 +7,7 @@
 	import PrivateChat from "$lib/components/ui/PrivateChat.svelte";
 	import SupportChatWidget from "$lib/components/ui/SupportChatWidget.svelte";
 	import Toast from "$lib/components/ui/Toast.svelte";
+	import ApiProgress from "$lib/components/ui/ApiProgress.svelte";
 	import LanguageSwitcher from "$lib/components/ui/LanguageSwitcher.svelte";
 	import {
 		initAuth,
@@ -281,6 +282,7 @@
 	<PrivateChat />
 	<SupportChatWidget />
 	<Toast />
+	<ApiProgress />
 
 	<!-- Footer -->
 	<footer class="site-footer">
