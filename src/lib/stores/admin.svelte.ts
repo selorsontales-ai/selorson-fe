@@ -10,22 +10,90 @@ interface ToastItem {
 	id: number;
 	message: string;
 	type: 'success' | 'error' | 'info';
+	/** Thời điểm tạo, dùng để gộp các lời báo cùng một thao tác. */
+	at: number;
 }
 
 let toasts = $state<ToastItem[]>([]);
 let toastId = 0;
+/** Thời điểm request thay đổi dữ liệu gần nhất bị hỏng. */
+let lastFailureAt = 0;
+
+/** Cửa sổ coi hai sự kiện là cùng thuộc một thao tác của người dùng. */
+const COALESCE_MS = 900;
+/** Sau khi có request hỏng, chặn báo thành công trong khoảng này. */
+const SUPPRESS_SUCCESS_MS = 1500;
 
 export function showToast(message: string, type: ToastItem['type'] = 'info') {
+	const now = Date.now();
+	const last = toasts.at(-1);
+
+	// Một thao tác hỏng thường sinh hai lời báo lỗi: một từ helper (kèm thông
+	// điệp của máy chủ) và một từ trang (kèm ngữ cảnh). Gộp lại thành một thẻ,
+	// giữ lời sau vì nó cụ thể hơn.
+	if (last && last.type === type && now - last.at < COALESCE_MS) {
+		if (last.message === message) return;
+		if (type === 'error') {
+			toasts = [...toasts.slice(0, -1), { ...last, message }];
+			return;
+		}
+		// Báo thành công khác nội dung thì vẫn xếp thêm thẻ.
+	}
+
 	const id = ++toastId;
-	toasts = [...toasts, { id, message, type }];
-	setTimeout(() => {
-		toasts = toasts.filter((t) => t.id !== id);
-	}, 3500);
+	toasts = [...toasts, { id, message, type, at: now }];
+	setTimeout(() => dismissToast(id), 3500);
 }
 
-export function toast_success(msg: string) { showToast(msg, 'success'); }
+/**
+ * Báo thành công — bị bỏ qua nếu vừa có request hỏng.
+ *
+ * Rất nhiều trang admin gọi API rồi báo "đã lưu" mà không xem kết quả. Chốt
+ * chặn này khiến chúng không thể báo xanh đè lên một thao tác vừa thất bại.
+ */
+export function toast_success(msg: string) {
+	if (Date.now() - lastFailureAt < SUPPRESS_SUCCESS_MS) return;
+	showToast(msg, 'success');
+}
+
 export function toast_error(msg: string) { showToast(msg, 'error'); }
 export function getToasts(): ToastItem[] { return toasts; }
+export function dismissToast(id: number) {
+	toasts = toasts.filter((t) => t.id !== id);
+}
+
+// ---- Trạng thái đang gọi API ----
+// Mọi thao tác admin đều đi qua các helper bên dưới, nên chỉ cần đo ở đây là
+// thanh tiến trình toàn cục biết lúc nào có request đang chạy, và mọi thất bại
+// đều được báo dù trang gọi có kiểm tra kết quả hay không.
+
+let inFlight = $state(0);
+
+export function isBusy(): boolean { return inFlight > 0; }
+
+async function tracked<T>(
+	run: () => Promise<ApiResponse<T>>,
+	mutating: boolean
+): Promise<ApiResponse<T>> {
+	inFlight += 1;
+	try {
+		const res = await run();
+		if (mutating && !res.success) {
+			lastFailureAt = Date.now();
+			showToast(res.message || 'Thao tác thất bại', 'error');
+		}
+		return res;
+	} catch (err) {
+		const res = toErrorResponse<T>(err);
+		if (mutating) {
+			lastFailureAt = Date.now();
+			showToast(res.message || 'Thao tác thất bại', 'error');
+		}
+		return res;
+	} finally {
+		inFlight -= 1;
+	}
+}
 
 // ---- Admin API Helpers ----
 // api() throws khi HTTP lỗi hoặc success:false — các trang admin lại kiểm tra
@@ -33,52 +101,37 @@ export function getToasts(): ToastItem[] { return toasts; }
 // ApiResponse dạng lỗi để spinner không bị kẹt và toast lỗi hiển thị đúng.
 
 function toErrorResponse<T>(err: unknown): ApiResponse<T> {
-	const e = err as { success?: boolean; message?: string; data?: T };
+	const e = err as { status?: number; success?: boolean; message?: string; data?: T };
+	// api() ném lỗi có dạng { status, success, message } khi máy chủ trả lời.
+	// Thiếu cả hai trường đó nghĩa là hỏng ở tầng dưới (mất mạng, body không
+	// phải JSON) — thông điệp gốc lúc đó là tiếng Anh kỹ thuật, không nên đẩy
+	// thẳng vào mặt người dùng.
+	const fromServer = e?.status !== undefined || e?.success !== undefined;
 	return {
 		success: false,
 		data: (e?.data as T) ?? (undefined as T),
-		message: e?.message || 'Không kết nối được máy chủ',
+		message: (fromServer && e?.message) || 'Không kết nối được máy chủ',
 	};
 }
 
 export async function adminGet<T>(endpoint: string): Promise<ApiResponse<T>> {
-	try {
-		return await api<T>(endpoint);
-	} catch (err) {
-		return toErrorResponse<T>(err);
-	}
+	return tracked<T>(() => api<T>(endpoint), false);
 }
 
 export async function adminPost<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
-	try {
-		return await api<T>(endpoint, { method: 'POST', body });
-	} catch (err) {
-		return toErrorResponse<T>(err);
-	}
+	return tracked<T>(() => api<T>(endpoint, { method: 'POST', body }), true);
 }
 
 export async function adminPut<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
-	try {
-		return await api<T>(endpoint, { method: 'PUT', body });
-	} catch (err) {
-		return toErrorResponse<T>(err);
-	}
+	return tracked<T>(() => api<T>(endpoint, { method: 'PUT', body }), true);
 }
 
 export async function adminDelete<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
-	try {
-		return await api<T>(endpoint, { method: 'DELETE', body });
-	} catch (err) {
-		return toErrorResponse<T>(err);
-	}
+	return tracked<T>(() => api<T>(endpoint, { method: 'DELETE', body }), true);
 }
 
 export async function adminUpload<T>(endpoint: string, formData: FormData): Promise<ApiResponse<T>> {
-	try {
-		return await apiUpload<T>(endpoint, formData);
-	} catch (err) {
-		return toErrorResponse<T>(err);
-	}
+	return tracked<T>(() => apiUpload<T>(endpoint, formData), true);
 }
 
 // ---- Formatting Helpers ----
