@@ -110,8 +110,7 @@
 
 			<nav class="main-nav">
 				<a href="/" class="nav-link" class:active={$page.url.pathname === '/'}>{m.nav_home()}</a>
-				<a href="/stories" class="nav-link" class:active={$page.url.pathname.startsWith('/stories') && $page.url.searchParams.get('tab') !== 'manga'}>{m.nav_stories()}</a>
-				<a href="/manga" class="nav-link" class:active={$page.url.pathname.startsWith('/manga') || ($page.url.pathname.startsWith('/stories') && $page.url.searchParams.get('tab') === 'manga')}>Manga</a>
+				<a href="/stories" class="nav-link" class:active={$page.url.pathname.startsWith('/stories')}>{m.nav_stories()}</a>
 				<a href="/videos" class="nav-link" class:active={$page.url.pathname.startsWith('/videos')}>{m.nav_videos()}</a>
 				<a href="/music" class="nav-link" class:active={$page.url.pathname.startsWith('/music')}>{m.nav_music()}</a>
 				<a href="/library" class="nav-link" class:active={$page.url.pathname.startsWith('/library')}>{m.nav_library()}</a>
@@ -242,8 +241,7 @@
 		></div>
 		<nav class="mobile-nav">
 			<a href="/" class:active={$page.url.pathname === '/'} onclick={() => (showMobileMenu = false)}>{m.nav_home()}</a>
-			<a href="/stories" class:active={$page.url.pathname.startsWith('/stories') && $page.url.searchParams.get('tab') !== 'manga'} onclick={() => (showMobileMenu = false)}>{m.nav_stories()}</a>
-			<a href="/manga" class:active={$page.url.pathname.startsWith('/manga') || ($page.url.pathname.startsWith('/stories') && $page.url.searchParams.get('tab') === 'manga')} onclick={() => (showMobileMenu = false)}>Manga</a>
+			<a href="/stories" class:active={$page.url.pathname.startsWith('/stories')} onclick={() => (showMobileMenu = false)}>{m.nav_stories()}</a>
 			<a href="/videos" class:active={$page.url.pathname.startsWith('/videos')} onclick={() => (showMobileMenu = false)}>{m.nav_videos()}</a>
 			<a href="/music" class:active={$page.url.pathname.startsWith('/music')} onclick={() => (showMobileMenu = false)}>{m.nav_music()}</a>
 			<a href="/library" class:active={$page.url.pathname.startsWith('/library')} onclick={() => (showMobileMenu = false)}>{m.nav_library()}</a>
