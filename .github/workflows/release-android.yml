@@ -1,4 +1,4 @@
-﻿name: Android Release
+name: Android Release
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ on:
       - "android-user-v*"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: release-android-${{ github.ref }}
@@ -30,13 +30,9 @@ concurrency:
 
 jobs:
   bundle:
-    name: Build signed Android AAB
+    name: Build & Publish signed Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    outputs:
-      audience: ${{ steps.release.outputs.audience }}
-      version: ${{ steps.release.outputs.version }}
-      tag: ${{ steps.release.outputs.tag }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -83,12 +79,6 @@ jobs:
             exit 1
           fi
 
-          # A signed APK, not an App Bundle: these builds are installed directly
-          # on the device they are meant for. An .aab cannot be installed â€” it is
-          # an upload format for Google Play, which neither audience ships to.
-          # APK output nests flavor and build type as separate directories
-          # (apk/admin/release), unlike the bundle task's single adminRelease
-          # folder. Verified against a local assembleAdminDebug.
           if [ "$audience" = "admin" ]; then
             task="assembleAdminRelease"
             output="android/app/build/outputs/apk/admin/release/app-admin-release.apk"
@@ -171,45 +161,21 @@ jobs:
           ANDROID_VERSION_CODE: ${{ steps.release.outputs.version_code }}
         run: ./gradlew --no-daemon ":app:${{ steps.release.outputs.task }}"
 
-      - name: Upload signed APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: selorson-android-${{ steps.release.outputs.audience }}-${{ steps.release.outputs.version }}
-          retention-days: 1
-          if-no-files-found: error
-          path: ${{ steps.release.outputs.output }}
-
-  publish:
-    name: Publish tagged Android artifact
-    if: github.event_name == 'push'
-    needs: bundle
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download verified signed APK
-        uses: actions/download-artifact@v4
-        with:
-          name: selorson-android-${{ needs.bundle.outputs.audience }}-${{ needs.bundle.outputs.version }}
-          path: apk
-
-      - name: Rename the APK to its release identity
-        shell: bash
-        run: |
-          set -e
-          source_apk=$(find apk -name '*.apk' | head -n 1)
-          if [ -z "$source_apk" ]; then
-            echo "::error::No APK was produced."
-            exit 1
-          fi
-          mv "$source_apk" "apk/Selorson-${{ needs.bundle.outputs.audience }}-${{ needs.bundle.outputs.version }}.apk"
-
-      - name: Publish without executing project code
+      - name: Publish tagged Android APK directly to GitHub Releases
+        if: github.event_name == 'push'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ needs.bundle.outputs.tag }}" \
-            --title "Selorson Android ${{ needs.bundle.outputs.audience }} ${{ needs.bundle.outputs.version }}" \
-            --notes "Báº£n Android ${{ needs.bundle.outputs.audience }} Ä‘Ã£ kÃ½. Táº£i file .apk vÃ  cÃ i trá»±c tiáº¿p lÃªn mÃ¡y." \
+          set -e
+          source_apk="${{ steps.release.outputs.output }}"
+          if [ ! -f "$source_apk" ]; then
+            echo "::error::No APK was produced at $source_apk."
+            exit 1
+          fi
+          mkdir -p apk
+          cp "$source_apk" "apk/Selorson-${{ steps.release.outputs.audience }}-${{ steps.release.outputs.version }}.apk"
+          gh release create "${{ steps.release.outputs.tag }}" \
+            --title "Selorson Android ${{ steps.release.outputs.audience }} ${{ steps.release.outputs.version }}" \
+            --notes "Bản Android ${{ steps.release.outputs.audience }} đã ký. Tải file .apk và cài trực tiếp lên máy." \
             apk/*.apk

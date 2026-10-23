@@ -11,9 +11,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build isolated web-admin artifact
+  deploy:
+    name: 🚀 Build & Deploy isolated web-admin to Cloudflare Pages
     runs-on: ubuntu-latest
+    environment: web-admin-production
     env:
       ADMIN_PROJECT_NAME: ${{ vars.CLOUDFLARE_ADMIN_PROJECT_NAME }}
       PUBLIC_API_BASE: https://selorson-v3-api.fly.dev/api/v1
@@ -50,53 +51,9 @@ jobs:
       - name: Build web-admin
         run: npm run build:web:admin
 
-      - name: Upload immutable web-admin artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-admin-${{ github.run_id }}
-          retention-days: 1
-          if-no-files-found: error
-          include-hidden-files: true
-          path: .svelte-kit
-
-  deploy:
-    name: Deploy isolated web-admin artifact
-    needs: build
-    runs-on: ubuntu-latest
-    environment: web-admin-production
-    env:
-      ADMIN_PROJECT_NAME: ${{ vars.CLOUDFLARE_ADMIN_PROJECT_NAME }}
-    steps:
-      - name: Checkout dependency manifests
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install dependencies without running project code
-        run: npm ci --ignore-scripts
-
-      - name: Download verified web-admin artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: web-admin-${{ github.run_id }}
-          path: site
-
-      - name: Require a dedicated Cloudflare project
-        shell: bash
-        run: |
-          if [ -z "$ADMIN_PROJECT_NAME" ] || [ "$ADMIN_PROJECT_NAME" = "selorson-frontend-v3" ]; then
-            echo "::error::web-admin requires its own Cloudflare Pages project."
-            exit 1
-          fi
-
       - name: Deploy to the dedicated Cloudflare Pages project
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy site/cloudflare --project-name=${{ vars.CLOUDFLARE_ADMIN_PROJECT_NAME }} --branch=main --commit-hash=${{ github.sha }}
+          command: pages deploy .svelte-kit/cloudflare --project-name=${{ vars.CLOUDFLARE_ADMIN_PROJECT_NAME }} --branch=main --commit-hash=${{ github.sha }}

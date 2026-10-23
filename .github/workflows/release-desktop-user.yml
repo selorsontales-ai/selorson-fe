@@ -1,4 +1,4 @@
-﻿name: Desktop User Release
+name: Desktop User Release
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ on:
       - "desktop-user-v*"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: release-desktop-user-${{ github.ref }}
@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build isolated desktop-user installer
+    name: Build & Publish isolated desktop-user installer
     runs-on: windows-latest
     timeout-minutes: 75
     env:
@@ -143,38 +143,16 @@ jobs:
           }
           Stop-Process -Id $process.Id -Force
 
-      - name: Upload desktop-user installers
-        uses: actions/upload-artifact@v4
-        with:
-          name: selorson-desktop-user-${{ github.ref_name }}
-          retention-days: 1
-          if-no-files-found: error
-          path: |
-            frontend-v3/src-tauri/target/release/bundle/msi/*.msi
-            frontend-v3/src-tauri/target/release/bundle/nsis/*-setup.exe
-
-  publish:
-    name: Publish tagged desktop-user artifact
-    if: startsWith(github.ref, 'refs/tags/desktop-user-v')
-    needs: build
-    runs-on: windows-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download verified build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: selorson-desktop-user-${{ github.ref_name }}
-          path: installers
-
-      - name: Publish release without executing project code
+      - name: Publish tagged desktop-user release directly
+        if: startsWith(github.ref, 'refs/tags/desktop-user-v')
         shell: pwsh
+        working-directory: frontend-v3
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = "${{ github.ref_name }}" -replace '^desktop-user-v', ''
-          $msi = Get-ChildItem installers -Recurse -Filter *.msi
-          $nsis = Get-ChildItem installers -Recurse -Filter *-setup.exe
+          $msi = Get-ChildItem src-tauri/target/release/bundle/msi -Filter *.msi
+          $nsis = Get-ChildItem src-tauri/target/release/bundle/nsis -Filter *-setup.exe
           if ($msi.Count -eq 0 -or $nsis.Count -eq 0) {
             throw "MSI or NSIS desktop-user installer is missing."
           }

@@ -197,11 +197,8 @@ test("CI builds every platform-audience boundary without delaying public deploy"
   }
   assert.match(deploy, /npm run build:web:user/);
   assert.doesNotMatch(deploy, /npm run build:web:admin/);
-  assert.match(deploy, /^  build:/m);
   assert.match(deploy, /^  deploy:/m);
-  assert.match(deploy, /needs: build/);
-  assert.match(deploy, /actions\/upload-artifact@v4/);
-  assert.match(deploy, /include-hidden-files: true/);
+  assert.doesNotMatch(deploy, /actions\/upload-artifact@v4/);
   assert.match(verifier, /flavor !== "desktop-admin"/);
 });
 
@@ -221,24 +218,19 @@ test("release channels and credentials are isolated by audience", async () => {
 
   assert.match(webAdmin, /CLOUDFLARE_ADMIN_PROJECT_NAME/);
   assert.match(webAdmin, /npm run build:web:admin/);
-  assert.match(webAdmin, /^  build:/m);
   assert.match(webAdmin, /^  deploy:/m);
-  assert.match(webAdmin, /needs: build/);
-  assert.match(webAdmin, /include-hidden-files: true/);
+  assert.doesNotMatch(webAdmin, /actions\/upload-artifact@v4/);
   assert.match(desktopUser, /- "desktop-user-v\*"/);
   assert.match(desktopUser, /\^\[0-9a-fA-F\]\{40\}\$/);
-  assert.match(desktopUser, /^  publish:/m);
-  assert.match(desktopUser, /needs: build/);
-  assert.match(desktopAdmin, /^  publish:/m);
-  assert.match(desktopAdmin, /needs: windows-installer/);
+  assert.doesNotMatch(desktopUser, /actions\/upload-artifact@v4/);
+  assert.doesNotMatch(desktopAdmin, /actions\/upload-artifact@v4/);
   assert.match(android, /- "android-admin-v\*"/);
   assert.match(android, /- "android-user-v\*"/);
   assert.match(android, /ANDROID_ADMIN_KEYSTORE_BASE64/);
   assert.match(android, /ANDROID_USER_KEYSTORE_BASE64/);
   assert.match(android, /major \* 1000000/);
   assert.doesNotMatch(android, /github\.run_number/);
-  assert.match(android, /^  publish:/m);
-  assert.match(android, /needs: bundle/);
+  assert.doesNotMatch(android, /actions\/upload-artifact@v4/);
 });
 
 test("two data modes exist for desktop-admin only, and default to the safe one", async () => {
@@ -258,8 +250,6 @@ test("two data modes exist for desktop-admin only, and default to the safe one",
 test("the launch gate is answered per session, never remembered", async () => {
   const mode = await source("src", "lib", "desktop-mode.svelte.ts");
 
-  // Persisting the acknowledgement would turn it back into a banner, and a
-  // banner that is always there stops being read.
   assert.match(mode, /let acknowledged = \$state\(false\)/);
   assert.doesNotMatch(mode, /localStorage/);
   assert.match(mode, /status\?\.mode === "production" && !acknowledged/);
@@ -271,8 +261,6 @@ test("a session belongs to the mode that issued it", async () => {
   const api = await source("src", "lib", "api.ts");
 
   assert.match(storage, /selorson_token\$\{dataModeScope\(\)\}/);
-  // No literal key may survive: one would silently share a token between two
-  // different user tables.
   assert.doesNotMatch(auth, /'selorson_token'/);
   assert.doesNotMatch(api, /'selorson_token'/);
   assert.match(auth, /tokenStorageKey\(\)/);
@@ -283,14 +271,10 @@ test("production mode leaves newsletter sending to the deployment", async () => 
   const tauri = await source("src-tauri", "src", "lib.rs");
   const dataMode = await source("src-tauri", "src", "data_mode.rs");
 
-  // Set for both modes, not only production: a restart inherits the previous
-  // process's environment, so an "off" left over from production would
-  // silently disable the workers in local too.
   assert.match(tauri, /SELORSON_BACKGROUND_WORKERS/);
   assert.match(tauri, /DataMode::Production => "off"/);
   assert.match(tauri, /DataMode::Local => "on"/);
 
-  // Production is refused rather than approximated when unconfigured.
   assert.match(dataMode, /fell_back/);
   assert.match(dataMode, /unwrap_or\(DataMode::Local\)/);
 });

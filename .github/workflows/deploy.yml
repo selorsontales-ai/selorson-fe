@@ -15,10 +15,11 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build web-user deployment artifact
+  deploy:
+    name: 🚀 Build & Deploy web-user to Cloudflare Pages
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+    environment: web-user-production
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,6 +31,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
@@ -48,47 +50,12 @@ jobs:
         env:
           NODE_ENV: production
 
-      - name: Upload immutable web-user artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-user-${{ github.run_id }}
-          retention-days: 1
-          if-no-files-found: error
-          include-hidden-files: true
-          path: .svelte-kit
-
-  deploy:
-    name: Deploy web-user artifact to Cloudflare Pages
-    needs: build
-    runs-on: ubuntu-latest
-    environment: web-user-production
-    steps:
-      - name: Checkout dependency manifests
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install dependencies without running project code
-        run: npm ci --ignore-scripts
-
-      - name: Download verified web-user artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: web-user-${{ github.run_id }}
-          path: site
-
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy site/cloudflare --project-name=selorson-frontend-v3 --branch=main --commit-hash=${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          command: pages deploy .svelte-kit/cloudflare --project-name=selorson-frontend-v3 --branch=main --commit-hash=${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Verify public web routes
         run: |
