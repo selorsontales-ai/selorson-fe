@@ -263,11 +263,7 @@
 						class:active={readerTab === 'manga'}
 						onclick={() => (readerTab = 'manga')}
 					>
-						{#if mangaConfig.color_pages.length > 0 && mangaConfig.bw_pages.length > 0}
-							🎨 Xem Manga (🎨 {mangaConfig.color_pages.length} · 🖋️ {mangaConfig.bw_pages.length})
-						{:else}
-							🎨 Xem Manga ({mangaConfig.pages.length} trang)
-						{/if}
+						🎨 Đọc Manga
 					</button>
 				</div>
 			{/if}

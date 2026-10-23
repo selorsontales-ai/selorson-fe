@@ -129,7 +129,7 @@
 							onclick={() => switchEdition('color')}
 							title="Đọc bản Full Color giữ nguyên vị trí trang"
 						>
-							🎨 Bản Màu <span class="ed-count">{colorPages.length}</span>
+							🎨 Bản Màu
 						</button>
 						<button
 							type="button"
@@ -138,13 +138,13 @@
 							onclick={() => switchEdition('bw')}
 							title="Đọc bản Tankōbon Đen Trắng giữ nguyên vị trí trang"
 						>
-							🖋️ Đen Trắng <span class="ed-count">{bwPages.length}</span>
+							🖋️ Đen Trắng
 						</button>
 					</div>
 				{:else if hasBw}
-					<span class="single-edition-badge bw">🖋️ Bản Đen Trắng ({bwPages.length} trang)</span>
+					<span class="single-edition-badge bw">🖋️ Bản Đen Trắng</span>
 				{:else}
-					<span class="single-edition-badge color">🎨 Bản Có Màu ({colorPages.length || totalPages} trang)</span>
+					<span class="single-edition-badge color">🎨 Bản Có Màu</span>
 				{/if}
 			</div>
 
@@ -399,12 +399,6 @@
 		background: linear-gradient(135deg, #334155, #0f172a);
 		color: #f8fafc;
 		box-shadow: 0 2px 10px rgba(15, 23, 42, 0.45);
-	}
-	.ed-count {
-		font-size: 0.7rem;
-		padding: 0.05rem 0.38rem;
-		border-radius: 999px;
-		background: rgba(255, 255, 255, 0.2);
 	}
 	.single-edition-badge {
 		font-size: 0.78rem;
