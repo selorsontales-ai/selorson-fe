@@ -7,9 +7,6 @@ const GENERATED_ROOT = path.join(ROOT, ".flavor-routes");
 
 const USER_FLAVORS = new Set(["web-user", "desktop-user", "android-user"]);
 const DESKTOP_ADMIN_ONLY_ROUTES = [
-  "(app)/admin/co-writer",
-  "(app)/admin/llm-gateway",
-  "(app)/admin/claude-chat",
   "(app)/admin/desktop-update",
 ];
 

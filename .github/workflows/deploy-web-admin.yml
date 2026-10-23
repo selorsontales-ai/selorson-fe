@@ -54,11 +54,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: web-admin-${{ github.run_id }}
+          retention-days: 1
           if-no-files-found: error
           include-hidden-files: true
-          # Whole tree, for the same reason as the public deploy: _worker.js
-          # imports ../output/server/index.js and ../cloudflare-tmp/manifest.js,
-          # and wrangler bundles it on the deploy runner.
           path: .svelte-kit
 
   deploy:
@@ -69,10 +67,6 @@ jobs:
     env:
       ADMIN_PROJECT_NAME: ${{ vars.CLOUDFLARE_ADMIN_PROJECT_NAME }}
     steps:
-      # Same reason as the public deploy: wrangler bundles _worker.js here and
-      # that bundle resolves bare specifiers from node_modules. --ignore-scripts
-      # installs the dependencies without executing any project code on the
-      # runner that holds the Cloudflare credentials.
       - name: Checkout dependency manifests
         uses: actions/checkout@v4
         with:

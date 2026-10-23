@@ -43,9 +43,6 @@ export const supportsAdminPanel =
 	appFlavor === "desktop-admin" ||
 	appFlavor === "android-admin";
 
-/** Local writing/AI tools are intentionally absent from public web/user flavors. */
-export const supportsLocalAiTools = appFlavor === "desktop-admin";
-
 export const supportsDesktopUpdater = appFlavor === "desktop-admin";
 
 /**

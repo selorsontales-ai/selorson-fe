@@ -75,7 +75,18 @@ async function performTokenRefresh(staleToken?: string): Promise<string> {
 		throw new TransientRefreshFailure(`Máy chủ chưa trả lời được (${res.status})`);
 	}
 
-	const json = await res.json();
+	const rawText = await res.text();
+	let json: any;
+	try {
+		json = rawText ? JSON.parse(rawText) : {};
+	} catch {
+		json = {
+			success: false,
+			message: rawText
+				? `Máy chủ từ chối yêu cầu (HTTP ${res.status}): ${rawText.slice(0, 180)}`
+				: `Lỗi máy chủ (HTTP ${res.status})`
+		};
+	}
 	if (!res.ok || !json.success) {
 		throw new Error(json.message || 'Refresh failed');
 	}
@@ -190,7 +201,18 @@ export async function api<T = unknown>(
 		}
 	}
 
-	const json = await res.json();
+	const rawText = await res.text();
+	let json: any;
+	try {
+		json = rawText ? JSON.parse(rawText) : {};
+	} catch {
+		json = {
+			success: false,
+			message: rawText
+				? `Máy chủ từ chối yêu cầu (HTTP ${res.status}): ${rawText.slice(0, 180)}`
+				: `Lỗi máy chủ (HTTP ${res.status})`
+		};
+	}
 
 	if (!res.ok || !json.success) {
 		throw {
@@ -242,7 +264,18 @@ export async function apiUpload<T = unknown>(
 		}
 	}
 
-	const json = await res.json();
+	const rawText = await res.text();
+	let json: any;
+	try {
+		json = rawText ? JSON.parse(rawText) : {};
+	} catch {
+		json = {
+			success: false,
+			message: rawText
+				? `Máy chủ từ chối yêu cầu (HTTP ${res.status}): ${rawText.slice(0, 180)}`
+				: `Lỗi máy chủ (HTTP ${res.status})`
+		};
+	}
 
 	if (!res.ok || !json.success) {
 		throw { status: res.status, ...json } as ApiError & { status: number };

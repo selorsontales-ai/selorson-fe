@@ -48,16 +48,11 @@ jobs:
         env:
           NODE_ENV: production
 
-      # The whole .svelte-kit tree travels, not just the cloudflare folder.
-      # adapter-cloudflare writes a _worker.js that imports two siblings of that
-      # folder — ../output/server/index.js and ../cloudflare-tmp/manifest.js —
-      # and wrangler bundles the worker on the deploy runner. Shipping the
-      # folder alone leaves those imports unresolvable and the deploy fails
-      # after the files have already uploaded.
       - name: Upload immutable web-user artifact
         uses: actions/upload-artifact@v4
         with:
           name: web-user-${{ github.run_id }}
+          retention-days: 1
           if-no-files-found: error
           include-hidden-files: true
           path: .svelte-kit
@@ -68,12 +63,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: web-user-production
     steps:
-      # wrangler bundles _worker.js on this runner, and that bundle pulls in
-      # @sveltejs/kit/internal, devalue, clsx and set-cookie-parser by bare
-      # specifier. Without node_modules here the bundle fails after every file
-      # has already uploaded. --ignore-scripts keeps the promise this split
-      # exists for: dependencies are placed on disk, no project code runs on
-      # the runner that holds the Cloudflare credentials.
       - name: Checkout dependency manifests
         uses: actions/checkout@v4
         with:

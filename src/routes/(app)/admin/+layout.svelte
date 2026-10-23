@@ -1,14 +1,12 @@
 <!-- Admin Layout — Sidebar + Content area with auth guard -->
 <script lang="ts">
-	import { isAdmin, isLoading, getUser } from "$lib/stores/auth.svelte";
-	import { isDark } from "$lib/stores/theme.svelte";
+	import { isAdmin, isLoading } from "$lib/stores/auth.svelte";
 	import { onMount } from "svelte";
 	import { goto } from "$app/navigation";
 	import { page } from "$app/stores";
 	import {
 		supportsAdminPanel,
 		supportsDesktopUpdater,
-		supportsLocalAiTools,
 	} from "$lib/app-flavor";
 
 	let { children } = $props();
@@ -33,19 +31,8 @@
 
 	// Close mobile drawer on route change
 	$effect(() => {
-		const pathname = $page.url.pathname;
+		$page.url.pathname;
 		mobileOpen = false;
-		if (
-			ready &&
-			!supportsLocalAiTools &&
-			[
-				"/admin/co-writer",
-				"/admin/llm-gateway",
-				"/admin/claude-chat",
-			].some((prefix) => pathname.startsWith(prefix))
-		) {
-			goto("/admin");
-		}
 	});
 
 	interface NavItem {
@@ -98,6 +85,7 @@
 			title: "Nội Dung",
 			items: [
 				{ href: "/admin/chapters", icon: "📖", label: "Chapters" },
+				{ href: "/admin/manga", icon: "🎨", label: "Manga" },
 				{ href: "/admin/videos", icon: "🎬", label: "Videos" },
 				{ href: "/admin/music", icon: "🎵", label: "Âm Nhạc" },
 			],
@@ -128,20 +116,6 @@
 					: []),
 			],
 		},
-		...(supportsLocalAiTools
-			? [
-					{
-						title: "Công Cụ AI",
-						items: [
-							{ href: "/admin/llm-gateway", icon: "🤖", label: "Cổng AI" },
-							{ href: "/admin/claude-chat", icon: "💬", label: "Claude Chat" },
-							{ href: "/admin/co-writer", icon: "✍️", label: "Trợ Lý Sáng Tác" },
-							{ href: "/admin/co-writer/gates", icon: "🚦", label: "Cổng Duyệt Chương" },
-							{ href: "/admin/co-writer/snapshots", icon: "📦", label: "Ảnh Chụp Co-Writer" },
-						],
-					},
-				]
-			: []),
 	];
 </script>
 

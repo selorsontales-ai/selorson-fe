@@ -248,7 +248,26 @@ export function normalizeBlocks(raw) {
 		if (item.type !== undefined && item.type !== 'paragraph') return;
 
 		// Đoạn trống được giữ nguyên: nhiều chương dùng nó làm khoảng ngắt cảnh.
-		const html = sanitizeInlineHtml(typeof item.content === 'string' ? item.content : '');
+		const rawContent = typeof item.content === 'string' ? item.content : '';
+		const trimmed = rawContent.trim();
+		if (/^(?:\*\s*\*\s*\*+|-\s*-\s*-+|_\s*_\s*_+)\s*$/.test(trimmed)) return;
+		let mdCleaned = rawContent;
+		const hMatch = trimmed.match(/^(#{1,6})\s+(.*)$/);
+		if (hMatch) {
+			const hText = hMatch[2].replace(/\*\*/g, '').replace(/\*/g, '').trim();
+			if (hMatch[1].length === 1 || !hText) return;
+			mdCleaned = `<b>${hText}</b>`;
+		} else if (trimmed) {
+			mdCleaned = trimmed
+				.replace(/^>\s*/gm, '')
+				.replace(/\*\*\*([^*]+?)\*\*\*/g, '<i>$1</i>')
+				.replace(/\*\*([^*]+?)\*\*/g, '$1')
+				.replace(/__([^_]+?)__/g, '$1')
+				.replace(/\*([^*\n]+?)\*/g, '<i>$1</i>')
+				.replace(/~~([^~\n]+?)~~/g, '<s>$1</s>')
+				.replace(/\*\*/g, '');
+		}
+		const html = sanitizeInlineHtml(mdCleaned);
 		blocks.push({ key, type: 'paragraph', html });
 	});
 

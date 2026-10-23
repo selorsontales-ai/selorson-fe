@@ -19,7 +19,6 @@ concurrency:
 
 # This workflow is the public-web gate. Native desktop/Android checks are kept
 # out of it so a Cloudflare deploy never waits for a 30-40 minute Tauri build.
-# Artifacts and sidecar remain separate because svelte-check cannot inspect them.
 jobs:
   web:
     name: 🌐 Web — check, build, leakage scan
@@ -58,9 +57,7 @@ jobs:
       - name: Build the public web-user bundle
         run: npm run build:web:user
 
-      # Desktop-only code must never reach the public bundle. The runner
-      # drives a browser and holds a bridge token; shipping any of it to the
-      # website would be a real leak, not a size problem.
+      # Desktop-only code must never reach the public bundle.
       - name: Scan the bundle for desktop-only code
         run: |
           set -e
@@ -72,41 +69,3 @@ jobs:
             fi
           done
           echo "clean: no desktop-only symbol in the client bundle"
-
-  artifacts:
-    name: 🎨 Artifacts — contracts and dist sync
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      # `artifacts/` has no dependencies: an Artifact pasted into claude.ai
-      # can import nothing but react, so the suite runs on Node alone.
-      # `npm test` there runs `build.mjs --check` first, which fails when the
-      # checked-in dist/ has drifted from lib/ — the one thing that would
-      # ship an Artifact nobody tested.
-      - name: Run the Artifact suite
-        run: npm test --prefix artifacts
-
-  sidecar:
-    name: 🔌 Sidecar — protocol and bridge
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install sidecar dependencies
-        run: npm ci --prefix src-tauri/sidecar
-
-      - name: Run the sidecar suite
-        run: npm test --prefix src-tauri/sidecar

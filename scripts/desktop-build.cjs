@@ -26,6 +26,9 @@ const env = {
 	BUILD_TARGET: "desktop",
 	VITE_BUILD_TARGET: "desktop",
 	VITE_APP_FLAVOR: appFlavor,
+	VITE_DESKTOP_UPDATER_ENABLED:
+		process.env.VITE_DESKTOP_UPDATER_ENABLED ??
+		(audience === "admin" ? "true" : "false"),
 	SELORSON_ROUTES_DIR: routesDir ?? "",
 };
 

@@ -13,7 +13,7 @@ async function source(...parts) {
   return readFile(join(root, ...parts), "utf8");
 }
 
-test("local AI tools are gated by the desktop-admin flavor", async () => {
+test("desktop updater is gated by the desktop-admin flavor", async () => {
   const flavor = await source("src", "lib", "app-flavor.ts");
   const adminLayout = await source(
     "src",
@@ -23,9 +23,10 @@ test("local AI tools are gated by the desktop-admin flavor", async () => {
     "+layout.svelte"
   );
 
-  assert.match(flavor, /supportsLocalAiTools = appFlavor === "desktop-admin"/);
-  assert.match(adminLayout, /supportsLocalAiTools/);
-  assert.match(adminLayout, /\/admin\/co-writer/);
+  assert.match(flavor, /supportsDesktopUpdater = appFlavor === "desktop-admin"/);
+  assert.match(adminLayout, /supportsDesktopUpdater/);
+  assert.match(adminLayout, /\/admin\/chapters/);
+  assert.match(adminLayout, /\/admin\/manga/);
   assert.doesNotMatch(
     flavor,
     /appFlavor === "desktop-user"[\s\S]*supportsAdminPanel/
@@ -43,16 +44,12 @@ test("non-desktop admin flavors exclude local desktop tools", () => {
   for (const flavor of ["web-admin", "android-admin"]) {
     assert.equal(includesRoute(flavor, "(app)/admin/+page.svelte"), true);
     assert.equal(
-      includesRoute(flavor, "(app)/admin/co-writer/+page.svelte"),
-      false
-    );
-    assert.equal(
       includesRoute(flavor, "(app)/admin/desktop-update/+page.svelte"),
       false
     );
   }
   assert.equal(
-    includesRoute("desktop-admin", "(app)/admin/co-writer/+page.svelte"),
+    includesRoute("desktop-admin", "(app)/admin/desktop-update/+page.svelte"),
     true
   );
 });
@@ -301,10 +298,6 @@ test("production mode leaves newsletter sending to the deployment", async () => 
 test("the mode badge sits beside the wordmark, never inside its link", async () => {
   const layout = await source("src", "routes", "+layout.svelte");
 
-  // A button nested in an anchor is invalid HTML, and every click on the badge
-  // would also navigate home. Sliced to the first closing tag rather than
-  // matched with a regex: a lazy match would happily run on to a later </a> in
-  // the navigation and report a leak that is not there.
   const linkStart = layout.indexOf('class="logo-link"');
   const linkEnd = layout.indexOf("</a>", linkStart);
   assert.ok(linkStart > -1 && linkEnd > linkStart, "logo link not found");
@@ -325,8 +318,6 @@ test("the launch gate renders outside the header", async () => {
     "DesktopDataMode.svelte"
   );
 
-  // The header carries a backdrop-filter, which makes it a containing block for
-  // fixed positioning: an overlay inside it is confined to the header strip.
   assert.match(shell, /DataModeGate/);
   assert.match(shell, /DataModeSwitchSheet/);
 
@@ -342,28 +333,12 @@ test("the launch gate renders outside the header", async () => {
 test("local mode shares no live resource beyond the database", async () => {
   const tauri = await source("src-tauri", "src", "lib.rs");
 
-  // One Redis, one mail account, one media bucket and one signing key serve
-  // every instance. Separating the database alone would leave local mode able
-  // to reach real readers through any of them.
   assert.match(tauri, /fn isolate_local_mode/);
-
-  // Scoped by database, not by instance. Production mode reads the deployment's
-  // database, so it shares its cache and its channels — a private channel there
-  // would strand realtime messages that were saved correctly. Local mode reads
-  // a different database and shares neither.
   assert.match(tauri, /SELORSON_CACHE_NAMESPACE/);
   assert.match(tauri, /DataMode::Production => ""/);
   assert.match(tauri, /DataMode::Local => "desktop-local"/);
-
-  // Uploads land in their own scope rather than beside the live site's files.
   assert.match(tauri, /SELORSON_STORAGE_PREFIX/);
-
-  // No mail account, so a test newsletter reaches the log instead of real
-  // subscribers.
   assert.match(tauri, /"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD"/);
-
-  // Both modes look users up by id and the ids overlap, so a token signed in
-  // one must not verify in the other. Derived, so editing a file cannot undo it.
   assert.match(tauri, /JWT_SECRET.*desktop-local|desktop-local.*JWT_SECRET/s);
 });
 
@@ -376,8 +351,6 @@ test("a mode that could not be honoured says so instead of appearing normal", as
     "DataModeBadge.svelte"
   );
 
-  // Without this the app simply shows Beta and the only symptom a person sees
-  // is that the mode "changed by itself" — which is what happened.
   assert.match(badge, /fell_back === true/);
   assert.match(badge, /thiếu cấu hình Alpha/);
   assert.match(badge, /class:warn=\{fellBack\}/);

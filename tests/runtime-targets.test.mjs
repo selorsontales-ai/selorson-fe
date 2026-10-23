@@ -60,12 +60,13 @@ test('SPA-compatible routes do not depend on server-only page loads', async () =
 	);
 });
 
-test('desktop-critical routes remain present, including Co-Writer', async () => {
+test('desktop-critical routes remain present, including Chapters and Manga admin', async () => {
 	const routes = [
 		join('src', 'routes', '(app)', 'profile', '[id]', '+page.svelte'),
 		join('src', 'routes', '(app)', 'settings', '+page.svelte'),
 		join('src', 'routes', '(app)', 'messages', '+page.svelte'),
-		join('src', 'routes', '(app)', 'admin', 'co-writer', '+page.svelte')
+		join('src', 'routes', '(app)', 'admin', 'chapters', '+page.svelte'),
+		join('src', 'routes', '(app)', 'admin', 'manga', '+page.svelte')
 	];
 
 	for (const route of routes) {

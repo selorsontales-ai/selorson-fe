@@ -1,4 +1,4 @@
-name: Android Release
+﻿name: Android Release
 
 on:
   workflow_dispatch:
@@ -84,7 +84,7 @@ jobs:
           fi
 
           # A signed APK, not an App Bundle: these builds are installed directly
-          # on the device they are meant for. An .aab cannot be installed — it is
+          # on the device they are meant for. An .aab cannot be installed â€” it is
           # an upload format for Google Play, which neither audience ships to.
           # APK output nests flavor and build type as separate directories
           # (apk/admin/release), unlike the bundle task's single adminRelease
@@ -175,6 +175,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: selorson-android-${{ steps.release.outputs.audience }}-${{ steps.release.outputs.version }}
+          retention-days: 1
           if-no-files-found: error
           path: ${{ steps.release.outputs.output }}
 
@@ -210,5 +211,5 @@ jobs:
         run: |
           gh release create "${{ needs.bundle.outputs.tag }}" \
             --title "Selorson Android ${{ needs.bundle.outputs.audience }} ${{ needs.bundle.outputs.version }}" \
-            --notes "Bản Android ${{ needs.bundle.outputs.audience }} đã ký. Tải file .apk và cài trực tiếp lên máy." \
+            --notes "Báº£n Android ${{ needs.bundle.outputs.audience }} Ä‘Ã£ kÃ½. Táº£i file .apk vÃ  cÃ i trá»±c tiáº¿p lÃªn mÃ¡y." \
             apk/*.apk

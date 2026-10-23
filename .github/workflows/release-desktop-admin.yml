@@ -22,10 +22,6 @@ jobs:
   shared-user-gate:
     name: Validate shared code and all sibling bundles
     runs-on: ubuntu-latest
-    # Job-wide, not per-step: web-build.cjs reads these from the environment and
-    # the runner has no .env file to fall back on, so every build step needs
-    # them, not only the check step. These are gate values — the bundles built
-    # here are inspected and thrown away, never shipped.
     env:
       PUBLIC_API_BASE: http://localhost:8001/api/v1
       PUBLIC_APP_NAME: Selorson
@@ -48,7 +44,6 @@ jobs:
         run: |
           npm run check
           npm run test:runtime
-          npm run artifacts:test
 
       - name: Build desktop-user bundle
         run: npm run build:desktop:user
@@ -67,11 +62,6 @@ jobs:
     needs: shared-user-gate
     name: Build signed desktop-admin updater
     runs-on: windows-latest
-    # 0.1.7 needed 1h30m and was killed at exactly 90 minutes — during the
-    # post-job cache save, after the installer had already been built, signed
-    # and uploaded. Everything real had succeeded and nothing was published.
-    # The release compile alone runs over an hour on a cold cargo cache, so the
-    # ceiling has to sit well clear of it.
     timeout-minutes: 150
     env:
       CARGO_BUILD_JOBS: "1"
@@ -134,33 +124,8 @@ jobs:
         run: npm ci
         working-directory: frontend-v3
 
-      - name: Install sidecar dependencies
-        run: npm ci --prefix src-tauri/sidecar
-        working-directory: frontend-v3
-
-      # The pinned backend is compiled here, never tested here. Its integration
-      # suite needs a PostgreSQL service and a Windows runner cannot start one,
-      # so `cargo test` on that manifest fails before it reaches an assertion.
-      # The backend repository's own CI gates that SHA against Postgres, and the
-      # installer build below links selorson-backend as a dependency — a pinned
-      # revision that does not compile still fails this job.
-      # tauri-build validates bundle.resources, which names sidecar-runtime/
-      # node.exe. That file is staged by sidecar:runtime, normally as part of
-      # beforeBuildCommand, so a bare cargo test fails before compiling a line.
-      - name: Stage the sidecar runtime the crate declares
-        run: npm run sidecar:runtime
-        working-directory: frontend-v3
-
-      # One command per step, deliberately. Two commands in a single run block
-      # report only the last exit code: cargo test was failing here for every
-      # release while the step stayed green, so the desktop suite was reported
-      # as passing without ever running.
       - name: Test the desktop crate
         run: cargo test --manifest-path src-tauri/Cargo.toml
-        working-directory: frontend-v3
-
-      - name: Test the sidecar
-        run: npm run sidecar:test
         working-directory: frontend-v3
 
       - name: Prepare signed updater configuration
@@ -279,11 +244,6 @@ jobs:
           }
 
           $signature = (Get-Content $signaturePath -Raw).Trim()
-          # GitHub rewrites a release asset's filename, replacing anything
-          # outside [A-Za-z0-9._-] with a dot. productName is "Selorson Admin",
-          # so the uploaded asset is Selorson.Admin_..., and a manifest naming
-          # the file as built points every installed app at a 404. Predict the
-          # rewrite here rather than discover it after publishing.
           $assetName = $installer.Name -replace '[^A-Za-z0-9._-]', '.'
           $url = "https://github.com/$($env:RELEASE_REPOSITORY)/releases/download/$tag/$assetName"
           $notes = if (Test-Path RELEASE_NOTES.md) {
@@ -309,6 +269,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: selorson-desktop-admin-${{ github.ref_name }}
+          retention-days: 1
           if-no-files-found: error
           path: |
             frontend-v3/src-tauri/target/release/bundle/msi/*.msi

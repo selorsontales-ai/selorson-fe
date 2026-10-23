@@ -37,12 +37,22 @@
 		const frame = rotatedFrame(resolveAspect(layout, image, measured[image.url]), rotation);
 		return `--frame-ar:${frame.frameAspect};--img-ar:${frame.aspect};--img-w:${frame.imageWidthPct}%;--rot:${frame.deg}deg;`;
 	}
+
+	function isSectionHeading(html: string): boolean {
+		const trimmed = (html ?? '').trim();
+		if (!trimmed) return false;
+		const plain = trimmed.replace(/<[^>]*>/g, '').trim();
+		if (/^(?:[IVXLCDM]{1,6})(?:\s*[-?:.]\s*.{1,60})?$/.test(plain)) return true;
+		if (/^(?:Ph?n|H?i|C?nh|M?n|Ch??ng)\s+[0-9IVXLCDM]+(?:\s*[-?:.]\s*.{1,60})?$/i.test(plain)) return true;
+		if (/^<(?:b|strong)>[^<]{1,50}<\/(?:b|strong)>$/i.test(trimmed)) return true;
+		return false;
+	}
 </script>
 
 {#if rendered.length > 0}
 	{#each rendered as block (block.key)}
 		{#if block.type === 'paragraph'}
-			<p>{@html block.html}</p>
+			<p class:section-heading={isSectionHeading(block.html)}>{@html block.html}</p>
 		{:else}
 			<figure class="story-image {block.layout}" class:tilted={block.rotation !== 0}>
 				<div class="image-container">
@@ -70,7 +80,7 @@
 	<div class="legacy-html">{@html contentHtml}</div>
 {:else if content}
 	{#each content.split('\n') as para}
-		{#if para.trim()}<p>{para}</p>{/if}
+		{#if para.trim()}<p class:section-heading={isSectionHeading(para)}>{para}</p>{/if}
 	{/each}
 {:else if emptyText}
 	<p class="story-empty">{emptyText}</p>
@@ -135,6 +145,15 @@
 		font-style: italic;
 		text-align: center !important;
 		text-indent: 0 !important;
+	}
+
+	p.section-heading {
+		text-align: center !important;
+		text-indent: 0 !important;
+		font-weight: 700;
+		font-size: 1.1em;
+		letter-spacing: 0.1em;
+		margin: 1.8em 0 1.1em !important;
 	}
 
 	/* Nội dung cũ chỉ còn figure/img trần — vẫn phải hiển thị tử tế. */

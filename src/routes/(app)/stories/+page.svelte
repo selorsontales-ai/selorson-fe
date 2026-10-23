@@ -9,6 +9,7 @@
 		chapter_number: number;
 		author_note: string | null;
 		status: string;
+		has_manga?: boolean;
 		created_at: string;
 	}
 
@@ -67,7 +68,12 @@
 		<div class="chapter-grid">
 			{#each chapters as chapter}
 				<a href="/stories/{chapter.chapter_number}" class="glass-card chapter-card">
-					<div class="chapter-number">Ch. {chapter.chapter_number}</div>
+					<div class="chapter-top-row">
+						<div class="chapter-number">Ch. {chapter.chapter_number}</div>
+						{#if chapter.has_manga}
+							<span class="manga-badge" title="Chương này có bản Manga">🎨 Manga</span>
+						{/if}
+					</div>
 					<h3 class="chapter-title">{chapter.title}</h3>
 					{#if chapter.author_note}
 						<p class="chapter-note">{chapter.author_note}</p>
@@ -127,12 +133,29 @@
 		gap: 0.5rem;
 	}
 
+	.chapter-top-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+
 	.chapter-number {
 		font-size: 0.75rem;
 		font-weight: 700;
 		color: var(--color-brand-400);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
+	}
+
+	.manga-badge {
+		font-size: 0.68rem;
+		font-weight: 700;
+		padding: 0.15rem 0.5rem;
+		border-radius: 999px;
+		background: rgba(168, 85, 247, 0.14);
+		color: #c084fc;
+		border: 1px solid rgba(168, 85, 247, 0.3);
 	}
 
 	.chapter-title {
