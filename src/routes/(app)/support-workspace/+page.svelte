@@ -4,6 +4,8 @@
 	import { isAuthenticated, getUser, getToken } from '$lib/stores/auth.svelte';
 	import { PUBLIC_API_BASE } from '$env/static/public';
 	import { goto } from '$app/navigation';
+	import * as m from '$lib/paraglide/messages';
+	import { dateLocale } from '$lib/i18n-labels';
 
 	// ── Support state ──
 	let workspaceMode = $state<'support' | 'moderation' | 'newsletter' | 'reports'>('support');
@@ -20,14 +22,20 @@
 	let showTransfer = $state(false);
 	let messagesEl = $state<HTMLDivElement | null>(null);
 
-	const tabs = [
-		{ key: 'pending', label: 'Chờ nhận', icon: '⏳' },
-		{ key: 'my_active', label: 'Của tôi', icon: '💬' },
-		{ key: 'all_active', label: 'Tất cả', icon: '📋' },
-		{ key: 'resolved', label: 'Đã giải quyết', icon: '✅' },
-	];
+	let tabs = $derived([
+		{ key: 'pending', label: m.cskh_tab_pending(), icon: '⏳' },
+		{ key: 'my_active', label: m.cskh_tab_my_active(), icon: '💬' },
+		{ key: 'all_active', label: m.cskh_tab_all_active(), icon: '📋' },
+		{ key: 'resolved', label: m.cskh_tab_resolved(), icon: '✅' },
+	]);
 
-	const statusLabels: Record<string, string> = { pending: 'Chờ nhận', active: 'Đang xử lý', resolved: 'Đã giải quyết', closed: 'Đã đóng' };
+	function getStatusLabel(s: string) {
+		if (s === 'pending') return m.cskh_status_pending();
+		if (s === 'active') return m.cskh_status_active();
+		if (s === 'resolved') return m.cskh_status_resolved();
+		if (s === 'closed') return m.cskh_status_closed();
+		return s;
+	}
 
 	async function fetchConversations(type?: string) {
 		isLoading = true;
@@ -112,9 +120,13 @@
 	}
 
 	async function handleDelete() {
-		if (!selectedConv || !confirm('Xóa vĩnh viễn ticket này?')) return;
+		if (!selectedConv || !confirm(m.cskh_confirm_delete_ticket())) return;
 		try {
-			await api(`/manager/support/ticket/${selectedConv.id}`, { method: 'DELETE' });
+			if (selectedConv.type === 'contact') {
+				await api(`/admin/contacts/${selectedConv.original_id}`, { method: 'DELETE' });
+			} else {
+				await api(`/manager/support/ticket/${selectedConv.id}`, { method: 'DELETE' });
+			}
 			selectedConv = null; selectedMessages = [];
 			await fetchConversations(); await fetchStats();
 		} catch {}
@@ -124,8 +136,8 @@
 		try { await api(`/manager/support/${id}/mark-read`, { method: 'POST' }); } catch {}
 	}
 
-	function formatDate(d: string) { return new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
-	function formatTime(d: string) { return new Date(d).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); }
+	function formatDate(d: string) { return new Date(d).toLocaleDateString(dateLocale(), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+	function formatTime(d: string) { return new Date(d).toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' }); }
 	function scrollBottom() { setTimeout(() => { if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight; }, 50); }
 
 	$effect(() => { if (selectedMessages.length) scrollBottom(); });
@@ -135,7 +147,7 @@
 	let modLoading = $state(false);
 	async function fetchModComments() { modLoading = true; try { const r = await api<any>('/admin/moderation'); modComments = r.data || []; } catch {} finally { modLoading = false; } }
 	async function approveComment(id: number) { try { await api(`/admin/moderation/${id}/approve`, { method: 'POST' }); modComments = modComments.filter(c => c.id !== id); } catch {} }
-	async function rejectComment(id: number) { if (!confirm('Từ chối và xóa comment này?')) return; try { await api(`/admin/moderation/${id}/reject`, { method: 'POST' }); modComments = modComments.filter(c => c.id !== id); } catch {} }
+	async function rejectComment(id: number) { if (!confirm(m.cskh_btn_delete() + '?')) return; try { await api(`/admin/moderation/${id}/reject`, { method: 'POST' }); modComments = modComments.filter(c => c.id !== id); } catch {} }
 
 	// ── Newsletter Broadcast state ──
 	let nlSubject = $state(''); let nlContent = $state(''); let nlSending = $state(false);
@@ -144,7 +156,7 @@
 	async function fetchNlBroadcasts() { try { const r = await api<any>('/admin/newsletter/broadcasts'); nlBroadcasts = r.data || []; } catch {} }
 	async function sendNlBroadcast() {
 		if (!nlSubject.trim() || !nlContent.trim()) return;
-		if (!confirm(`Gửi bản tin "${nlSubject}" đến ${nlStats?.active ?? 0} subscribers?`)) return;
+		if (!confirm(`${m.cskh_nl_btn_send()}: "${nlSubject}" (${nlStats?.active ?? 0})?`)) return;
 		nlSending = true;
 		try { await api('/admin/newsletter/broadcast', { method: 'POST', body: { subject: nlSubject, content: nlContent } }); nlSubject = ''; nlContent = ''; fetchNlBroadcasts(); fetchNlStats(); } catch {}
 		finally { nlSending = false; }
@@ -205,10 +217,9 @@
 			try {
 				const data = JSON.parse(event.data);
 				if (data.type === 'support_update' && workspaceMode === 'support') {
-					await fetchConversations(activeTab);
-					if (selectedConv && selectedConv.id === data.conversation_id) {
-						const r = await api<any>(`/manager/support/${selectedConv.id}/messages`);
-						if (r.data) selectedMessages = r.data.messages || [];
+					await Promise.all([fetchConversations(activeTab), fetchStats()]);
+					if (selectedConv && (selectedConv.id === data.conversation_id || selectedConv.original_id === data.conversation_id)) {
+						await selectConv(selectedConv);
 					}
 				}
 			} catch {}
@@ -244,28 +255,28 @@
 	});
 </script>
 
-<svelte:head><title>CSKH Workspace — Selorson</title></svelte:head>
+<svelte:head><title>{m.cskh_page_title()}</title></svelte:head>
 
 <div class="cskh-workspace">
 	<div class="cskh-container">
 		<!-- Header -->
 		<div class="cskh-header">
 			<div>
-				<h1>🎧 CSKH Workspace</h1>
-				<p class="subtitle">Tiếp nhận, hỗ trợ & quản lý nội dung</p>
+				<h1>{m.cskh_header_title()}</h1>
+				<p class="subtitle">{m.cskh_header_subtitle()}</p>
 			</div>
 			<div class="stats-row">
-				<div class="stat pending"><span class="stat-num">{stats?.pending ?? 0}</span><span class="stat-label">Chờ nhận</span></div>
-				<div class="stat active"><span class="stat-num">{stats?.active ?? 0}</span><span class="stat-label">Đang xử lý</span></div>
+				<div class="stat pending"><span class="stat-num">{stats?.pending ?? 0}</span><span class="stat-label">{m.cskh_stat_pending()}</span></div>
+				<div class="stat active"><span class="stat-num">{stats?.active ?? 0}</span><span class="stat-label">{m.cskh_stat_active()}</span></div>
 			</div>
 		</div>
 
 		<!-- Workspace Mode Selector -->
 		<div class="mode-bar">
-			<button class:active={workspaceMode==='support'} onclick={() => workspaceMode='support'}>🎧 Hỗ Trợ</button>
-			<button class:active={workspaceMode==='moderation'} onclick={() => { workspaceMode='moderation'; fetchModComments(); }}>🛡️ Kiểm Duyệt</button>
-			<button class:active={workspaceMode==='newsletter'} onclick={() => { workspaceMode='newsletter'; fetchNlStats(); fetchNlBroadcasts(); }}>📰 Bản Tin</button>
-			<button class:active={workspaceMode==='reports'} onclick={() => { workspaceMode='reports'; fetchReports('pending'); }}>🚨 Báo Cáo</button>
+			<button class:active={workspaceMode==='support'} onclick={() => workspaceMode='support'}>{m.cskh_mode_support()}</button>
+			<button class:active={workspaceMode==='moderation'} onclick={() => { workspaceMode='moderation'; fetchModComments(); }}>{m.cskh_mode_moderation()}</button>
+			<button class:active={workspaceMode==='newsletter'} onclick={() => { workspaceMode='newsletter'; fetchNlStats(); fetchNlBroadcasts(); }}>{m.cskh_mode_newsletter()}</button>
+			<button class:active={workspaceMode==='reports'} onclick={() => { workspaceMode='reports'; fetchReports('pending'); }}>{m.cskh_mode_reports()}</button>
 		</div>
 
 		{#if workspaceMode === 'support'}
@@ -280,13 +291,13 @@
 		</div>
 
 		<!-- Main Layout -->
-		<div class="cskh-layout">
+		<div class="cskh-layout" class:has-selected={!!selectedConv}>
 			<!-- Conversation List -->
 			<div class="cskh-list">
 				{#if isLoading}
-					<div class="cskh-loading">Đang tải...</div>
+					<div class="cskh-loading">{m.cskh_loading()}</div>
 				{:else if conversations.length === 0}
-					<div class="cskh-empty"><span>📭</span><p>{activeTab === 'pending' ? 'Không có ticket chờ nhận' : 'Không có cuộc hội thoại'}</p></div>
+					<div class="cskh-empty"><span>📭</span><p>{activeTab === 'pending' ? m.cskh_empty_pending() : m.cskh_empty_convs()}</p></div>
 				{:else}
 					{#each conversations as c}
 						<button class="conv-item" class:selected={selectedConv?.id === c.id} onclick={() => selectConv(c)}>
@@ -298,7 +309,7 @@
 								<p class="conv-preview">{c.latest_message?.message || '...'}</p>
 							</div>
 							<div class="conv-badges">
-                                {#if c.type === 'contact'}<span title="Email Contact">📧</span>{/if}
+                                {#if c.type === 'contact'}<span title={m.cskh_email_contact_badge()}>📧</span>{/if}
 								<span class="priority-dot {c.priority || 'normal'}"></span>
 								{#if (c.unread_count ?? 0) > 0}<span class="unread-badge">{c.unread_count}</span>{/if}
 							</div>
@@ -310,24 +321,25 @@
 			<!-- Chat Panel -->
 			<div class="cskh-chat">
 				{#if !selectedConv}
-					<div class="chat-empty"><span>💬</span><p>Chọn một cuộc hội thoại để bắt đầu hỗ trợ</p></div>
+					<div class="chat-empty"><span>💬</span><p>{m.cskh_select_conv_prompt()}</p></div>
 				{:else}
 					<!-- Chat Header -->
 					<div class="chat-header">
 						<div class="chat-user-info">
-							<strong>{selectedConv.user?.name || 'Khách hàng'}</strong>
-							<span class="chat-status {selectedConv.status}">{statusLabels[selectedConv.status] || selectedConv.status}</span>
+							<button type="button" class="mobile-back-btn" onclick={() => selectedConv = null} aria-label="Back">←</button>
+							<strong>{selectedConv.user?.name || m.cskh_customer_fallback()}</strong>
+							<span class="chat-status {selectedConv.status}">{getStatusLabel(selectedConv.status)}</span>
 						</div>
 						<div class="chat-actions">
 							{#if selectedConv.status === 'pending'}
-								<button class="action-btn claim" onclick={handleClaim}>✋ Nhận</button>
+								<button class="action-btn claim" onclick={handleClaim}>{m.cskh_btn_claim()}</button>
 							{/if}
 							{#if selectedConv.status === 'active' && selectedConv.manager_id === getUser()?.id}
-								<button class="action-btn transfer" onclick={() => showTransfer = true}>🔄 Chuyển</button>
-								<button class="action-btn resolve" onclick={handleResolve}>✅ Giải quyết</button>
+								<button class="action-btn transfer" onclick={() => showTransfer = true}>{m.cskh_btn_transfer()}</button>
+								<button class="action-btn resolve" onclick={handleResolve}>{m.cskh_btn_resolve()}</button>
 							{/if}
 							{#if getUser()?.role === 'admin'}
-								<button class="action-btn delete" onclick={handleDelete}>🗑 Xóa</button>
+								<button class="action-btn delete" onclick={handleDelete}>{m.cskh_btn_delete()}</button>
 							{/if}
 						</div>
 					</div>
@@ -347,17 +359,17 @@
 					{#if selectedConv.status === 'active' && selectedConv.manager_id === getUser()?.id}
 						<div class="chat-reply" class:is-contact={selectedConv.type === 'contact'}>
                             {#if selectedConv.type === 'contact'}
-                                <textarea bind:value={replyText} rows="4" placeholder="Nhập email phản hồi..."></textarea>
-                                <button disabled={!replyText.trim() || isSending} onclick={handleReply}>{isSending ? '⏳' : 'Gửi Email'}</button>
+                                <textarea bind:value={replyText} rows="4" placeholder={m.cskh_placeholder_email_reply()}></textarea>
+                                <button disabled={!replyText.trim() || isSending} onclick={handleReply}>{isSending ? '⏳' : m.cskh_btn_send_email()}</button>
                             {:else}
-							    <input bind:value={replyText} placeholder="Nhập phản hồi..." onkeydown={(e) => { if (e.key === 'Enter') handleReply(); }} />
+							    <input bind:value={replyText} placeholder={m.cskh_placeholder_chat_reply()} onkeydown={(e) => { if (e.key === 'Enter') handleReply(); }} />
 							    <button disabled={!replyText.trim() || isSending} onclick={handleReply}>{isSending ? '⏳' : '📤'}</button>
                             {/if}
 						</div>
 					{:else if selectedConv.status === 'pending'}
-						<div class="chat-info-bar pending">⏳ Ticket chưa được nhận. Bấm "Nhận" để bắt đầu.</div>
+						<div class="chat-info-bar pending">{m.cskh_info_pending_claim()}</div>
 					{:else if selectedConv.status === 'resolved'}
-						<div class="chat-info-bar resolved">✅ Đã giải quyết{selectedConv.rating ? ` — ⭐ ${selectedConv.rating}/5` : ''}</div>
+						<div class="chat-info-bar resolved">{m.cskh_info_resolved()}{selectedConv.rating ? ` — ⭐ ${selectedConv.rating}/5` : ''}</div>
 					{/if}
 				{/if}
 			</div>
@@ -370,17 +382,17 @@
 		<div class="modal-overlay" onmousedown={() => showTransfer = false}>
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="modal-box glass-card" onmousedown={(e) => e.stopPropagation()}>
-				<h3>🔄 Chuyển cuộc hội thoại</h3>
-				<p>Chọn nhân viên CSKH sẽ tiếp nhận:</p>
-				{#each managers.filter(m => m.id !== getUser()?.id) as m}
-					<button class="transfer-item" onclick={() => handleTransfer(m.id)}>
-						<span class="transfer-name">{m.name}</span>
-						<span class="transfer-role">{m.role}</span>
+				<h3>{m.cskh_transfer_title()}</h3>
+				<p>{m.cskh_transfer_desc()}</p>
+				{#each managers.filter(mgr => mgr.id !== getUser()?.id) as mgr}
+					<button class="transfer-item" onclick={() => handleTransfer(mgr.id)}>
+						<span class="transfer-name">{mgr.name}</span>
+						<span class="transfer-role">{mgr.role}</span>
 					</button>
 				{:else}
-					<p class="transfer-empty">Không có nhân viên khác khả dụng.</p>
+					<p class="transfer-empty">{m.cskh_transfer_empty()}</p>
 				{/each}
-				<button class="modal-close" onclick={() => showTransfer = false}>Đóng</button>
+				<button class="modal-close" onclick={() => showTransfer = false}>{m.cskh_btn_close()}</button>
 			</div>
 		</div>
 	{/if}
@@ -391,21 +403,21 @@
 		<div class="modal-overlay" onmousedown={() => showReportModal = false}>
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="modal-box glass-card" onmousedown={(e) => e.stopPropagation()}>
-				<h3>✅ Xử lý Báo Cáo</h3>
+				<h3>{m.cskh_report_modal_title()}</h3>
 				<div class="nl-form" style="margin-top: 1rem;">
-					<label>Ghi chú xử lý<textarea bind:value={reportResolveNote} rows="3" placeholder="Ghi chú nội bộ..."></textarea></label>
+					<label>{m.cskh_report_note_label()}<textarea bind:value={reportResolveNote} rows="3" placeholder={m.cskh_report_note_placeholder()}></textarea></label>
 					<label style="flex-direction: row; align-items: center; gap: 0.5rem; cursor: pointer;">
                         <input type="checkbox" bind:checked={reportResolveBan} style="width: auto;" />
-                        <span style="color: #ef4444; font-weight: 700;">🚫 Ban người dùng này</span>
+                        <span style="color: #ef4444; font-weight: 700;">{m.cskh_report_ban_user()}</span>
                     </label>
                     {#if reportResolveBan}
-                        <label>Lý do ban<input bind:value={reportResolveBanReason} placeholder="Vi phạm tiêu chuẩn cộng đồng..." /></label>
-                        <label>Số ngày ban (0 = vĩnh viễn)<input type="number" bind:value={reportResolveBanDays} min="0" /></label>
+                        <label>{m.cskh_report_ban_reason_label()}<input bind:value={reportResolveBanReason} placeholder={m.cskh_report_ban_reason_placeholder()} /></label>
+                        <label>{m.cskh_report_ban_days_label()}<input type="number" bind:value={reportResolveBanDays} min="0" /></label>
                     {/if}
 				</div>
 				<div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
-                    <button class="action-btn resolve" style="flex: 1;" onclick={submitResolveReport}>Xác nhận xử lý</button>
-                    <button class="action-btn transfer" style="flex: 1;" onclick={() => showReportModal = false}>Hủy</button>
+                    <button class="action-btn resolve" style="flex: 1;" onclick={submitResolveReport}>{m.cskh_report_btn_confirm()}</button>
+                    <button class="action-btn transfer" style="flex: 1;" onclick={() => showReportModal = false}>{m.cskh_btn_cancel()}</button>
                 </div>
 			</div>
 		</div>
@@ -414,12 +426,12 @@
 		{#if workspaceMode === 'moderation'}
 		<!-- Moderation Panel -->
 		<div class="tool-panel">
-			<h2>🛡️ Kiểm Duyệt Bình Luận</h2>
-			<p class="tool-desc">Duyệt hoặc xóa bình luận vi phạm. Hiện có {modComments.length} comment.</p>
+			<h2>{m.cskh_mod_title()}</h2>
+			<p class="tool-desc">{m.cskh_mod_desc({ count: modComments.length })}</p>
 			{#if modLoading}
-				<p class="tool-empty">Đang tải...</p>
+				<p class="tool-empty">{m.cskh_loading()}</p>
 			{:else if !modComments.length}
-				<p class="tool-empty">✅ Không có bình luận cần kiểm duyệt.</p>
+				<p class="tool-empty">{m.cskh_mod_empty()}</p>
 			{:else}
 				<div class="mod-list">
 					{#each modComments as c (c.id)}
@@ -431,8 +443,8 @@
 							<p class="mod-content">{c.content}</p>
 							<div class="mod-meta">{c.commentable_type} #{c.commentable_id}</div>
 							<div class="mod-actions">
-								<button class="action-btn resolve" onclick={() => approveComment(c.id)}>✅ Duyệt</button>
-								<button class="action-btn delete" onclick={() => rejectComment(c.id)}>🗑 Xóa</button>
+								<button class="action-btn resolve" onclick={() => approveComment(c.id)}>{m.cskh_mod_btn_approve()}</button>
+								<button class="action-btn delete" onclick={() => rejectComment(c.id)}>{m.cskh_btn_delete()}</button>
 							</div>
 						</div>
 					{/each}
@@ -444,22 +456,22 @@
 		{#if workspaceMode === 'newsletter'}
 		<!-- Newsletter Broadcast Panel -->
 		<div class="tool-panel">
-			<h2>📰 Gửi Bản Tin</h2>
-			<p class="tool-desc">Gửi email đến <strong>{nlStats?.active ?? 0}</strong> subscribers đang hoạt động.</p>
+			<h2>{m.cskh_nl_title()}</h2>
+			<p class="tool-desc">{m.cskh_nl_desc({ count: nlStats?.active ?? 0 })}</p>
 			<div class="nl-form">
-				<label>Tiêu đề<input bind:value={nlSubject} placeholder="VD: Cập nhật tháng 5" /></label>
-				<label>Nội dung<textarea bind:value={nlContent} rows="6" placeholder="Nội dung bản tin..."></textarea></label>
-				<button class="action-btn claim" disabled={nlSending || !nlSubject.trim() || !nlContent.trim()} onclick={sendNlBroadcast}>{nlSending ? '⏳ Đang gửi...' : '📤 Gửi Bản Tin'}</button>
+				<label>{m.cskh_nl_subject_label()}<input bind:value={nlSubject} placeholder={m.cskh_nl_subject_placeholder()} /></label>
+				<label>{m.cskh_nl_content_label()}<textarea bind:value={nlContent} rows="6" placeholder={m.cskh_nl_content_placeholder()}></textarea></label>
+				<button class="action-btn claim" disabled={nlSending || !nlSubject.trim() || !nlContent.trim()} onclick={sendNlBroadcast}>{nlSending ? m.cskh_nl_btn_sending() : m.cskh_nl_btn_send()}</button>
 			</div>
 			{#if nlBroadcasts.length > 0}
-				<h3 class="sub-title">📨 Lịch sử gửi gần đây</h3>
+				<h3 class="sub-title">{m.cskh_nl_recent_title()}</h3>
 				<div class="nl-history">
 					{#each nlBroadcasts.slice(0, 5) as bc (bc.id)}
 						<div class="nl-item">
                             <strong>{bc.subject}</strong>
                             <span style="display: flex; align-items: center; gap: 0.5rem;">
                                 <span class="chat-status {bc.status}">{bc.status}</span>
-                                {bc.recipient_count} người · {bc.sent_at ? formatDate(bc.sent_at) : '—'}
+                                {m.cskh_nl_recipients_unit({ count: bc.recipient_count })} · {bc.sent_at ? formatDate(bc.sent_at) : '—'}
                             </span>
                         </div>
 					{/each}
@@ -471,16 +483,16 @@
 		{#if workspaceMode === 'reports'}
 		<!-- Reports Panel -->
 		<div class="tool-panel">
-			<h2>🚨 Báo Cáo Vi Phạm</h2>
+			<h2>{m.cskh_rpt_title()}</h2>
 			<div class="rpt-filters">
-				{#each [['pending','⏳ Chờ xử lý'],['resolved','✅ Đã xử lý'],['dismissed','❌ Đã bỏ qua']] as [key, label]}
+				{#each [['pending', m.cskh_rpt_filter_pending()],['resolved', m.cskh_rpt_filter_resolved()],['dismissed', m.cskh_rpt_filter_dismissed()]] as [key, label]}
 					<button class:active={reportFilter===key} onclick={() => { reportFilter=key; fetchReports(key); }}>{label}</button>
 				{/each}
 			</div>
 			{#if rptLoading}
-				<p class="tool-empty">Đang tải...</p>
+				<p class="tool-empty">{m.cskh_loading()}</p>
 			{:else if !reports.length}
-				<p class="tool-empty">Không có báo cáo nào.</p>
+				<p class="tool-empty">{m.cskh_rpt_empty()}</p>
 			{:else}
 				<div class="rpt-list">
 					{#each reports as rpt (rpt.id)}
@@ -490,11 +502,11 @@
 								<span class="rpt-type">{rpt.reason ?? rpt.type ?? '—'}</span>
 							</div>
 							<p class="rpt-desc">{rpt.description ?? rpt.details ?? '—'}</p>
-							<div class="rpt-meta">Người gửi: {rpt.reporter?.name ?? 'User #' + rpt.reporter_id} · Đối tượng: {rpt.reported?.name ?? 'User #' + rpt.reported_id}</div>
+							<div class="rpt-meta">{m.cskh_rpt_meta({ reporter: rpt.reporter?.name ?? ('User #' + rpt.reporter_id), reported: rpt.reported?.name ?? ('User #' + rpt.reported_id) })}</div>
 							{#if reportFilter === 'pending'}
 								<div class="mod-actions">
-									<button class="action-btn resolve" onclick={() => openResolveModal(rpt.id)}>✅ Giải quyết</button>
-									<button class="action-btn transfer" onclick={() => dismissReport(rpt.id)}>❌ Bỏ qua</button>
+									<button class="action-btn resolve" onclick={() => openResolveModal(rpt.id)}>{m.cskh_btn_resolve()}</button>
+									<button class="action-btn transfer" onclick={() => dismissReport(rpt.id)}>{m.cskh_rpt_btn_dismiss()}</button>
 								</div>
 							{/if}
 						</div>
@@ -508,19 +520,19 @@
 
 <style>
 	.cskh-workspace{min-height:100vh;background:var(--color-surface-50)}
-	.cskh-container{max-width:1200px;margin:0 auto;padding:1.5rem}
+	.cskh-container{max-width:1200px;margin:0 auto;padding:clamp(0.85rem,3vw,1.5rem)}
 	.cskh-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem}
 	.cskh-header h1{font-size:1.5rem;font-weight:800;margin:0}
 	.subtitle{margin:.25rem 0 0;font-size:.8rem;color:var(--color-text-muted)}
-	.stats-row{display:flex;gap:.75rem}
+	.stats-row{display:flex;flex-wrap:wrap;gap:.75rem}
 	.stat{display:flex;flex-direction:column;align-items:center;padding:.625rem 1rem;border-radius:12px;background:var(--color-surface-100);border:1px solid rgba(255,255,255,.06);min-width:80px}
 	.stat-num{font-size:1.25rem;font-weight:800}
 	.stat-label{font-size:.625rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--color-text-muted)}
 	.stat.pending .stat-num{color:#f59e0b}
 	.stat.active .stat-num{color:#3b82f6}
 
-	.cskh-tabs{display:flex;gap:.25rem;margin-bottom:1rem;background:var(--color-surface-100);border-radius:12px;padding:.25rem;border:1px solid rgba(255,255,255,.04)}
-	.cskh-tab{flex:1;padding:.625rem;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:500;color:var(--color-text-muted);transition:all .2s;display:flex;align-items:center;justify-content:center;gap:.375rem}
+	.cskh-tabs{display:flex;flex-wrap:wrap;gap:.25rem;margin-bottom:1rem;background:var(--color-surface-100);border-radius:12px;padding:.25rem;border:1px solid rgba(255,255,255,.04)}
+	.cskh-tab{flex:1 1 110px;padding:.625rem;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:500;color:var(--color-text-muted);transition:all .2s;display:flex;align-items:center;justify-content:center;gap:.375rem}
 	.cskh-tab.active{background:linear-gradient(135deg,#0c713d,#085a30);color:#fff;font-weight:600}
 	.cskh-tab:hover:not(.active){background:rgba(12,113,61,.06);color:var(--color-brand-400)}
 	.tab-badge{background:#ef4444;color:#fff;font-size:.56rem;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 4px}
@@ -550,8 +562,9 @@
 	.chat-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:3rem;color:var(--color-text-muted)}
 	.chat-empty span{font-size:3rem;margin-bottom:.75rem;opacity:.5}
 
-	.chat-header{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid rgba(255,255,255,.06)}
-	.chat-user-info{display:flex;align-items:center;gap:.75rem}
+	.chat-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;padding:1rem 1.25rem;border-bottom:1px solid rgba(255,255,255,.06)}
+	.chat-user-info{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem}
+	.mobile-back-btn{display:none;width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,.12);background:var(--color-surface-200);color:var(--color-text-primary);cursor:pointer;align-items:center;justify-content:center;font-weight:700;flex-shrink:0}
 	.chat-user-info strong{font-size:.9rem}
 	.chat-status{font-size:.625rem;font-weight:700;text-transform:uppercase;padding:.1875rem .5rem;border-radius:1rem;letter-spacing:.5px}
 	.chat-status.pending{background:rgba(245,158,11,.1);color:#f59e0b}
@@ -559,7 +572,7 @@
 	.chat-status.resolved,.chat-status.sent{background:rgba(34,197,94,.1);color:#22c55e}
     .chat-status.sending{background:rgba(6,182,212,.1);color:#06b6d4}
     .chat-status.partial{background:rgba(245,158,11,.1);color:#f59e0b}
-	.chat-actions{display:flex;gap:.375rem}
+	.chat-actions{display:flex;flex-wrap:wrap;gap:.375rem}
 	.action-btn{padding:.4rem .75rem;border:none;border-radius:8px;font-size:.75rem;font-weight:600;cursor:pointer;transition:all .15s}
 	.action-btn.claim{background:rgba(59,130,246,.15);color:#60a5fa}
 	.action-btn.claim:hover{background:rgba(59,130,246,.25)}
@@ -599,7 +612,14 @@
 	.transfer-empty{font-size:.85rem;color:var(--color-text-muted);text-align:center;padding:1rem}
 	.modal-close{display:block;margin-top:1rem;padding:.5rem 1rem;background:var(--color-surface-200);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:var(--color-text-secondary);cursor:pointer;width:100%;font-family:inherit}
 
-	@media(max-width:768px){.cskh-layout{grid-template-columns:1fr}.mode-bar{flex-wrap:wrap}}
+	@media(max-width:768px){
+		.cskh-layout{grid-template-columns:1fr;min-height:460px}
+		.cskh-layout.has-selected .cskh-list{display:none}
+		.cskh-layout:not(.has-selected) .cskh-chat{display:none}
+		.mobile-back-btn{display:inline-flex}
+		.mode-bar{flex-wrap:wrap}
+		.mode-bar button{flex:1 1 130px}
+	}
 
 	/* Mode Bar */
 	.mode-bar{display:flex;gap:.375rem;margin-bottom:1rem;background:var(--color-surface-100);border-radius:12px;padding:.3rem;border:1px solid rgba(255,255,255,.04)}

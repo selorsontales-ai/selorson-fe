@@ -1,10 +1,11 @@
 <script lang="ts">
+	import * as m from '$lib/paraglide/messages';
 	// The app started without database credentials. The embedded backend dies on
 	// its own thread when that happens, so every page below renders its empty
 	// state and looks merely idle. This bar is the only thing that separates
 	// "there is no data yet" from "this window can never load anything".
 	import { getConfigProblem } from "$lib/desktop-mode.svelte";
-
+	
 	const problem = $derived(getConfigProblem());
 	let copied = $state(false);
 
@@ -28,12 +29,12 @@
 	<div class="bar" role="alert">
 		<span class="mark" aria-hidden="true">!</span>
 		<div class="body">
-			<strong>App đang chạy không có backend.</strong>
+			<strong>{m.ui_app_is_running_without_backend()}</strong>
 			<span class="detail">{problem.split("\n")[0]}</span>
 			<code class="path">{problem.split("\n").pop()}</code>
 		</div>
 		<button type="button" onclick={copyPath}>
-			{copied ? "Đã chép" : "Chép đường dẫn"}
+			{copied ? m.ui_copied() : m.ui_copy_path()}
 		</button>
 	</div>
 {/if}

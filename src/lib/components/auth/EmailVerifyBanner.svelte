@@ -2,7 +2,7 @@
 <script lang="ts">
 	import { getUser, isAuthenticated, isEmailVerified, verifyEmail, resendVerification, fetchMe } from '$lib/stores/auth.svelte';
 	import * as m from '$lib/paraglide/messages';
-
+	
 	let showVerifyForm = $state(false);
 	let verifyCode = $state('');
 	let loading = $state(false);
@@ -18,10 +18,10 @@
 		error = '';
 		try {
 			await verifyEmail(user.email, verifyCode);
-			successMsg = 'Email đã xác nhận thành công! 🎉';
+			successMsg = m.ui_email_verified();
 			setTimeout(() => { fetchMe(); }, 1500);
 		} catch (err: any) {
-			error = err.message || 'Mã không đúng hoặc đã hết hạn';
+			error = err.message || m.auth_err_invalid_code();
 		} finally {
 			loading = false;
 		}
@@ -34,14 +34,14 @@
 		error = '';
 		try {
 			await resendVerification(user.email);
-			successMsg = 'Mã mới đã được gửi!';
+			successMsg = m.ui_new_verification_code_sent();
 			resendCooldown = 60;
 			const timer = setInterval(() => {
 				resendCooldown--;
 				if (resendCooldown <= 0) clearInterval(timer);
 			}, 1000);
 		} catch (err: any) {
-			error = err.message || 'Không thể gửi lại mã';
+			error = err.message || m.ui_could_not_resend_code();
 		} finally {
 			loading = false;
 		}
@@ -55,10 +55,10 @@
 				<div class="banner-row">
 					<span class="banner-icon">📧</span>
 					<span class="banner-text">
-						Email <strong>{getUser()?.email}</strong> chưa được xác nhận.
+						{m.auth_label_email()} <strong>{getUser()?.email}</strong> {m.ui_is_not_verified_yet()}
 					</span>
 					<button class="banner-btn" onclick={() => showVerifyForm = true}>
-						Xác nhận ngay
+						{m.ui_verify_now()}
 					</button>
 				</div>
 			{:else}
@@ -80,7 +80,7 @@
 						class="banner-input"
 					/>
 					<button class="banner-btn" type="submit" disabled={loading}>
-						{loading ? '...' : 'Xác nhận'}
+						{loading ? '...' : m.auth_verify()}
 					</button>
 					<button
 						type="button"
@@ -90,7 +90,7 @@
 					>
 						{resendCooldown > 0 ? m.verify_resend_wait({ n: resendCooldown }) : m.verify_resend()}
 					</button>
-					<button class="banner-dismiss" onclick={() => showVerifyForm = false} aria-label="Thu gọn">←</button>
+					<button class="banner-dismiss" onclick={() => showVerifyForm = false} aria-label={m.ui_collapse()}>←</button>
 				</form>
 			{/if}
 		</div>

@@ -64,12 +64,19 @@
 	.newsletter-icon { font-size: 1.75rem; margin-bottom: 0.5rem; }
 	h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.35rem; }
 	p { font-size: 0.82rem; color: var(--color-text-muted); margin-bottom: 1rem; max-width: 360px; margin-inline: auto; }
-	.nl-form { display: flex; gap: 0.4rem; max-width: 380px; margin: 0 auto; }
+	.nl-form { display: flex; gap: 0.4rem; max-width: 380px; margin: 0 auto; flex-wrap: wrap; }
 	input {
-		flex: 1; padding: 0.55rem 0.75rem;
+		flex: 1 1 180px; min-width: 0; padding: 0.55rem 0.75rem;
 		background: var(--color-surface-200); border: 1px solid rgba(255,255,255,.08);
 		border-radius: var(--radius-sm); color: var(--color-text-primary);
 		font-family: inherit; font-size: 0.85rem;
+	}
+	.nl-form :global(.btn-brand) {
+		flex: 0 0 auto;
+	}
+	@media (max-width: 420px) {
+		.newsletter-box { padding: 1.35rem 1rem; }
+		.nl-form :global(.btn-brand) { width: 100%; }
 	}
 	input:focus { outline: none; border-color: var(--color-brand-500); }
 	.nl-msg { font-size: 0.8rem; margin-top: 0.5rem; padding: 0.35rem 0.6rem; border-radius: 4px; display: inline-block; }

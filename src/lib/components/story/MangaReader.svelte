@@ -1,14 +1,19 @@
 <script lang="ts">
+	import * as m from '$lib/paraglide/messages';
 	import type { MangaConfigBlock, MangaPageItem } from '$lib/story/manga-blocks';
-
+	
 	let {
 		manga,
 		maxWidth = 860,
-		initialEdition
+		initialEdition,
+		initialProgressPercent = 0,
+		onProgressChange
 	} = $props<{
 		manga: MangaConfigBlock;
 		maxWidth?: number;
 		initialEdition?: 'color' | 'bw';
+		initialProgressPercent?: number;
+		onProgressChange?: (percent: number, pageIndex: number, totalPages: number) => void;
 	}>();
 
 	let mode = $state<'vertical' | 'paged'>('vertical');
@@ -17,6 +22,7 @@
 	let currentPage = $state(0);
 	let showPanels = $state(false);
 	let lastMangaId = $state<string>('');
+	let restoredForMangaId = $state<string>('');
 
 	let colorPages = $derived<MangaPageItem[]>(manga?.color_pages ?? []);
 	let bwPages = $derived<MangaPageItem[]>(manga?.bw_pages ?? []);
@@ -25,12 +31,15 @@
 	let hasBothEditions = $derived(hasColor && hasBw);
 
 	$effect(() => {
+		if (manga?.reading_mode) {
+			mode = manga.reading_mode;
+		}
+	});
+
+	$effect(() => {
 		const cfgId = manga?.id ?? '';
 		if (cfgId !== lastMangaId) {
 			lastMangaId = cfgId;
-			if (manga?.reading_mode) {
-				mode = manga.reading_mode;
-			}
 			if (initialEdition === 'bw' && bwPages.length > 0) {
 				edition = 'bw';
 			} else if (initialEdition === 'color' && colorPages.length > 0) {
@@ -61,6 +70,36 @@
 	);
 	let totalPages = $derived(pages.length);
 
+	$effect(() => {
+		const cfgId = manga?.id ?? '';
+		if (
+			cfgId &&
+			restoredForMangaId !== cfgId &&
+			totalPages > 1 &&
+			initialProgressPercent > 5 &&
+			initialProgressPercent < 98
+		) {
+			restoredForMangaId = cfgId;
+			const targetIdx = Math.min(
+				totalPages - 1,
+				Math.max(0, Math.round((initialProgressPercent / 100) * (totalPages - 1)))
+			);
+			currentPage = targetIdx;
+			if (mode === 'vertical' && typeof document !== 'undefined') {
+				setTimeout(() => {
+					const el = document.getElementById(`manga-page-${targetIdx + 1}`);
+					if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+				}, 180);
+			}
+		}
+	});
+
+	function reportMangaProgress(idx: number) {
+		if (!onProgressChange || totalPages <= 0) return;
+		const pct = totalPages === 1 ? 100 : Math.round(((idx + 1) / totalPages) * 100);
+		onProgressChange(pct, idx, totalPages);
+	}
+
 	function switchEdition(target: 'color' | 'bw') {
 		if (target === 'color' && !hasColor) return;
 		if (target === 'bw' && !hasBw) return;
@@ -74,6 +113,7 @@
 	function jumpToPage(idx: number) {
 		if (idx < 0 || idx >= totalPages) return;
 		currentPage = idx;
+		reportMangaProgress(idx);
 		if (mode === 'vertical' && typeof document !== 'undefined') {
 			const el = document.getElementById(`manga-page-${idx + 1}`);
 			if (el) {
@@ -85,12 +125,14 @@
 	function prevPage() {
 		if (currentPage > 0) {
 			currentPage -= 1;
+			reportMangaProgress(currentPage);
 		}
 	}
 
 	function nextPage() {
 		if (currentPage < totalPages - 1) {
 			currentPage += 1;
+			reportMangaProgress(currentPage);
 		}
 	}
 
@@ -113,7 +155,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if totalPages === 0}
-	<div class="manga-empty">Chương này chưa có trang Manga nào.</div>
+	<div class="manga-empty">{m.manga_no_manga_pages_available_for()}</div>
 {:else}
 	<div class="manga-reader" style:max-width="{effectiveWidth}px">
 		<!-- Thanh Navbar Đọc Manga (Sticky) -->
@@ -121,30 +163,30 @@
 			<!-- Cột trái: Chuyển đổi Bản Màu ↔ Bản Đen Trắng -->
 			<div class="toolbar-section">
 				{#if hasBothEditions}
-					<div class="edition-switch" role="group" aria-label="Chọn phiên bản màu sắc">
+					<div class="edition-switch" role="group" aria-label={m.manga_select_color_edition()}>
 						<button
 							type="button"
 							class="edition-btn color-ed"
 							class:active={edition === 'color'}
 							onclick={() => switchEdition('color')}
-							title="Đọc bản Full Color giữ nguyên vị trí trang"
+							title={m.manga_read_full_color_edition_keeping()}
 						>
-							🎨 Bản Màu
+							{m.manga_color()}
 						</button>
 						<button
 							type="button"
 							class="edition-btn bw-ed"
 							class:active={edition === 'bw'}
 							onclick={() => switchEdition('bw')}
-							title="Đọc bản Tankōbon Đen Trắng giữ nguyên vị trí trang"
+							title={m.manga_read_b_w_tankobon_edition()}
 						>
-							🖋️ Đen Trắng
+							{m.manga_b_w()}
 						</button>
 					</div>
 				{:else if hasBw}
-					<span class="single-edition-badge bw">🖋️ Bản Đen Trắng</span>
+					<span class="single-edition-badge bw">{m.manga_b_w_edition_2()}</span>
 				{:else}
-					<span class="single-edition-badge color">🎨 Bản Có Màu</span>
+					<span class="single-edition-badge color">{m.manga_color_edition_2()}</span>
 				{/if}
 			</div>
 
@@ -157,7 +199,7 @@
 						class:active={mode === 'vertical'}
 						onclick={() => (mode = 'vertical')}
 					>
-						📜 Cuộn dọc
+						{m.manga_vertical()}
 					</button>
 					<button
 						type="button"
@@ -165,7 +207,7 @@
 						class:active={mode === 'paged'}
 						onclick={() => (mode = 'paged')}
 					>
-						📖 Lật trang ({currentPage + 1}/{totalPages})
+						📖 {m.manga_paged()} ({currentPage + 1}/{totalPages})
 					</button>
 				</div>
 
@@ -173,10 +215,10 @@
 					class="page-jump-select"
 					value={currentPage}
 					onchange={(e) => jumpToPage(Number((e.currentTarget as HTMLSelectElement).value))}
-					aria-label="Chuyển nhanh tới trang"
+					aria-label={m.manga_jump_to_page()}
 				>
 					{#each pages as _, i}
-						<option value={i}>Trang {i + 1} / {totalPages}</option>
+						<option value={i}>{m.manga_page()} {i + 1} / {totalPages}</option>
 					{/each}
 				</select>
 			</div>
@@ -189,27 +231,27 @@
 						class="zoom-btn"
 						class:active={zoomMode === 'fit'}
 						onclick={() => (zoomMode = 'fit')}
-						title="Khung tiêu chuẩn"
+						title={m.manga_standard_width()}
 					>
-						Vừa
+						{m.manga_fit()}
 					</button>
 					<button
 						type="button"
 						class="zoom-btn"
 						class:active={zoomMode === 'wide'}
 						onclick={() => (zoomMode = 'wide')}
-						title="Khung mở rộng"
+						title={m.manga_wide_width()}
 					>
-						Rộng
+						{m.manga_wide()}
 					</button>
 					<button
 						type="button"
 						class="zoom-btn"
 						class:active={zoomMode === 'full'}
 						onclick={() => (zoomMode = 'full')}
-						title="Toàn màn hình đọc"
+						title={m.manga_full_reader_width()}
 					>
-						Toàn khung
+						{m.manga_full()}
 					</button>
 				</div>
 
@@ -220,7 +262,7 @@
 						class:active={showPanels}
 						onclick={() => (showPanels = !showPanels)}
 					>
-						💬 Thoại
+						{m.manga_dialogue()}
 					</button>
 				{/if}
 			</div>
@@ -232,11 +274,11 @@
 				{#each pages as page, idx (page.page_number ?? idx)}
 					<figure class="manga-page-item" id="manga-page-{idx + 1}">
 						<div class="page-badge-floating">
-							Trang {idx + 1}/{totalPages} · {edition === 'bw' && hasBw ? '🖋️ Đen Trắng' : '🎨 Bản Màu'}
+							{m.manga_page()} {idx + 1}/{totalPages} · {edition === 'bw' && hasBw ? m.manga_b_w() : m.manga_color()}
 						</div>
 						<img
 							src={page.cloudinary_url}
-							alt={page.filename || `Trang ${idx + 1}`}
+							alt={page.filename || `${m.manga_page()} ${idx + 1}`}
 							loading={idx < 3 ? 'eager' : 'lazy'}
 							decoding="async"
 						/>
@@ -266,15 +308,15 @@
 					<div class="paged-stage">
 						<!-- svelte-ignore a11y_click_events_have_key_events -->
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<div class="click-zone left" onclick={prevPage} title="Trang trước (←)"></div>
+						<div class="click-zone left" onclick={prevPage} title={m.manga_previous_page()}></div>
 						<img
 							src={activePage.cloudinary_url}
-							alt={activePage.filename || `Trang ${currentPage + 1}`}
+							alt={activePage.filename || `${m.manga_page()} ${currentPage + 1}`}
 							class="paged-img"
 						/>
 						<!-- svelte-ignore a11y_click_events_have_key_events -->
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<div class="click-zone right" onclick={nextPage} title="Trang sau (→)"></div>
+						<div class="click-zone right" onclick={nextPage} title={m.manga_next_page_2()}></div>
 					</div>
 
 					{#if activePage.caption}
@@ -296,7 +338,7 @@
 
 					<div class="paged-controls">
 						<button type="button" class="nav-page-btn" onclick={prevPage} disabled={currentPage <= 0}>
-							← Trang trước
+							{m.manga_prev_page()}
 						</button>
 						<div class="page-slider-wrap">
 							<input
@@ -304,10 +346,11 @@
 								min="0"
 								max={totalPages - 1}
 								bind:value={currentPage}
+								onchange={() => reportMangaProgress(currentPage)}
 								class="page-slider"
 							/>
 							<span class="page-counter">
-								Trang {currentPage + 1} / {totalPages} ({edition === 'bw' && hasBw ? 'Bản Đen Trắng' : 'Bản Màu'})
+								{m.manga_page()} {currentPage + 1} / {totalPages} ({edition === 'bw' && hasBw ? m.manga_b_w_edition() : m.manga_color_edition()})
 							</span>
 						</div>
 						<button
@@ -316,7 +359,7 @@
 							onclick={nextPage}
 							disabled={currentPage >= totalPages - 1}
 						>
-							Trang tiếp →
+							{m.manga_next_page()}
 						</button>
 					</div>
 				</div>
@@ -606,5 +649,40 @@
 	.panel-line strong {
 		color: var(--color-brand-400);
 		margin-right: 0.35rem;
+	}
+
+	@media (max-width: 860px) {
+		.zoom-switch {
+			display: none;
+		}
+	}
+
+	@media (max-width: 640px) {
+		.manga-toolbar {
+			top: 3.7rem;
+			padding: 0.45rem 0.65rem;
+			gap: 0.4rem;
+		}
+		.edition-btn,
+		.mode-btn {
+			padding: 0.3rem 0.55rem;
+			font-size: 0.74rem;
+		}
+		.paged-stage {
+			min-height: 280px;
+		}
+		.paged-controls {
+			flex-wrap: wrap;
+			gap: 0.6rem;
+			padding: 0.6rem 0.75rem;
+		}
+		.page-slider-wrap {
+			order: -1;
+			flex-basis: 100%;
+		}
+		.nav-page-btn {
+			flex: 1;
+			text-align: center;
+		}
 	}
 </style>

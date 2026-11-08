@@ -26,6 +26,7 @@ let supportUnread = $state(0);
 let supportLoading = $state(false);
 let supportSending = $state(false);
 let chatWidgetHidden = $state(false);
+let staffOnline = $state(false);
 
 export function getSupportTickets() { return supportTickets; }
 export function getActiveTicket() { return activeTicket; }
@@ -35,6 +36,7 @@ export function getSupportUnread() { return supportUnread; }
 export function isSupportLoading() { return supportLoading; }
 export function isSupportSending() { return supportSending; }
 export function isChatWidgetHidden() { return chatWidgetHidden; }
+export function isStaffOnline() { return staffOnline; }
 
 export function setChatWidgetHidden(hidden: boolean) {
 	chatWidgetHidden = hidden;
@@ -85,7 +87,13 @@ export async function closeTicket(ticketId: number) {
 }
 
 export async function fetchUnread() {
-	try { const r: any = await apiFetch('/support/unread'); supportUnread = r.data.count; } catch {}
+	try {
+		const r: any = await apiFetch('/support/unread');
+		supportUnread = r.data?.count ?? 0;
+		if (typeof r.data?.staff_online === 'boolean') {
+			staffOnline = r.data.staff_online;
+		}
+	} catch {}
 }
 
 /** Alias for SupportChatWidget */
@@ -94,9 +102,18 @@ export const fetchUnreadCount = fetchUnread;
 export async function fetchActiveConversation() {
 	try {
 		const r: any = await apiFetch('/support/active');
+		if (typeof r.staff_online === 'boolean') {
+			staffOnline = r.staff_online;
+		}
 		if (r.data) {
 			activeConversation = r.data.conversation;
 			supportMessages = r.data.messages || [];
+			if (typeof r.data.staff_online === 'boolean') {
+				staffOnline = r.data.staff_online;
+			}
+		} else {
+			activeConversation = null;
+			supportMessages = [];
 		}
 	} catch {}
 }

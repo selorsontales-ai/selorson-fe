@@ -14,7 +14,7 @@
 	import { fetchRevisions, publishWorld, restoreRevision } from './api';
 	import Inspector from './Inspector.svelte';
 	import StudioCanvas from './StudioCanvas.svelte';
-	import { Studio } from './studio.svelte';
+	import { regionSlugOf, Studio } from './studio.svelte';
 	import {
 		KIND_COLORS,
 		KIND_ICONS,
@@ -37,6 +37,8 @@
 	let search = $state('');
 	let showPreview = $state(false);
 	let showHistory = $state(false);
+	let mobileListOpen = $state(false);
+	let mobileInspectorOpen = $state(false);
 	let revisions = $state<RevisionSummary[]>([]);
 	let canvas = $state<StudioCanvas | undefined>();
 	let PreviewCanvas = $state<typeof import('$lib/world/engine/WorldCanvas.svelte').default | null>(
@@ -86,10 +88,37 @@
 		})
 	);
 
+	let unplacedLocationsCount = $derived(
+		studio.entries.filter(
+			(e) =>
+				(e.kind === 'region' || e.kind === 'place') &&
+				(typeof e.layout?.lat !== 'number' || typeof e.layout?.lng !== 'number')
+		).length
+	);
+
 	function toggleKind(kind: StudioNodeKind) {
 		visibleKinds = visibleKinds.includes(kind)
 			? visibleKinds.filter((k) => k !== kind)
 			: [...visibleKinds, kind];
+	}
+
+	function handleSelectBorderRegion(slugValue: string) {
+		const slug = slugValue || null;
+		borderTarget = slug;
+		if (!slug) return;
+		const matched = studio.regions.find((r) => regionSlugOf(r) === slug);
+		if (matched && !matched.layout?.slug) {
+			studio.patchNode(matched.item.id, { slug });
+		}
+	}
+
+	function handleAutoPlaceAll() {
+		const placedCount = studio.autoPlaceUnplacedLocations();
+		if (placedCount > 0) {
+			toast_success(`Đã tự dàn tọa độ gợi ý cho ${placedCount} địa danh/vùng đất.`);
+		} else {
+			toast_success('Tất cả địa danh và vùng đất đều đã có tọa độ.');
+		}
 	}
 
 	/**
@@ -219,8 +248,32 @@
 <div class="studio">
 	<header class="toolbar">
 		<div class="modes">
+			<button
+				type="button"
+				class="mobile-drawer-toggle"
+				class:on={mobileListOpen}
+				onclick={() => {
+					mobileListOpen = !mobileListOpen;
+					if (mobileListOpen) mobileInspectorOpen = false;
+				}}
+				title="Danh sách thực thể"
+			>
+				📋 Danh sách
+			</button>
 			<button class:on={mode === 'map'} onclick={() => (mode = 'map')}>🗺️ Bản đồ</button>
 			<button class:on={mode === 'graph'} onclick={() => (mode = 'graph')}>🕸️ Đồ thị</button>
+			<button
+				type="button"
+				class="mobile-drawer-toggle"
+				class:on={mobileInspectorOpen}
+				onclick={() => {
+					mobileInspectorOpen = !mobileInspectorOpen;
+					if (mobileInspectorOpen) mobileListOpen = false;
+				}}
+				title="Thuộc tính mục đang chọn"
+			>
+				⚙️ Thuộc tính
+			</button>
 		</div>
 
 		<div class="filters">
@@ -239,19 +292,25 @@
 			<button class="chip wide" class:on={focus} onclick={() => (focus = !focus)}>
 				Tập trung
 			</button>
+			<button
+				class="chip wide"
+				class:on={studio.showDraftItems}
+				onclick={() => (studio.showDraftItems = !studio.showDraftItems)}
+				title="Hiển thị cả các thực thể Nháp đồng bộ từ Co-Writer"
+			>
+				{studio.showDraftItems ? '👁️ Cả mục Nháp' : '✓ Chỉ mục đã duyệt'}
+			</button>
 		</div>
 
 		{#if mode === 'map'}
 			<div class="border-tools">
 				<select
 					value={borderTarget ?? ''}
-					onchange={(e) => (borderTarget = e.currentTarget.value || null)}
+					onchange={(e) => handleSelectBorderRegion(e.currentTarget.value)}
 				>
 					<option value="">— chọn vùng để vẽ ranh giới —</option>
 					{#each studio.regions as region (region.item.id)}
-						{#if region.layout?.slug}
-							<option value={region.layout.slug}>{region.item.name}</option>
-						{/if}
+						<option value={regionSlugOf(region)}>{region.item.name}</option>
 					{/each}
 				</select>
 				<button
@@ -277,6 +336,15 @@
 				{:else if borderTool === 'edit'}
 					<button class="chip wide" onclick={() => canvas?.deleteSelectedVertex()}>
 						🗑 Xoá đỉnh
+					</button>
+				{/if}
+				{#if unplacedLocationsCount > 0}
+					<button
+						class="chip wide"
+						onclick={handleAutoPlaceAll}
+						title="Tự động dàn tọa độ gợi ý cho các địa danh/vùng đất chưa xếp"
+					>
+						🧭 Dàn tọa độ ({unplacedLocationsCount})
 					</button>
 				{/if}
 				<label class="opacity">
@@ -312,8 +380,8 @@
 		</div>
 	{/if}
 
-	<div class="body">
-		<aside class="list">
+	<div class="body" class:mobile-inspector-open={mobileInspectorOpen}>
+		<aside class="list" class:mobile-open={mobileListOpen}>
 			<input class="search" placeholder="Tìm trong thư viện…" bind:value={search} />
 			<ul>
 				{#each filtered as entry (entry.item.id)}
@@ -322,10 +390,16 @@
 							class="item"
 							class:on={studio.selectedId === entry.item.id}
 							style="--c:{KIND_COLORS[entry.kind]}"
-							onclick={() => (studio.selectedId = entry.item.id)}
+							onclick={() => {
+								studio.selectedId = entry.item.id;
+								mobileListOpen = false;
+							}}
 						>
 							<span class="item-icon">{KIND_ICONS[entry.kind]}</span>
 							<span class="item-name">{entry.item.name}</span>
+							{#if !entry.item.is_active}
+								<span class="draft-pill" title="Mục nháp (chưa bật xuất bản)">Nháp</span>
+							{/if}
 							{#if typeof entry.layout?.lat !== 'number'}
 								<span class="unplaced" title="Chưa có toạ độ">○</span>
 							{/if}
@@ -447,7 +521,11 @@
 	}
 	.modes {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0.3rem;
+	}
+	.mobile-drawer-toggle {
+		display: none;
 	}
 	.modes button.on {
 		background: rgba(255, 183, 3, 0.18);
@@ -547,10 +625,11 @@
 		flex: 1;
 		display: flex;
 		min-height: 0;
+		position: relative;
 	}
 
 	.list {
-		width: 15rem;
+		width: 15.5rem;
 		flex: none;
 		display: flex;
 		flex-direction: column;
@@ -604,6 +683,15 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+	.draft-pill {
+		font-size: 0.62rem;
+		padding: 0.05rem 0.32rem;
+		border-radius: 99px;
+		background: rgba(251, 191, 36, 0.15);
+		color: #fbbf24;
+		border: 1px solid rgba(251, 191, 36, 0.35);
+		flex: none;
+	}
 	.unplaced {
 		color: #64748b;
 		font-size: 0.7rem;
@@ -634,8 +722,8 @@
 		position: absolute;
 		right: 0.75rem;
 		bottom: 0.75rem;
-		width: 22rem;
-		height: 15rem;
+		width: min(22rem, calc(100% - 1.5rem));
+		height: min(15rem, 45%);
 		border-radius: 10px;
 		overflow: hidden;
 		border: 1px solid rgba(255, 255, 255, 0.14);
@@ -656,7 +744,7 @@
 		position: absolute;
 		right: 0.75rem;
 		top: 0.75rem;
-		width: 23rem;
+		width: min(23rem, calc(100% - 1.5rem));
 		max-height: 60%;
 		overflow-y: auto;
 		background: rgba(8, 14, 24, 0.96);
@@ -664,6 +752,7 @@
 		border-radius: 10px;
 		padding: 0.75rem;
 		font-size: 0.78rem;
+		z-index: 25;
 	}
 	.history header {
 		display: flex;
@@ -713,8 +802,37 @@
 	}
 
 	@media (max-width: 1100px) {
+		.mobile-drawer-toggle {
+			display: inline-flex;
+			align-items: center;
+		}
 		.list {
 			display: none;
+			position: absolute;
+			top: 0;
+			left: 0;
+			bottom: 0;
+			width: min(17rem, 85vw);
+			z-index: 30;
+			background: rgba(8, 14, 24, 0.97);
+			box-shadow: 12px 0 32px rgba(0, 0, 0, 0.55);
+		}
+		.list.mobile-open {
+			display: flex;
+		}
+		.body :global(.inspector) {
+			display: none;
+			position: absolute;
+			top: 0;
+			right: 0;
+			bottom: 0;
+			width: min(21rem, 88vw);
+			z-index: 30;
+			background: rgba(8, 14, 24, 0.97);
+			box-shadow: -12px 0 32px rgba(0, 0, 0, 0.55);
+		}
+		.body.mobile-inspector-open :global(.inspector) {
+			display: block;
 		}
 	}
 </style>

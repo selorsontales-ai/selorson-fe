@@ -23,6 +23,7 @@
 		setChatWidgetHidden,
 	} from "$lib/stores/support.svelte";
 	import * as m from "$lib/paraglide/messages";
+	import { dateLocale } from '$lib/i18n-labels';
 	import QRCode from "qrcode";
 
 	let totpCode = $state("");
@@ -210,7 +211,7 @@
 
 	function formatDate(d: string | null) {
 		if (!d) return "—";
-		return new Date(d).toLocaleDateString("vi-VN", {
+		return new Date(d).toLocaleDateString(dateLocale(), {
 			day: "2-digit",
 			month: "2-digit",
 			year: "numeric",
@@ -259,15 +260,15 @@
 
 			<!-- UI Options -->
 			<section class="card">
-				<h2>🎨 Giao Diện & Tiện Ích</h2>
+				<h2>{m.settings_appearance_widgets()}</h2>
 				<p class="hint">
-					Tuỳ chỉnh trải nghiệm hiển thị của bạn trên trang web.
+					{m.settings_customize_your_display_experience_on()}
 				</p>
 				<div class="setting-item">
 					<div>
-						<strong>Nút Hỗ Trợ (Chat)</strong>
+						<strong>{m.settings_support_chat_button()}</strong>
 						<p class="hint">
-							Hiển thị nút chat hỗ trợ ở góc phải màn hình.
+							{m.settings_show_the_support_chat_button()}
 						</p>
 					</div>
 					<button
@@ -276,7 +277,9 @@
 						onclick={() =>
 							setChatWidgetHidden(!isChatWidgetHidden())}
 					>
-						{!isChatWidgetHidden() ? "Đang Bật" : "Đang Tắt"}
+						{!isChatWidgetHidden()
+							? m.settings_enabled()
+							: m.settings_disabled()}
 					</button>
 				</div>
 			</section>
@@ -593,8 +596,8 @@
 <style>
 	.settings-page {
 		max-width: 900px;
-		margin: 2rem auto;
-		padding: 0 1.5rem;
+		margin: clamp(1.25rem, 3vw, 2rem) auto;
+		padding: 0 clamp(0.85rem, 3vw, 1.5rem);
 	}
 	h1 {
 		font-size: 1.75rem;
@@ -780,6 +783,8 @@
 	.device-item {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
 		gap: 0.75rem;
 		padding: 0.75rem;
 		background: var(--color-surface-200);
@@ -787,6 +792,7 @@
 	}
 	.device-info {
 		flex: 1;
+		min-width: 180px;
 	}
 	.device-name {
 		display: block;
@@ -809,6 +815,7 @@
 	.delete-actions {
 		display: flex;
 		align-items: center;
+		flex-wrap: wrap;
 		gap: 0.75rem;
 		margin-top: 0.5rem;
 	}
@@ -820,10 +827,11 @@
 	}
 	.tfa-disable {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0.5rem;
 	}
 	.tfa-disable input {
-		flex: 1;
+		flex: 1 1 180px;
 	}
 	.tfa-setup {
 		padding: 0.75rem 0;
@@ -850,6 +858,9 @@
 		letter-spacing: 2px;
 	}
 	.tfa-secret code {
+		display: inline-block;
+		max-width: 100%;
+		overflow-wrap: anywhere;
 		background: rgba(255, 255, 255, 0.06);
 		padding: 0.4rem 0.8rem;
 		border-radius: 6px;
@@ -857,10 +868,11 @@
 	}
 	.tfa-verify {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0.5rem;
 	}
 	.tfa-verify input {
-		flex: 1;
+		flex: 1 1 180px;
 	}
 	.backup-codes {
 		margin-top: 0.75rem;
@@ -892,7 +904,8 @@
 	}
 	.lang-options {
 		display: flex;
-		gap: 1rem;
+		flex-wrap: wrap;
+		gap: 0.75rem;
 	}
 	.lang-options .btn-export.active {
 		background: rgba(12, 113, 61, 0.15);
@@ -903,6 +916,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 0.75rem;
 		padding: 1rem;
 		background: rgba(255, 255, 255, 0.02);
 		border: 1px solid rgba(255, 255, 255, 0.04);
@@ -933,7 +948,10 @@
 	}
 	@media (max-width: 640px) {
 		.card {
-			padding: 1.5rem;
+			padding: 1.15rem;
+		}
+		.codes-grid {
+			grid-template-columns: repeat(2, 1fr);
 		}
 	}
 </style>

@@ -1,14 +1,14 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { isAuthenticated, getUser } from '$lib/stores/auth.svelte';
 	import {
 		fetchConversations, getConversations, getConversationsError, isDrawerOpen, isLoadingConvs,
-		toggleDrawer, closeDrawer, openWindow, getOpenWindows, getBubbles,
+		toggleDrawer, closeDrawer, openWindow, getOpenWindows,
 		getVisibleBubbles, getOverflowBubbles, isOverflowOpen, toggleOverflow,
 		sendMsg, minimizeWindow, closeWindow, promoteBubble, getTotalUnread, updateDraft
 	} from '$lib/stores/chat.svelte';
 	import * as m from '$lib/paraglide/messages';
+	import { dateLocale } from '$lib/i18n-labels';
 
 	let msgRefs = $state<Record<number, HTMLElement>>({});
 
@@ -20,7 +20,7 @@
 		}
 	});
 
-	function fmtTime(d: string) { return new Date(d).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); }
+	function fmtTime(d: string) { return new Date(d).toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' }); }
 	function scrollWin(convId: number) { setTimeout(() => { const el = msgRefs[convId]; if (el) el.scrollTop = el.scrollHeight; }, 50); }
 
 	function handleSend(w: any) { sendMsg(w).then(() => scrollWin(w.convId)); }
@@ -36,9 +36,9 @@
 		<div class="pchat-overlay" onmousedown={closeDrawer}></div>
 	{/if}
 
-	<!-- Tab (thin strip on right edge) -->
+	<!-- Tab (thin strip on right edge, expands on hover or when there are unread messages) -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="pchat-tab-wrap" class:active={isDrawerOpen()} onmousedown={toggleDrawer}>
+	<div class="pchat-tab-wrap" class:active={isDrawerOpen()} class:has-unread={getTotalUnread() > 0} onmousedown={toggleDrawer}>
 		<span class="pchat-tab-icon">💬</span>
 		{#if getTotalUnread() > 0}<span class="pchat-tab-badge">{getTotalUnread() > 9 ? '9+' : getTotalUnread()}</span>{/if}
 	</div>
@@ -46,7 +46,16 @@
 	<!-- Drawer Panel -->
 	{#if isDrawerOpen()}
 	<div class="pchat-drawer">
-		<div class="pchat-drawer-head"><strong>{m.pchat_title()}</strong><button class="pchat-x" onclick={closeDrawer}>✕</button></div>
+		<div class="pchat-drawer-head">
+			<div class="pchat-drawer-title">
+				<strong>{m.pchat_title()}</strong>
+				{#if getTotalUnread() > 0}<span class="pchat-drawer-badge">{getTotalUnread() > 99 ? '99+' : getTotalUnread()}</span>{/if}
+			</div>
+			<div class="pchat-drawer-actions">
+				<a href="/messages" class="pchat-view-all" onclick={closeDrawer} title={m.chat_open_full_page()}>{m.chat_view_all()}</a>
+				<button class="pchat-x" onclick={closeDrawer}>✕</button>
+			</div>
+		</div>
 		{#if isLoadingConvs()}<div class="pchat-loading">{m.pchat_loading()}</div>
 		{:else if getConversationsError()}<div class="pchat-error">{getConversationsError()}</div>
 		{:else if getConversations().length === 0}<div class="pchat-empty">{m.pchat_empty()}</div>
@@ -68,9 +77,9 @@
 
 	<!-- Chat Windows (max 2) -->
 	{#each getOpenWindows() as w, i (w.convId)}
-	<div class="pchat-win" style="right:{i * 340 + 60}px">
+	<div class="pchat-win" style="right:{i * 336 + 96}px">
 		<div class="pchat-win-head">
-			<a href="/profile/{w.otherUser?.username}" class="pchat-win-user">
+			<a href="/profile/{w.otherUser?.id || w.otherUser?.username}" class="pchat-win-user">
 				<div class="pchat-win-av">{#if w.otherUser?.avatar}<img src={w.otherUser.avatar} alt="" />{:else}<span>{(w.otherUser?.name||'?')[0]}</span>{/if}</div>
 				<strong>{w.otherUser?.name}</strong>
 			</a>
@@ -85,9 +94,9 @@
 			{:else if w.error}<div class="pchat-error">{w.error}</div>
 			{:else if w.messages.length === 0}<div class="pchat-empty">{m.pchat_start()}</div>
 			{:else}
-				{#each w.messages as m}
-					<div class="pchat-msg" class:mine={m.sender_id === getUser()?.id}>
-						<p>{m.message}</p><span class="pchat-msg-t">{fmtTime(m.created_at)}</span>
+				{#each w.messages as msg}
+					<div class="pchat-msg" class:mine={msg.sender_id === getUser()?.id}>
+						<p>{msg.message}</p><span class="pchat-msg-t">{fmtTime(msg.created_at)}</span>
 					</div>
 				{/each}
 			{/if}
@@ -103,18 +112,18 @@
 	<!-- Bubbles -->
 	{#each getVisibleBubbles() as b, i}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="pchat-bubble" style="bottom:{i * 52 + 70}px" onmousedown={() => promoteBubble(b)}>
+		<div class="pchat-bubble" style="bottom:{i * 54 + 92}px" onmousedown={() => promoteBubble(b)}>
 			{#if b.otherUser?.avatar}<img src={b.otherUser.avatar} alt="" />{:else}<span class="pchat-bubble-init">{(b.otherUser?.name||'?')[0]}</span>{/if}
 			{#if b.unread > 0}<span class="pchat-bubble-badge">{b.unread}</span>{/if}
 		</div>
 	{/each}
 	{#if getOverflowBubbles().length > 0}
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="pchat-bubble pchat-overflow" style="bottom:{getVisibleBubbles().length * 52 + 70}px" onmousedown={toggleOverflow}>
+		<div class="pchat-bubble pchat-overflow" style="bottom:{getVisibleBubbles().length * 54 + 92}px" onmousedown={toggleOverflow}>
 			<span>+{getOverflowBubbles().length}</span>
 		</div>
 		{#if isOverflowOpen()}
-		<div class="pchat-overflow-list" style="bottom:{(getVisibleBubbles().length + 1) * 52 + 70}px">
+		<div class="pchat-overflow-list" style="bottom:{(getVisibleBubbles().length + 1) * 54 + 92}px">
 			{#each getOverflowBubbles() as ob}
 				<button class="pchat-conv" onclick={() => { promoteBubble(ob); toggleOverflow(); }}>
 					<div class="pchat-conv-av">{#if ob.otherUser?.avatar}<img src={ob.otherUser.avatar} alt="" />{:else}<span>{(ob.otherUser?.name||'?')[0]}</span>{/if}</div>
@@ -131,14 +140,19 @@
 	.pchat{position:fixed;top:0;right:0;z-index:9990;pointer-events:none}
 	.pchat-overlay{position:fixed;inset:0;z-index:9989;pointer-events:auto}
 	.pchat-tab-wrap{position:fixed;top:80px;right:0;z-index:9991;width:5px;height:48px;background:linear-gradient(180deg,#0c713d,#085a30);border-radius:.375rem 0 0 .375rem;transition:all .25s;overflow:hidden;cursor:pointer;pointer-events:auto;box-shadow:-1px 0 6px rgba(0,0,0,.06)}
-	.pchat-tab-wrap:hover,.pchat-tab-wrap.active{width:42px;height:42px;border-radius:.5rem 0 0 .5rem}
+	.pchat-tab-wrap:hover,.pchat-tab-wrap.active,.pchat-tab-wrap.has-unread{width:42px;height:42px;border-radius:.5rem 0 0 .5rem}
 	.pchat-tab-icon{font-size:1.1rem;color:#fff;opacity:0;transition:opacity .15s .05s;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
-	.pchat-tab-wrap:hover .pchat-tab-icon,.pchat-tab-wrap.active .pchat-tab-icon{opacity:1}
+	.pchat-tab-wrap:hover .pchat-tab-icon,.pchat-tab-wrap.active .pchat-tab-icon,.pchat-tab-wrap.has-unread .pchat-tab-icon{opacity:1}
 	.pchat-tab-badge{position:absolute;top:2px;right:2px;background:#ef4444;font-size:.5rem;font-weight:700;min-width:14px;height:14px;border-radius:7px;display:flex;align-items:center;justify-content:center;padding:0 2px;color:#fff}
 	.pchat-drawer{position:fixed;top:80px;right:42px;width:320px;height:420px;background:var(--color-surface-100);border-radius:0 0 0 1rem;box-shadow:-4px 4px 24px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.04);border-right:none;display:flex;flex-direction:column;overflow:hidden;z-index:9990;pointer-events:auto;animation:drawerIn .25s ease}
 	@keyframes drawerIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
 	.pchat-drawer-head{display:flex;justify-content:space-between;align-items:center;padding:.875rem 1rem;border-bottom:1px solid rgba(255,255,255,.06)}
+	.pchat-drawer-title{display:flex;align-items:center;gap:.4rem}
 	.pchat-drawer-head strong{font-size:.9375rem}
+	.pchat-drawer-badge{background:#ef4444;color:#fff;font-size:.65rem;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
+	.pchat-drawer-actions{display:flex;align-items:center;gap:.5rem}
+	.pchat-view-all{font-size:.75rem;font-weight:600;color:var(--color-brand-400);text-decoration:none;padding:.2rem .5rem;border-radius:.375rem;background:rgba(12,113,61,.1);transition:background .15s}
+	.pchat-view-all:hover{background:rgba(12,113,61,.2)}
 	.pchat-x{background:none;border:none;font-size:1rem;cursor:pointer;color:var(--color-text-muted);padding:.25rem}
 	.pchat-loading,.pchat-empty,.pchat-error{padding:2rem;text-align:center;color:var(--color-text-muted);font-size:.8rem}
 	.pchat-error{color:#fca5a5}
@@ -174,13 +188,17 @@
 	.pchat-win-input input:focus{border-color:var(--color-brand-500)}
 	.pchat-win-input button{width:32px;height:32px;border-radius:50%;background:#0c713d;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.875rem;flex-shrink:0}
 	.pchat-win-input button:disabled{opacity:.4;cursor:not-allowed}
-	.pchat-bubble{position:fixed;right:56px;width:44px;height:44px;border-radius:50%;overflow:hidden;background:rgba(12,113,61,.08);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.2);border:2px solid var(--color-surface-50);transition:all .2s;animation:bubbleIn .25s ease;pointer-events:auto;z-index:9988}
+	.pchat-bubble{position:fixed;right:30px;width:44px;height:44px;border-radius:50%;overflow:hidden;background:rgba(12,113,61,.08);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.2);border:2px solid var(--color-surface-50);transition:all .2s;animation:bubbleIn .25s ease;pointer-events:auto;z-index:9988}
 	@keyframes bubbleIn{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
 	.pchat-bubble:hover{transform:scale(1.1)}
 	.pchat-bubble img{width:100%;height:100%;object-fit:cover}
 	.pchat-bubble-init{font-weight:700;font-size:.875rem;color:var(--color-brand-400)}
 	.pchat-bubble-badge{position:absolute;top:-2px;right:-2px;background:#ef4444;color:#fff;font-size:.5rem;font-weight:700;min-width:14px;height:14px;border-radius:7px;display:flex;align-items:center;justify-content:center}
 	.pchat-overflow{background:var(--color-surface-300);color:#fff;font-size:.75rem;font-weight:700}
-	.pchat-overflow-list{position:fixed;right:56px;width:220px;background:var(--color-surface-100);border-radius:.75rem;box-shadow:0 4px 20px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.04);overflow:hidden;z-index:9989;pointer-events:auto}
-	@media(max-width:768px){.pchat-tab-wrap{top:56px}.pchat-win{width:calc(100vw - 1rem);right:.5rem !important;height:60vh}.pchat-drawer{width:calc(100vw - 1rem);right:42px;top:56px;height:360px}}
+	.pchat-overflow-list{position:fixed;right:30px;width:220px;background:var(--color-surface-100);border-radius:.75rem;box-shadow:0 4px 20px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.04);overflow:hidden;z-index:9989;pointer-events:auto}
+	@media(max-width:768px){
+		.pchat-tab-wrap{top:72px}
+		.pchat-win{left:.5rem !important;right:.5rem !important;width:auto;height:min(440px, 65dvh)}
+		.pchat-drawer{left:.75rem;right:.75rem;width:auto;top:72px;height:min(380px, calc(100dvh - 6rem));border-radius:.85rem;border-right:1px solid rgba(255,255,255,.08)}
+	}
 </style>

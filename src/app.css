@@ -37,6 +37,11 @@
   --color-text-secondary: #a0a0b5;
   --color-text-muted: #6b6b80;
 
+  /* Borders & Layout */
+  --color-border: rgba(255, 255, 255, 0.09);
+  --color-border-strong: rgba(255, 255, 255, 0.16);
+  --header-height: 64px;
+
   /* Fonts */
   --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-serif: 'Merriweather', Georgia, serif;
@@ -79,6 +84,8 @@
     --color-text-primary: #1a1a2e;
     --color-text-secondary: #4a4a60;
     --color-text-muted: #8888a0;
+    --color-border: rgba(15, 23, 42, 0.11);
+    --color-border-strong: rgba(15, 23, 42, 0.2);
     --shadow-glow: 0 0 20px rgba(12, 113, 61, 0.15);
     --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.08);
     --shadow-elevated: 0 4px 24px rgba(0, 0, 0, 0.12);
@@ -205,12 +212,14 @@
 
   /* Section Title */
   .section-title {
-    font-size: 2.2rem;
+    font-size: clamp(1.45rem, 3.2vw, 2.2rem);
     font-weight: 800;
     text-align: center;
     width: 100%;
     display: block;
-    margin-bottom: 2rem;
+    margin-bottom: clamp(1.25rem, 2.5vw, 2rem);
+    line-height: 1.25;
+    padding-inline: 0.5rem;
     background: linear-gradient(135deg, var(--color-text-primary), var(--color-brand-400));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -219,10 +228,19 @@
 
   .page-subtitle {
     text-align: center;
-    font-size: 1.05rem;
+    font-size: clamp(0.92rem, 1.8vw, 1.05rem);
     color: var(--color-text-muted);
-    margin-top: -1.5rem;
-    margin-bottom: 3rem;
+    margin-top: -0.75rem;
+    margin-bottom: clamp(1.75rem, 3.5vw, 3rem);
+    padding-inline: 0.75rem;
+    line-height: 1.55;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 1280px;
+    margin-inline: auto;
+    padding-inline: clamp(0.875rem, 3vw, 1.5rem);
   }
 
   /* Gradient Text */
@@ -315,4 +333,64 @@ html[data-theme="light"] .btn-ghost {
 html[data-theme="light"] .btn-ghost:hover {
   border-color: var(--color-brand-500);
   background: rgba(12, 113, 61, 0.06);
+}
+
+/* Global responsive stacked table helper for any .crud-table with data-label cells */
+@media (max-width: 768px) {
+  .crud-table thead {
+    display: none;
+  }
+  .crud-table,
+  .crud-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .crud-table tbody tr {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0.85rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-200);
+    padding: 0.5rem 0.65rem;
+  }
+  html[data-theme="light"] .crud-table tbody tr {
+    background: #f9fafb;
+  }
+  .crud-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.35rem !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+    text-align: right;
+    max-width: 100% !important;
+    white-space: normal !important;
+  }
+  html[data-theme="light"] .crud-table tbody td {
+    border-bottom-color: rgba(0, 0, 0, 0.06) !important;
+  }
+  .crud-table tbody td:last-child {
+    border-bottom: none !important;
+  }
+  .crud-table tbody td[data-label]::before {
+    content: attr(data-label);
+    font-weight: 700;
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    text-align: left;
+    flex-shrink: 0;
+  }
+  .crud-table tbody td.empty-row {
+    display: block;
+    text-align: center !important;
+    padding: 2rem 1rem !important;
+  }
+  .crud-table tbody td.empty-row::before {
+    display: none;
+  }
 }

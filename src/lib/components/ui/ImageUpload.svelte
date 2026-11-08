@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { apiUpload } from "$lib/api";
+	import * as m from "$lib/paraglide/messages";
 
 	let {
 		folder = "general",
@@ -13,11 +14,11 @@
 
 	async function handleFile(file: File) {
 		if (!file.type.startsWith("image/")) {
-			error = "Chỉ chấp nhận file hình";
+			error = m.upload_err_invalid_img();
 			return;
 		}
 		if (file.size > 10 * 1024 * 1024) {
-			error = "File quá lớn (tối đa 10MB)";
+			error = m.upload_err_max_10mb();
 			return;
 		}
 
@@ -37,10 +38,10 @@
 			if (res.success) {
 				onUpload(res.data);
 			} else {
-				error = res.message || "Upload thất bại";
+				error = res.message || m.upload_err_failed();
 			}
 		} catch (e: any) {
-			error = e.message || "Lỗi kết nối";
+			error = e.message || m.upload_err_conn();
 		}
 		uploading = false;
 	}
@@ -73,7 +74,7 @@
 	{#if uploading}
 		<div class="upload-progress">
 			<div class="spinner"></div>
-			<span>Đang upload...</span>
+			<span>{m.upload_uploading()}</span>
 		</div>
 	{:else if preview}
 		<img src={preview} alt="Preview" class="upload-preview" />
@@ -84,7 +85,7 @@
 				onchange={onFileSelect}
 				hidden
 			/>
-			🔄 Đổi hình
+			{m.upload_change_img()}
 		</label>
 	{:else}
 		<label class="upload-label">
@@ -95,8 +96,8 @@
 				hidden
 			/>
 			<span class="upload-icon">📷</span>
-			<span>Kéo thả hoặc nhấn để chọn hình</span>
-			<span class="upload-hint">JPEG, PNG, WebP — tối đa 10MB</span>
+			<span>{m.upload_drop_label()}</span>
+			<span class="upload-hint">{m.upload_format_hint()}</span>
 		</label>
 	{/if}
 

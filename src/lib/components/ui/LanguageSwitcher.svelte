@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { setLocale, getLocale } from '$lib/paraglide/runtime.js';
+	import * as m from '$lib/paraglide/messages';
 
 	function toggleLanguage() {
 		const newLang = getLocale() === 'vi' ? 'en' : 'vi';
@@ -11,7 +12,7 @@
 <button 
 	class="lang-toggle" 
 	onclick={toggleLanguage} 
-	title={getLocale() === 'vi' ? 'Switch to English' : 'Đổi sang Tiếng Việt'}
+	title={m.lang_switch_title()}
 >
 	{getLocale() === 'vi' ? 'EN' : 'VI'}
 </button>

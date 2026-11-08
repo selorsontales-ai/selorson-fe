@@ -1,20 +1,29 @@
 <script lang="ts">
 	/**
-	 * Overlay for a place: the disassembly slider, the part list, and the lore
-	 * each part carries.
-	 *
-	 * The slider is the primary control — dragging it apart is the gesture the
-	 * whole scene exists for — so it gets the full width of the bottom edge
-	 * rather than being buried in a panel.
+	 * Overlay for a place: the disassembly slider, the part list, the lore
+	 * each part carries, connected characters & artifacts, and an integrated
+	 * reader discussion drawer.
 	 */
+	import CommentsSection from '$lib/components/ui/CommentsSection.svelte';
 	import * as m from '$lib/paraglide/messages';
-	import type { ScenePart, PlaceChapterRef, WorldNode } from '../types';
+		import type { ScenePart, PlaceChapterRef, WorldNode } from '../types';
+	import { resolveWorldNodeTargetUrl } from '../world-utils';
+
+	interface LinkedItemRef {
+		id: number;
+		name: string;
+		category: string;
+		image_url: string | null;
+		role: string;
+	}
 
 	interface Props {
 		place: WorldNode;
 		region: WorldNode | null;
 		neighbours: WorldNode[];
 		chapters: PlaceChapterRef[];
+		visitors?: WorldNode[];
+		linkedItems?: LinkedItemRef[];
 		parts: ScenePart[];
 		explode: number;
 		detached: string[];
@@ -31,6 +40,8 @@
 		region,
 		neighbours,
 		chapters,
+		visitors = [],
+		linkedItems = [],
 		parts,
 		explode,
 		detached,
@@ -43,8 +54,12 @@
 	}: Props = $props();
 
 	let current = $derived(parts.find((p) => p.id === selectedPart) ?? null);
-	let backHref = $derived(region ? `/world/${region.slug}` : '/world');
+	let backHref = $derived(
+		region ? `/world/${region.slug}` : `/world?focus=${encodeURIComponent(place.slug)}`
+	);
 	let installed = $derived(parts.length - detached.length);
+	let showComments = $state(false);
+	let mobileListOpen = $state(false);
 
 	function label(node: WorldNode): string {
 		return node.name ?? m.world_unknown_place();
@@ -66,6 +81,24 @@
 		</a>
 		<h1 class="place-name">{label(place)}</h1>
 		<button
+			type="button"
+			class="chip mobile-parts-toggle"
+			class:on={mobileListOpen}
+			onclick={() => (mobileListOpen = !mobileListOpen)}
+		>
+			📋 {m.world_parts()} ({installed}/{parts.length})
+		</button>
+		<a class="chip link-chip" href="/library?id={place.id}">
+			{m.lhud_encyclopedia_dossier()}
+		</a>
+		<button
+			class="chip"
+			class:on={showComments}
+			onclick={() => (showComments = !showComments)}
+		>
+			{m.lhud_discussion_2()}
+		</button>
+		<button
 			class="chip"
 			class:on={xray}
 			onclick={() => onxray(!xray)}
@@ -75,7 +108,7 @@
 		</button>
 	</header>
 
-	<aside class="panel list-panel">
+	<aside class="panel list-panel" class:mobile-open={mobileListOpen}>
 		<h2 class="panel-head">
 			{m.world_parts()}
 			<span class="count">{installed}/{parts.length}</span>
@@ -92,7 +125,11 @@
 							class="part-btn"
 							class:active={selectedPart === part.id}
 							class:off
-							onclick={() => onselectpart(selectedPart === part.id ? null : part.id)}
+							onclick={() => {
+								const next = selectedPart === part.id ? null : part.id;
+								onselectpart(next);
+								if (next) mobileListOpen = false;
+							}}
 						>
 							<span class="part-name">{part.label}</span>
 							{#if part.lore}<span class="part-dot" title={m.world_has_lore()}>✦</span>{/if}
@@ -110,15 +147,41 @@
 			</ul>
 		{/if}
 
+		{#if visitors.length}
+			<h2 class="panel-head neighbours-head">🧭 {m.lhud_related_characters()} ({visitors.length})</h2>
+			<ul class="neighbour-list">
+				{#each visitors as person (person.id)}
+					<li>
+						<a class="neighbour" href="/world/journey/{person.id}">
+							🧭 {label(person)}
+						</a>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+
+		{#if linkedItems.length}
+			<h2 class="panel-head neighbours-head">🔗 {m.lhud_linked_entities()} ({linkedItems.length})</h2>
+			<ul class="neighbour-list">
+				{#each linkedItems as item (item.id)}
+					<li>
+						<a class="neighbour" href="/library?id={item.id}">
+							✦ {item.name}
+						</a>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+
 		{#if neighbours.length}
 			<h2 class="panel-head neighbours-head">{m.world_nearby()}</h2>
 			<ul class="neighbour-list">
 				{#each neighbours as n (n.id)}
 					<li>
-						{#if n.state === 'hidden' || !region}
+						{#if n.state === 'hidden'}
 							<span class="neighbour dim">{label(n)}</span>
 						{:else}
-							<a class="neighbour" href="/world/{region.slug}/{n.slug}">{label(n)}</a>
+							<a class="neighbour" href={resolveWorldNodeTargetUrl(n)}>{label(n)}</a>
 						{/if}
 					</li>
 				{/each}
@@ -126,7 +189,13 @@
 		{/if}
 	</aside>
 
-	{#if current}
+	{#if showComments}
+		<section class="panel detail-panel comments-drawer">
+			<button class="close" onclick={() => (showComments = false)} aria-label="close">×</button>
+			<h2 class="detail-title">💬 {m.lhud_discussion()} {label(place)}</h2>
+			<CommentsSection commentableType="library" commentableId={place.id} />
+		</section>
+	{:else if current}
 		<section class="panel detail-panel">
 			<button class="close" onclick={() => onselectpart(null)} aria-label="close">×</button>
 			<h2 class="detail-title">{current.label}</h2>
@@ -144,10 +213,15 @@
 				{detached.includes(current.id) ? m.world_reattach() : m.world_detach()}
 			</button>
 		</section>
-	{:else if place.description}
+	{:else if place.description || chapters.length}
 		<section class="panel detail-panel">
 			<h2 class="detail-title">{label(place)}</h2>
-			<p class="detail-lore">{place.description}</p>
+			{#if place.image_url}
+				<img class="detail-img" src={place.image_url} alt={label(place)} />
+			{/if}
+			{#if place.description}
+				<p class="detail-lore">{place.description}</p>
+			{/if}
 			{#if chapters.length}
 				<ul class="chapter-list">
 					{#each chapters as c (c.chapter_id)}
@@ -156,7 +230,7 @@
 								<span class="chapter dim">{m.world_chapter()} {c.chapter_number}</span>
 							{:else}
 								<a class="chapter" href="/stories/{c.chapter_number}">
-									{m.world_chapter()} {c.chapter_number} — {c.title}
+									📖 {m.world_chapter()} {c.chapter_number}{c.title ? ` — ${c.title}` : ''}
 								</a>
 							{/if}
 						</li>
@@ -194,7 +268,7 @@
 		z-index: 5;
 		pointer-events: none;
 		display: grid;
-		grid-template-columns: minmax(0, 18rem) 1fr minmax(0, 21rem);
+		grid-template-columns: minmax(0, 18rem) 1fr minmax(0, 23rem);
 		grid-template-rows: auto 1fr auto;
 		gap: 1rem;
 		padding: 1rem;
@@ -214,7 +288,8 @@
 		grid-row: 1;
 		display: flex;
 		align-items: center;
-		gap: 1rem;
+		gap: 0.75rem;
+		flex-wrap: wrap;
 		padding: 0.65rem 1rem;
 	}
 	.back {
@@ -348,6 +423,9 @@
 		color: var(--color-brand-300, #4ade80);
 		text-decoration: none;
 	}
+	.neighbour:hover {
+		text-decoration: underline;
+	}
 	.neighbour.dim {
 		color: var(--color-text-muted, #94a3b8);
 		opacity: 0.6;
@@ -368,6 +446,13 @@
 		font-size: 1.05rem;
 		margin: 0 0 0.7rem;
 		padding-right: 1.5rem;
+	}
+	.detail-img {
+		width: 100%;
+		max-height: 10rem;
+		object-fit: cover;
+		border-radius: 8px;
+		margin-bottom: 0.65rem;
 	}
 	.detail-lore {
 		font-size: 0.86rem;
@@ -438,6 +523,7 @@
 		font-size: 0.75rem;
 		cursor: pointer;
 		white-space: nowrap;
+		text-decoration: none;
 	}
 	.chip:hover {
 		border-color: #ffb703;
@@ -448,13 +534,29 @@
 		border-color: #ffb703;
 		color: #ffb703;
 	}
+	.link-chip {
+		border-color: rgba(56, 189, 248, 0.35);
+		color: #7dd3fc;
+	}
+	.link-chip:hover {
+		border-color: #38bdf8;
+		color: #e0f2fe;
+	}
+	.mobile-parts-toggle {
+		display: none;
+	}
 
-	@media (max-width: 900px) {
+	@media (max-width: 1024px) {
 		.hud {
 			grid-template-columns: 1fr;
 			grid-template-rows: auto auto 1fr auto;
 			padding: 0.6rem;
 			gap: 0.6rem;
+		}
+		.mobile-parts-toggle {
+			display: inline-flex;
+			align-items: center;
+			gap: 0.25rem;
 		}
 		.top-bar {
 			grid-column: 1;
@@ -463,17 +565,26 @@
 		.list-panel {
 			grid-column: 1;
 			grid-row: 2;
-			max-height: 9rem;
+			max-height: 40dvh;
+			display: none;
+		}
+		.list-panel.mobile-open {
+			display: block;
 		}
 		.detail-panel {
 			grid-column: 1;
 			grid-row: 3;
 			align-self: end;
-			max-height: 40vh;
+			max-height: 42dvh;
 		}
 		.explode-bar {
 			grid-column: 1;
 			grid-row: 4;
+			padding: 0.55rem 0.75rem;
+			gap: 0.5rem 0.75rem;
+		}
+		.explode-range {
+			min-width: 7rem;
 		}
 	}
 </style>

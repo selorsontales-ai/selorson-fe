@@ -175,6 +175,8 @@
 		toast_success('Đã dọn sạch toàn bộ ký tự Markdown (#, ###, ***, **, *)!');
 	}
 
+	let preservedMangaBlock = $state<Record<string, unknown> | null>(null);
+
 	onMount(() => {
 		if (initialTitle) title = initialTitle.replace(/^#+\s*/, '').trim();
 		if (initialStatus) status = initialStatus;
@@ -185,6 +187,8 @@
 		if (initialLinks) links = [...initialLinks];
 
 		if (initialBlocks && Array.isArray(initialBlocks)) {
+			const existingManga = initialBlocks.find((b: any) => b?.type === 'manga_config');
+			preservedMangaBlock = existingManga ? JSON.parse(JSON.stringify(existingManga)) : null;
 			const proseOnly = initialBlocks.filter((b: any) => b?.type !== 'manga_config');
 			blocks = cleanBlocksInPlace(JSON.parse(JSON.stringify(proseOnly)));
 		} else if (initialContent) {
@@ -373,7 +377,18 @@
 
 	function updateBlockContent(index: number, html: string) {
 		blocks[index].content = html;
-		snapshotHistory();
+	}
+
+	function editableHtml(node: HTMLElement, content: string) {
+		node.innerHTML = content || '';
+		return {
+			update(newContent: string) {
+				const target = newContent || '';
+				if (node.innerHTML !== target) {
+					node.innerHTML = target;
+				}
+			}
+		};
 	}
 
 	// ==========================================
@@ -483,11 +498,27 @@
 			.map((b) => String(b.content || '').replace(/<[^>]*>/g, ' '))
 			.join('\n');
 
-		const fullCorpus = `${title}\n${paragraphText}`.toLowerCase();
-		if (!fullCorpus.trim()) {
+		const rawCorpus = `${title}\n${paragraphText}`;
+		const lowerCorpus = rawCorpus.toLowerCase();
+		if (!lowerCorpus.trim()) {
 			toast_error('Chương chưa có nội dung để quét.');
 			return;
 		}
+
+		const hasBoundedTerm = (haystack: string, needle: string): boolean => {
+			if (!needle || haystack.length < needle.length) return false;
+			let start = 0;
+			while (true) {
+				const idx = haystack.indexOf(needle, start);
+				if (idx === -1) return false;
+				const prev = idx > 0 ? haystack[idx - 1] : ' ';
+				const next = idx + needle.length < haystack.length ? haystack[idx + needle.length] : ' ';
+				if (!/[\p{L}\p{N}]/u.test(prev) && !/[\p{L}\p{N}]/u.test(next)) {
+					return true;
+				}
+				start = idx + 1;
+			}
+		};
 
 		let added = 0;
 		for (const item of libraryItems) {
@@ -504,8 +535,12 @@
 
 			let matched = false;
 			for (const cand of candidates) {
-				const needle = cand.toLowerCase();
-				if (fullCorpus.includes(needle)) {
+				const isShortSingleWord = !/\s/.test(cand) && cand.length <= 4;
+				if (
+					isShortSingleWord
+						? hasBoundedTerm(rawCorpus, cand)
+						: hasBoundedTerm(lowerCorpus, cand.toLowerCase())
+				) {
 					matched = true;
 					break;
 				}
@@ -668,8 +703,13 @@
 		const content_html = compileHTML();
 		const rawContent = blocks
 			.filter((b) => b.type === 'paragraph')
-			.map((b) => b.content)
+			.map((b) => String(b.content || '').replace(/<[^>]*>/g, '').trim())
+			.filter(Boolean)
 			.join('\n\n');
+
+		const mergedBlocks = preservedMangaBlock
+			? [...blocks, preservedMangaBlock as unknown as EditorBlock]
+			: [...blocks];
 
 		const payload: SavePayload = {
 			title,
@@ -678,7 +718,7 @@
 			author_note,
 			content: rawContent,
 			content_html,
-			content_blocks: [...blocks],
+			content_blocks: mergedBlocks,
 			tags,
 			links,
 			assets,
@@ -770,7 +810,9 @@
 								class="editable-p"
 								class:section-heading={isSectionHeading(block.content || '')}
 								contenteditable="true"
-								oninput={(e) => updateBlockContent(i, (e.target as HTMLElement).innerHTML)}
+								use:editableHtml={block.content || ''}
+								oninput={(e) => updateBlockContent(i, (e.currentTarget as HTMLElement).innerHTML)}
+								onblur={() => snapshotHistory()}
 								onkeydown={(e) => {
 									if (e.key === 'Enter' && !e.shiftKey) {
 										e.preventDefault();
@@ -781,7 +823,7 @@
 										}, 10);
 									}
 								}}
-							>{@html block.content || ''}</div>
+							></div>
 						{:else if block.type === 'image'}
 							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div
@@ -1070,18 +1112,18 @@
 {/if}
 
 <style>
-	.editor-container { display: flex; gap: 1rem; max-width: 1400px; margin: 0 auto; min-height: 80vh; padding: 0 1rem; align-items: flex-start; }
+	.editor-container { display: flex; gap: 1rem; max-width: 1400px; margin: 0 auto; min-height: 80vh; padding: 0 clamp(0.5rem, 2vw, 1rem); align-items: flex-start; position: relative; }
 	.editor-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1rem; }
 
 	/* STICKY HEADER */
 	.editor-header-sticky { position: sticky; top: 0; z-index: 40; background: var(--color-surface-50); padding: 0.5rem 0; }
 	.editor-header { background: var(--color-surface-100); padding: 0.75rem 1rem; border-radius: var(--radius-lg); border: 1px solid var(--color-border); display: flex; flex-direction: column; gap: 0.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-	.header-top { display: flex; gap: 0.5rem; align-items: center; }
+	.header-top { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 	.btn-back { background: transparent; border: 1px solid var(--color-border); padding: 0.4rem 0.75rem; border-radius: var(--radius-md); cursor: pointer; color: var(--color-text-secondary); font-size: 0.8rem; white-space: nowrap; flex-shrink: 0; }
 	.btn-back:hover { background: var(--color-surface-200); color: var(--color-text-primary); }
-	.title-input { flex: 1; font-size: 1.25rem; font-weight: 700; padding: 0.4rem 0.5rem; border: none; background: transparent; color: var(--color-text-primary); border-bottom: 2px solid transparent; min-width: 0; }
+	.title-input { flex: 1 1 220px; font-size: clamp(1.05rem, 2.5vw, 1.25rem); font-weight: 700; padding: 0.4rem 0.5rem; border: none; background: transparent; color: var(--color-text-primary); border-bottom: 2px solid transparent; min-width: 0; }
 	.title-input:focus { outline: none; border-bottom-color: var(--color-brand-500); }
-	.header-actions { display: flex; gap: 0.375rem; flex-shrink: 0; }
+	.header-actions { display: flex; flex-wrap: wrap; gap: 0.375rem; flex-shrink: 0; }
 	.btn-preview { background: transparent; border: 1px solid var(--color-border); padding: 0.4rem 0.75rem; border-radius: var(--radius-md); cursor: pointer; color: var(--color-text-secondary); font-size: 0.8rem; white-space: nowrap; }
 	.btn-preview:hover { background: var(--color-surface-200); }
 	.manga-jump-btn { border-color: rgba(168, 85, 247, 0.4); color: #c084fc; font-weight: 600; }
@@ -1136,13 +1178,16 @@
 	.preview-book-inner :global(p.section-heading) { text-align: center !important; text-indent: 0 !important; font-weight: 700; font-size: 1.1em; letter-spacing: 0.1em; margin: 1.8em 0 1.1em !important; }
 
 	.block-adders { display: flex; gap: 0.5rem; margin-top: 0.5rem; justify-content: center; opacity: 0; transition: opacity 0.2s; }
-	.block-wrapper:hover .block-adders { opacity: 1; }
+	.block-wrapper:hover .block-adders, .block-wrapper:focus-within .block-adders { opacity: 1; }
+	@media (hover: none) {
+		.block-controls, .block-adders { opacity: 1; }
+	}
 	.block-adders button { padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 1rem; border: 1px solid var(--color-border); background: var(--color-surface-100); color: var(--color-text-secondary); cursor: pointer; }
 	.block-adders button:hover { background: var(--color-surface-200); color: var(--color-brand-500); }
 
 	/* IMAGE BLOCK */
 	.image-block { border: 1px dashed var(--color-border); border-radius: var(--radius-sm); padding: 1rem; background: var(--color-surface-50); }
-	.layout-selector { display: flex; justify-content: space-between; margin-bottom: 1rem; }
+	.layout-selector { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; margin-bottom: 1rem; }
 	.layout-selector select { padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface-200); color: var(--color-text-primary); outline: none; }
 	.img-hint { font-size: 0.8rem; color: var(--color-text-muted); font-style: italic; }
 	.images-preview { display: flex; flex-direction: column; gap: 0.5rem; width: 100%; margin-top: 0.5rem; }
@@ -1249,11 +1294,27 @@
 	.btn-primary { padding: 0.5rem 1rem; border-radius: var(--radius-md); border: none; background: var(--color-brand-500); color: white; cursor: pointer; }
 	.btn-primary:hover { background: var(--color-brand-600); }
 
-	.image-meta-inputs { display: flex; gap: 1rem; align-items: center; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--color-border); }
-	.image-caption-input { flex: 1; padding: 0.4rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.85rem; background: var(--color-surface-100); color: var(--color-text-primary); }
+	.image-meta-inputs { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--color-border); }
+	.image-caption-input { flex: 1 1 200px; padding: 0.4rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 0.85rem; background: var(--color-surface-100); color: var(--color-text-primary); }
 	.rotation-label { font-size: 0.85rem; color: var(--color-text-secondary); display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; }
 	.rotation-slider { width: 100px; cursor: pointer; accent-color: var(--color-brand-500); }
 	.rotation-reset { border: 1px solid var(--color-border); background: var(--color-surface-100); color: var(--color-text-secondary); border-radius: var(--radius-sm); width: 1.75rem; height: 1.75rem; cursor: pointer; line-height: 1; flex-shrink: 0; }
 	.rotation-reset:hover:not(:disabled) { background: var(--color-surface-200); color: var(--color-brand-500); }
 	.rotation-reset:disabled { opacity: 0.35; cursor: default; }
+
+	@media (max-width: 960px) {
+		.asset-sidebar-wrapper {
+			position: fixed;
+			top: var(--header-height, 64px);
+			right: 0.5rem;
+			z-index: 60;
+			height: calc(100dvh - var(--header-height, 64px) - 1rem);
+			width: min(300px, calc(100vw - 1rem));
+			box-shadow: -8px 0 32px rgba(0, 0, 0, 0.45);
+		}
+	}
+	@media (max-width: 640px) {
+		.title-input { order: -1; flex-basis: 100%; }
+		.toolbar { margin-left: 0; width: 100%; justify-content: flex-start; }
+	}
 </style>

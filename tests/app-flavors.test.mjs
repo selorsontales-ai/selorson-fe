@@ -334,8 +334,10 @@ test("a mode that could not be honoured says so instead of appearing normal", as
     "desktop",
     "DataModeBadge.svelte"
   );
+  const viMessages = await source("messages", "vi.json");
 
   assert.match(badge, /fell_back === true/);
-  assert.match(badge, /thiếu cấu hình Alpha/);
+  assert.match(badge, /m\.dm_beta_missing_alpha_config\(\)/);
+  assert.match(viMessages, /thiếu cấu hình Alpha/);
   assert.match(badge, /class:warn=\{fellBack\}/);
 });

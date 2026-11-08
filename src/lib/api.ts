@@ -1,4 +1,5 @@
 import { PUBLIC_API_BASE } from '$env/static/public';
+import { getLocale } from '$lib/paraglide/runtime';
 import { tokenRefreshChannel, tokenStorageKey } from '$lib/session-storage';
 
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
@@ -8,8 +9,18 @@ interface ApiOptions {
 	body?: unknown;
 	headers?: Record<string, string>;
 	token?: string;
+	lang?: string;
 	/** @internal — prevents infinite retry loops */
 	_isRetry?: boolean;
+}
+
+function resolveRequestLocale(explicit?: string): string {
+	if (explicit && explicit.trim()) return explicit.trim();
+	try {
+		return getLocale() || 'vi';
+	} catch {
+		return 'vi';
+	}
 }
 
 export interface ApiResponse<T = unknown> {
@@ -163,7 +174,7 @@ export async function api<T = unknown>(
 	endpoint: string,
 	options: ApiOptions = {}
 ): Promise<ApiResponse<T>> {
-	const { method = 'GET', body, headers = {}, token, _isRetry = false } = options;
+	const { method = 'GET', body, headers = {}, token, lang, _isRetry = false } = options;
 
 	const url = `${PUBLIC_API_BASE}${endpoint}`;
 
@@ -172,6 +183,10 @@ export async function api<T = unknown>(
 		Accept: 'application/json',
 		...headers,
 	};
+
+	if (!endpoint.startsWith('/admin') && !reqHeaders['Accept-Language']) {
+		reqHeaders['Accept-Language'] = resolveRequestLocale(lang);
+	}
 
 	if (token) {
 		reqHeaders['Authorization'] = `Bearer ${token}`;

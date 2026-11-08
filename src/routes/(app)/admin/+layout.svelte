@@ -13,6 +13,7 @@
 	let sidebarCollapsed = $state(false);
 	let mobileOpen = $state(false);
 	let ready = $state(false);
+	let innerWidth = $state(1200);
 
 	onMount(() => {
 		// Wait for auth to load, then check admin role
@@ -119,6 +120,8 @@
 	];
 </script>
 
+<svelte:window bind:innerWidth />
+
 <svelte:head>
 	<title>Admin — Selorson</title>
 </svelte:head>
@@ -154,14 +157,14 @@
 				<button
 					class="toggle-btn"
 					onclick={() => {
-						if (window.innerWidth <= 768) {
+						if (innerWidth <= 768) {
 							mobileOpen = false;
 						} else {
 							sidebarCollapsed = !sidebarCollapsed;
 						}
 					}}
 				>
-					{sidebarCollapsed && window.innerWidth > 768 ? "☰" : "✕"}
+					{sidebarCollapsed && innerWidth > 768 ? "☰" : "✕"}
 				</button>
 			</div>
 
@@ -255,8 +258,8 @@
 		transition: width 0.3s var(--ease-spring), background 0.3s ease;
 		overflow-y: auto;
 		position: sticky;
-		top: 0;
-		height: 100vh;
+		top: var(--header-height, 64px);
+		height: calc(100dvh - var(--header-height, 64px));
 	}
 	
 	:global(html[data-theme='light']) .admin-sidebar {
@@ -366,15 +369,16 @@
 	/* Main */
 	.admin-main {
 		flex: 1;
-		padding: 2rem;
-		min-height: 100vh;
+		min-width: 0;
+		padding: clamp(0.85rem, 2.5vw, 2rem);
+		min-height: calc(100dvh - var(--header-height, 64px));
 	}
 
 	/* Mobile Layout Elements */
 	.admin-mobile-header {
 		display: none;
 		align-items: center;
-		padding: 1rem;
+		padding: 0.75rem 1rem;
 		background: var(--color-surface-100);
 		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 	}
@@ -404,7 +408,7 @@
 		position: fixed;
 		inset: 0;
 		background: rgba(0, 0, 0, 0.6);
-		z-index: 40;
+		z-index: 1090;
 		backdrop-filter: blur(2px);
 	}
 
@@ -419,9 +423,9 @@
 			position: fixed;
 			top: 0;
 			left: -260px;
-			height: 100vh;
+			height: 100dvh;
 			width: 260px !important;
-			z-index: 50;
+			z-index: 1100;
 			transition: left 0.3s ease;
 			box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
 		}
@@ -429,7 +433,7 @@
 			left: 0;
 		}
 		.admin-main {
-			padding: 1rem;
+			padding: 0.85rem;
 		}
 
 		/* Global Mobile Table Card Styles */

@@ -40,10 +40,23 @@ export async function toggleFollow(userId: number) {
 	return r;
 }
 
+export async function fetchFollowers(userId: number) {
+	return apiFetch(`/followers/${userId}`);
+}
+
+export async function fetchFollowing(userId: number) {
+	return apiFetch(`/following/${userId}`);
+}
+
 export async function getBlockedUsers() {
 	return apiFetch('/social/blocked');
 }
 
-export async function getExplore() {
-	return apiFetch('/social/explore');
+export async function getExplore(params?: { q?: string; sort?: string; limit?: number }) {
+	const sp = new URLSearchParams();
+	if (params?.q && params.q.trim()) sp.set('q', params.q.trim());
+	if (params?.sort) sp.set('sort', params.sort);
+	if (params?.limit) sp.set('limit', String(params.limit));
+	const qs = sp.toString();
+	return apiFetch(`/social/explore${qs ? `?${qs}` : ''}`);
 }

@@ -24,7 +24,7 @@
 	import BorderLayer from './BorderLayer.svelte';
 	import EntityNode from './nodes/EntityNode.svelte';
 	import { MAP_HEIGHT, MAP_WIDTH, clampLngLat, lngLatToXY, round, xyToLngLat } from './projection';
-	import type { Studio } from './studio.svelte';
+	import { regionSlugOf, type Studio } from './studio.svelte';
 	import {
 		KIND_COLORS,
 		edgeRule,
@@ -179,10 +179,9 @@
 
 		if (rule.role === 'belongs_to') {
 			// "belongs to a region" is a property of the place, not a free edge.
-			const slug = to.layout?.slug;
-			if (!slug) {
-				onmessage?.('Vùng đất này chưa có slug. Đặt slug trước khi gán địa điểm vào.');
-				return;
+			const slug = regionSlugOf(to);
+			if (!to.layout?.slug) {
+				studio.patchNode(to.item.id, { slug });
 			}
 			studio.patchNode(from.item.id, { region: slug });
 			onmessage?.(`${from.item.name} → thuộc ${to.item.name}`);
@@ -310,11 +309,7 @@
 	}
 
 	let regionNames = $derived(
-		Object.fromEntries(
-			studio.regions
-				.filter((r) => r.layout?.slug)
-				.map((r) => [r.layout!.slug as string, r.item.name])
-		)
+		Object.fromEntries(studio.regions.map((r) => [regionSlugOf(r), r.item.name]))
 	);
 
 	let backdrop = $derived(`${ASSET_BASE}/textures/akunalia-color-4k.jpg`);

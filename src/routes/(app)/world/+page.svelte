@@ -1,17 +1,23 @@
 <script lang="ts">
 	/**
-	 * L1 — the globe.
+	 * L1 — the globe & 2D Cartographic Atlas.
 	 *
 	 * The 3D engine is loaded with `await import()` so Three.js never enters the
-	 * main bundle; devices without WebGL, and readers who prefer it, get the
-	 * list view instead of a blank canvas.
+	 * main bundle; devices without WebGL, and readers who toggle `🗺️ Atlas 2D`,
+	 * get the interactive 2D equirectangular map (`WorldAtlas2D`) with the full HUD.
 	 */
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import * as m from '$lib/paraglide/messages';
 	import { fetchWorld, isPlaced } from '$lib/world/api';
 	import { resolveQuality, type QualitySettings } from '$lib/world/quality';
 	import type { WorldMap, WorldNode } from '$lib/world/types';
+	import WorldAtlas2D from '$lib/world/ui/WorldAtlas2D.svelte';
 	import WorldHud from '$lib/world/ui/WorldHud.svelte';
+	import {
+		findNodeByFocusParam,
+		resolveWorldNodeTargetUrl
+	} from '$lib/world/world-utils';
 	import { onMount } from 'svelte';
 
 	let world = $state<WorldMap | null>(null);
@@ -24,14 +30,22 @@
 
 	let selected = $state<WorldNode | null>(null);
 	let hovered = $state<WorldNode | null>(null);
+	let viewMode = $state<'3d' | '2d'>('3d');
+	let lastAppliedFocus = $state<string | null>(null);
 
 	/** Regions and places that have coordinates; characters travel, so not here. */
 	let placedNodes = $derived(
 		world ? [...world.regions, ...world.locations].filter(isPlaced) : []
 	);
 
+	let webglAvailable = $derived(Boolean(CanvasComponent && quality && quality.tier !== 'none'));
+
 	onMount(async () => {
-		const resolvedQuality = resolveQuality(new URLSearchParams(location.search));
+		const params = new URLSearchParams(location.search);
+		if (params.get('mode') === '2d') {
+			viewMode = '2d';
+		}
+		const resolvedQuality = resolveQuality(params);
 		quality = resolvedQuality;
 		const canvasPromise =
 			resolvedQuality.tier !== 'none'
@@ -44,6 +58,9 @@
 			const [loadedWorld, canvas] = await Promise.all([fetchWorld(), canvasPromise]);
 			world = loadedWorld;
 			CanvasComponent = canvas;
+			if (!canvas) {
+				viewMode = '2d';
+			}
 		} catch {
 			failed = true;
 		} finally {
@@ -51,8 +68,33 @@
 		}
 	});
 
-	function enterRegion(node: WorldNode) {
-		goto(`/world/${node.slug}`);
+	// Reactively honor `?focus=` / `?id=` / `?select=` deep-links from Stories, Library, Profile, Search
+	$effect(() => {
+		if (!world) return;
+		const searchParams = page.url?.searchParams;
+		const focusParam =
+			searchParams?.get('focus') ??
+			searchParams?.get('id') ??
+			searchParams?.get('select') ??
+			null;
+		if (!focusParam || focusParam === lastAppliedFocus) return;
+		lastAppliedFocus = focusParam;
+
+		const allNodes = [...world.regions, ...world.locations];
+		const match = findNodeByFocusParam(allNodes, focusParam);
+		if (match && match.state !== 'hidden') {
+			selected = match;
+			return;
+		}
+
+		const charMatch = findNodeByFocusParam(world.characters, focusParam);
+		if (charMatch && charMatch.state !== 'hidden') {
+			goto(`/world/journey/${charMatch.id}`);
+		}
+	});
+
+	function enterNode(node: WorldNode) {
+		goto(resolveWorldNodeTargetUrl(node));
 	}
 </script>
 
@@ -66,17 +108,29 @@
 			<p>{m.world_empty()}</p>
 			<a class="fallback-link" href="/library">{m.world_open_library()}</a>
 		</div>
-	{:else if CanvasComponent && quality}
+	{:else}
 		<div class="stage">
-			<CanvasComponent
-				nodes={placedNodes}
-				{quality}
-				{selected}
-				{hovered}
-				onselect={(node) => (selected = node)}
-				onhover={(node) => (hovered = node)}
-			/>
-			{#if placedNodes.length === 0}
+			{#if webglAvailable && viewMode === '3d' && CanvasComponent && quality}
+				<CanvasComponent
+					nodes={placedNodes}
+					{quality}
+					{selected}
+					{hovered}
+					onselect={(node) => (selected = node)}
+					onhover={(node) => (hovered = node)}
+				/>
+			{:else}
+				<WorldAtlas2D
+					{world}
+					{selected}
+					{hovered}
+					onselect={(node) => (selected = node)}
+					onhover={(node) => (hovered = node)}
+					onenter={enterNode}
+				/>
+			{/if}
+
+			{#if placedNodes.length === 0 && world.characters.length === 0}
 				<div class="empty-note">
 					<strong>{m.world_empty()}</strong>
 					<span>{m.world_empty_hint()}</span>
@@ -88,16 +142,13 @@
 					characters={world.characters}
 					progress={world.progress}
 					{selected}
+					viewMode={webglAvailable ? viewMode : '2d'}
+					{webglAvailable}
 					onselect={(node) => (selected = node)}
-					onenter={enterRegion}
+					onenter={enterNode}
+					ontogglemode={(mode) => (viewMode = mode)}
 				/>
 			{/if}
-		</div>
-	{:else}
-		<!-- No WebGL: the same data, as a list. Nothing is lost but the spectacle. -->
-		<div class="world-msg">
-			<p>{m.world_no_webgl()}</p>
-			<a class="fallback-link" href="/library">{m.world_open_library()}</a>
 		</div>
 	{/if}
 </section>

@@ -7,7 +7,7 @@
  */
 
 /** How much of a node the reader has earned the right to see. */
-export type RevealState = 'hidden' | 'rumored' | 'revealed';
+export type RevealState = 'hidden' | 'rumored' | 'revealed' | 'explored';
 
 /** Which scene a location opens into when the reader arrives. */
 export type SceneKind = 'orbit' | 'assembly' | 'fps';
@@ -60,6 +60,7 @@ export interface WorldNode {
 	lng: number | null;
 	/** Height above the surface in planet radii — Skyland floats, chasms sink. */
 	alt: number;
+	estimated_coords?: boolean;
 	terrain: string | null;
 	scene: SceneKind | (string & {});
 	state: RevealState;
@@ -101,6 +102,8 @@ export interface WorldProgress {
 	/** Nodes that have coordinates. */
 	placed: number;
 	revealed: number;
+	explored?: number;
+	explored_percent?: number;
 	percent: number;
 	is_guest: boolean;
 }
@@ -139,6 +142,14 @@ export interface LocationDetail {
 	/** Other places in the same region, for the "where next" strip. */
 	neighbours: WorldNode[];
 	chapters: PlaceChapterRef[];
+	visitors?: WorldNode[];
+	linked_items?: Array<{
+		id: number;
+		name: string;
+		category: string;
+		image_url: string | null;
+		role: string;
+	}>;
 }
 
 export interface RegionDetail {

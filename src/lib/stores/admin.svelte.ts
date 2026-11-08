@@ -171,3 +171,47 @@ export function statusClass(val: string): string {
 	if (['suspended', 'pending', 'draft'].includes(v)) return 'badge-yellow';
 	return 'badge-blue';
 }
+
+// ---- CMS Translation Helpers (VI / EN) ----
+
+export type CmsEntityType =
+	| 'hero_slide'
+	| 'milestone'
+	| 'future_project'
+	| 'music_album'
+	| 'music_track'
+	| 'video';
+
+export function extractCmsLocaleFields(
+	item: Record<string, unknown> | null | undefined,
+	keys: string[],
+	locale = 'en'
+): { values: Record<string, string>; hasExisting: boolean } {
+	const values: Record<string, string> = {};
+	const translations = (item?.translations as Record<string, Record<string, unknown>> | undefined)?.[
+		locale
+	];
+	let hasExisting = false;
+	for (const k of keys) {
+		const raw = translations?.[k];
+		const str = typeof raw === 'string' ? raw : '';
+		if (str.trim()) hasExisting = true;
+		values[k] = str;
+	}
+	return { values, hasExisting };
+}
+
+export async function saveCmsLocaleFields(
+	entityType: CmsEntityType,
+	entityId: number | undefined | null,
+	fields: Record<string, string>,
+	hadExisting: boolean,
+	locale = 'en'
+): Promise<boolean> {
+	const id = Number(entityId);
+	if (!Number.isFinite(id) || id <= 0) return false;
+	const hasAnyValue = Object.values(fields).some((v) => typeof v === 'string' && v.trim().length > 0);
+	if (!hasAnyValue && !hadExisting) return true;
+	const res = await adminPut(`/admin/cms-translations/${entityType}/${id}/${locale}`, { fields });
+	return res.success;
+}

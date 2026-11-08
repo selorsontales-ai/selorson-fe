@@ -17,8 +17,22 @@
 
 	async function fetchData() { loading = true; try { const r = await adminGet<SecurityData>('/admin/security/dashboard'); if (r.success) data = r.data; } catch { toast_error('Lỗi tải dữ liệu.'); } finally { loading = false; } }
 	async function unbanUser(user: any) { if (!confirm(`Gỡ ban "${user.name}"?`)) return; try { await adminPost(`/admin/users/${user.id}/unban`); toast_success(`Đã gỡ ban.`); fetchData(); } catch { toast_error('Lỗi'); } }
-	function actionClass(a: string) { return a === 'create' ? 'badge-green' : a === 'update' ? 'badge-blue' : a === 'delete' ? 'badge-red' : 'badge-gray'; }
-	function actionLabel(a: string) { return a === 'create' ? '✨ Tạo' : a === 'update' ? '✏️ Sửa' : a === 'delete' ? '🗑️ Xóa' : a; }
+	function actionClass(a: string) {
+		const v = String(a || '').toLowerCase();
+		if (v === 'create' || v.endsWith('.create') || v.endsWith('.unban')) return 'badge-green';
+		if (v === 'update' || v.endsWith('.update')) return 'badge-blue';
+		if (v === 'delete' || v.endsWith('.delete') || v.endsWith('.ban')) return 'badge-red';
+		return 'badge-gray';
+	}
+	function actionLabel(a: string) {
+		const v = String(a || '').toLowerCase();
+		if (v === 'create' || v.endsWith('.create')) return '✨ Tạo';
+		if (v === 'update' || v.endsWith('.update')) return '✏️ Sửa';
+		if (v === 'delete' || v.endsWith('.delete')) return '🗑️ Xóa';
+		if (v === 'user.ban' || v.endsWith('.ban')) return '🚫 Ban';
+		if (v === 'user.unban' || v.endsWith('.unban')) return '✅ Unban';
+		return a;
+	}
 	onMount(fetchData);
 </script>
 <svelte:head><title>Admin - Bảo Mật</title></svelte:head>

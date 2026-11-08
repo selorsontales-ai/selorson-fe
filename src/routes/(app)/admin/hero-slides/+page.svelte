@@ -2,16 +2,25 @@
 <script lang="ts">
 	import AdminCrudTable from "$lib/components/admin/AdminCrudTable.svelte";
 	import AdminModal from "$lib/components/admin/AdminModal.svelte";
+	import CmsEnTranslationFields from "$lib/components/admin/CmsEnTranslationFields.svelte";
 	import {
 		adminGet,
 		adminPost,
 		adminPut,
 		adminDelete,
 		adminUpload,
+		extractCmsLocaleFields,
+		saveCmsLocaleFields,
 		toast_success,
 		toast_error,
 	} from "$lib/stores/admin.svelte";
 	import { onMount } from "svelte";
+
+	const EN_SPECS = [
+		{ key: "title", label: "Tiêu đề (EN)", placeholder: "English slide title..." },
+		{ key: "button_text", label: "Chữ trên nút bấm (EN)", placeholder: "e.g. Read Now" },
+		{ key: "description", label: "Mô tả (EN)", placeholder: "English slide description...", multiline: true, rows: 3 },
+	];
 
 	let items = $state<Record<string, unknown>[]>([]);
 	let showForm = $state(false);
@@ -28,10 +37,13 @@
 		display_order: 0,
 		is_active: true,
 	});
+	let enFields = $state<Record<string, string>>({ title: "", button_text: "", description: "" });
+	let hadExistingEn = $state(false);
 
 	const columns = [
 		{ key: "id", label: "ID" },
 		{ key: "title", label: "Tiêu đề" },
+		{ key: "en_badge", label: "Bản EN" },
 		{ key: "image_url", label: "Hình", type: "truncate" as const },
 		{ key: "display_order", label: "Thứ tự" },
 		{ key: "is_active", label: "Kích hoạt", type: "boolean" as const },
@@ -39,9 +51,13 @@
 
 	async function fetchItems() {
 		try {
-			const res =
-				await adminGet<Record<string, unknown>[]>("/admin/hero-slides");
-			if (res.success) items = res.data;
+			const res = await adminGet<Record<string, unknown>[]>("/admin/hero-slides");
+			if (res.success && Array.isArray(res.data)) {
+				items = res.data.map((row) => {
+					const hasEn = extractCmsLocaleFields(row, ["title", "description", "button_text"]).hasExisting;
+					return { ...row, en_badge: hasEn ? "🇬🇧 Có EN" : "—" };
+				});
+			}
 		} catch {
 			/* empty */
 		}
@@ -58,6 +74,8 @@
 			display_order: 0,
 			is_active: true,
 		};
+		enFields = { title: "", button_text: "", description: "" };
+		hadExistingEn = false;
 		showForm = true;
 	}
 
@@ -72,16 +90,26 @@
 			display_order: (item.display_order as number) ?? 0,
 			is_active: (item.is_active as boolean) ?? true,
 		};
+		const extracted = extractCmsLocaleFields(item, ["title", "button_text", "description"]);
+		enFields = extracted.values;
+		hadExistingEn = extracted.hasExisting;
 		showForm = true;
 	}
 
 	async function saveItem() {
 		try {
+			let savedId: number | null = null;
 			if (editing) {
-				await adminPut(`/admin/hero-slides/${editing.id}`, form);
+				const r = await adminPut<any>(`/admin/hero-slides/${editing.id}`, form);
+				if (!r.success) return;
+				savedId = Number(editing.id);
+				await saveCmsLocaleFields("hero_slide", savedId, enFields, hadExistingEn);
 				toast_success("Cập nhật thành công!");
 			} else {
-				await adminPost("/admin/hero-slides", form);
+				const r = await adminPost<any>("/admin/hero-slides", form);
+				if (!r.success) return;
+				savedId = Number(r.data?.id);
+				await saveCmsLocaleFields("hero_slide", savedId, enFields, false);
 				toast_success("Tạo mới thành công!");
 			}
 			showForm = false;
@@ -189,6 +217,9 @@
 		<label class="checkbox-label">
 			<input type="checkbox" bind:checked={form.is_active} /> Kích hoạt
 		</label>
+
+		<CmsEnTranslationFields bind:fields={enFields} specs={EN_SPECS} />
+
 		<div class="form-actions">
 			<button
 				type="button"

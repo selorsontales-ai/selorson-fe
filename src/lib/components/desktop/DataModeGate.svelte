@@ -1,10 +1,11 @@
 <script lang="ts">
+	import * as m from '$lib/paraglide/messages';
 	import {
 		acknowledgeProductionData,
 		getDataMode,
 		switchDataMode,
 	} from "$lib/desktop-mode.svelte";
-
+	
 	let leaving = $state(false);
 	let switching = $state(false);
 	let error = $state<string | null>(null);
@@ -36,24 +37,23 @@
 	<div class="card">
 		<div class="badge" style="--i: 0">
 			<span class="dot" aria-hidden="true"></span>
-			CHẾ ĐỘ DỮ LIỆU THẬT
+			{m.ui_live_production_mode()}
 		</div>
 
-		<h1 id="gate-title" style="--i: 1">Bạn đang mở dữ liệu thật</h1>
+		<h1 id="gate-title" style="--i: 1">{m.ui_you_are_opening_live_production()}</h1>
 
 		<p class="lede" style="--i: 2">
-			Mọi thay đổi trong phiên này có hiệu lực ngay trên trang web. Không có
-			bước duyệt, không có bản nháp, không hoàn tác được.
+			{m.ui_every_change_in_this_session()}
 		</p>
 
 		<dl class="facts" style="--i: 3">
 			<div>
-				<dt>Dữ liệu</dt>
-				<dd>Cơ sở dữ liệu production</dd>
+				<dt>{m.ui_database()}</dt>
+				<dd>{m.ui_production_database()}</dd>
 			</div>
 			<div>
-				<dt>Gửi bản tin</dt>
-				<dd>Do máy chủ đảm nhiệm, app này không gửi</dd>
+				<dt>{m.ui_newsletter()}</dt>
+				<dd>{m.ui_handled_by_server_this_desktop()}</dd>
 			</div>
 		</dl>
 
@@ -63,10 +63,10 @@
 
 		<div class="actions" style="--i: 4">
 			<button class="enter" onclick={enter} disabled={switching}>
-				Tôi hiểu, tiếp tục
+				{m.ui_i_understand_continue()}
 			</button>
 			<button class="btn-ghost" onclick={goLocal} disabled={switching}>
-				{switching ? "Đang khởi động lại..." : "Chuyển sang chế độ Thử"}
+				{switching ? m.ui_restarting() : m.ui_switch_to_local_beta_mode()}
 			</button>
 		</div>
 

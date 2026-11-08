@@ -1,16 +1,28 @@
 <script lang="ts">
 	import AdminCrudTable from "$lib/components/admin/AdminCrudTable.svelte";
 	import AdminModal from "$lib/components/admin/AdminModal.svelte";
+	import CmsEnTranslationFields from "$lib/components/admin/CmsEnTranslationFields.svelte";
 	import {
 		adminGet,
 		adminPost,
 		adminPut,
 		adminDelete,
 		adminUpload,
+		extractCmsLocaleFields,
+		saveCmsLocaleFields,
 		toast_success,
 		toast_error,
 	} from "$lib/stores/admin.svelte";
 	import { onMount } from "svelte";
+
+	const ALBUM_EN_SPECS = [
+		{ key: "title", label: "Tên album (EN)", placeholder: "English album title..." },
+		{ key: "description", label: "Mô tả album (EN)", placeholder: "English album description...", multiline: true, rows: 2 },
+	];
+	const TRACK_EN_SPECS = [
+		{ key: "title", label: "Tên bài hát (EN)", placeholder: "English track title..." },
+		{ key: "artist", label: "Nghệ sĩ (EN)", placeholder: "Artist name in English..." },
+	];
 
 	// ── State ──
 	let activeTab = $state<"albums" | "tracks">("albums");
@@ -42,11 +54,16 @@
 		duration: 0,
 		is_active: true,
 	});
+	let albumEnFields = $state<Record<string, string>>({ title: "", description: "" });
+	let hadAlbumEn = $state(false);
+	let trackEnFields = $state<Record<string, string>>({ title: "", artist: "" });
+	let hadTrackEn = $state(false);
 
 	// ── Table Columns ──
 	const albumColumns = [
 		{ key: "id", label: "ID" },
 		{ key: "title", label: "Album" },
+		{ key: "en_badge", label: "Bản EN" },
 		{ key: "display_order", label: "Thứ tự" },
 		{ key: "is_active", label: "Active", type: "boolean" as const },
 	];
@@ -54,6 +71,7 @@
 		{ key: "id", label: "ID" },
 		{ key: "track_number", label: "#" },
 		{ key: "title", label: "Bài hát" },
+		{ key: "en_badge", label: "Bản EN" },
 		{ key: "artist", label: "Nghệ sĩ" },
 		{ key: "album_id", label: "Album ID" },
 		{ key: "duration", label: "Giây" },
@@ -65,7 +83,12 @@
 			const r = await adminGet<Record<string, unknown>[]>(
 				"/admin/music/albums",
 			);
-			if (r.success) albums = r.data;
+			if (r.success && Array.isArray(r.data)) {
+				albums = r.data.map((row) => {
+					const hasEn = extractCmsLocaleFields(row, ["title", "description"]).hasExisting;
+					return { ...row, en_badge: hasEn ? "🇬🇧 Có EN" : "—" };
+				});
+			}
 		} catch {
 			/* empty */
 		}
@@ -75,7 +98,12 @@
 			const r = await adminGet<Record<string, unknown>[]>(
 				"/admin/music/tracks",
 			);
-			if (r.success) tracks = r.data;
+			if (r.success && Array.isArray(r.data)) {
+				tracks = r.data.map((row) => {
+					const hasEn = extractCmsLocaleFields(row, ["title", "artist"]).hasExisting;
+					return { ...row, en_badge: hasEn ? "🇬🇧 Có EN" : "—" };
+				});
+			}
 		} catch {
 			/* empty */
 		}
@@ -91,6 +119,8 @@
 			display_order: 0,
 			is_active: true,
 		};
+		albumEnFields = { title: "", description: "" };
+		hadAlbumEn = false;
 		showForm = true;
 	}
 	function handleEditAlbum(item: Record<string, unknown>) {
@@ -102,15 +132,22 @@
 			display_order: (item.display_order as number) ?? 0,
 			is_active: (item.is_active as boolean) ?? true,
 		};
+		const ex = extractCmsLocaleFields(item, ["title", "description"]);
+		albumEnFields = ex.values;
+		hadAlbumEn = ex.hasExisting;
 		showForm = true;
 	}
 	async function handleSaveAlbum() {
 		try {
 			if (editing) {
-				await adminPut(`/admin/music/albums/${editing.id}`, albumForm);
+				const r = await adminPut<any>(`/admin/music/albums/${editing.id}`, albumForm);
+				if (!r.success) return;
+				await saveCmsLocaleFields("music_album", Number(editing.id), albumEnFields, hadAlbumEn);
 				toast_success("Cập nhật album thành công!");
 			} else {
-				await adminPost("/admin/music/albums", albumForm);
+				const r = await adminPost<any>("/admin/music/albums", albumForm);
+				if (!r.success) return;
+				await saveCmsLocaleFields("music_album", Number(r.data?.id), albumEnFields, false);
 				toast_success("Tạo album thành công!");
 			}
 			showForm = false;
@@ -131,17 +168,25 @@
 	}
 
 	// ── Track CRUD ──
+	function nextTrackNumberForAlbum(albumId: number): number {
+		const albumTracks = tracks.filter((t) => Number(t.album_id) === Number(albumId));
+		return albumTracks.length + 1;
+	}
+
 	function handleCreateTrack() {
 		editing = null;
+		const defaultAlbumId = (albums[0]?.id as number) ?? 0;
 		trackForm = {
 			title: "",
-			album_id: (albums[0]?.id as number) ?? 0,
+			album_id: defaultAlbumId,
 			artist: "",
 			file_path: "",
-			track_number: tracks.length + 1,
+			track_number: nextTrackNumberForAlbum(defaultAlbumId),
 			duration: 0,
 			is_active: true,
 		};
+		trackEnFields = { title: "", artist: "" };
+		hadTrackEn = false;
 		showForm = true;
 	}
 	function handleEditTrack(item: Record<string, unknown>) {
@@ -155,15 +200,22 @@
 			duration: (item.duration as number) ?? 0,
 			is_active: (item.is_active as boolean) ?? true,
 		};
+		const ex = extractCmsLocaleFields(item, ["title", "artist"]);
+		trackEnFields = ex.values;
+		hadTrackEn = ex.hasExisting;
 		showForm = true;
 	}
 	async function handleSaveTrack() {
 		try {
 			if (editing) {
-				await adminPut(`/admin/music/tracks/${editing.id}`, trackForm);
+				const r = await adminPut<any>(`/admin/music/tracks/${editing.id}`, trackForm);
+				if (!r.success) return;
+				await saveCmsLocaleFields("music_track", Number(editing.id), trackEnFields, hadTrackEn);
 				toast_success("Cập nhật track thành công!");
 			} else {
-				await adminPost("/admin/music/tracks", trackForm);
+				const r = await adminPost<any>("/admin/music/tracks", trackForm);
+				if (!r.success) return;
+				await saveCmsLocaleFields("music_track", Number(r.data?.id), trackEnFields, false);
 				toast_success("Tạo track thành công!");
 			}
 			showForm = false;
@@ -204,10 +256,29 @@
 		}
 	}
 
-	// ── Upload: Audio (Cloudflare R2) ──
+	// ── Upload: Audio (Cloudflare R2 / Local Media) ──
+	function detectAudioFileDuration(file: File) {
+		try {
+			const tempUrl = URL.createObjectURL(file);
+			const probe = new Audio();
+			probe.preload = "metadata";
+			probe.onloadedmetadata = () => {
+				if (Number.isFinite(probe.duration) && probe.duration > 0) {
+					trackForm.duration = Math.round(probe.duration);
+				}
+				URL.revokeObjectURL(tempUrl);
+			};
+			probe.onerror = () => URL.revokeObjectURL(tempUrl);
+			probe.src = tempUrl;
+		} catch {
+			/* ignore */
+		}
+	}
+
 	async function handleUploadAudio(e: Event) {
 		const file = (e.target as HTMLInputElement).files?.[0];
 		if (!file) return;
+		detectAudioFileDuration(file);
 		uploadingAudio = true;
 		try {
 			const fd = new FormData();
@@ -219,6 +290,9 @@
 			}>("/upload/audio", fd);
 			if (r.success) {
 				trackForm.file_path = r.data.url;
+				if (!trackForm.title.trim()) {
+					trackForm.title = file.name.replace(/\.[^/.]+$/, "");
+				}
 				toast_success("Upload nhạc thành công!");
 			}
 		} catch {
@@ -364,6 +438,8 @@
 				</label>
 			</div>
 
+			<CmsEnTranslationFields bind:fields={albumEnFields} specs={ALBUM_EN_SPECS} />
+
 			<div class="form-actions">
 				<button
 					type="button"
@@ -457,6 +533,12 @@
 							controls
 							src={trackForm.file_path}
 							preload="metadata"
+							onloadedmetadata={(e) => {
+								const el = e.currentTarget as HTMLAudioElement;
+								if (Number.isFinite(el.duration) && el.duration > 0 && !trackForm.duration) {
+									trackForm.duration = Math.round(el.duration);
+								}
+							}}
 						></audio>
 					</div>
 				{/if}
@@ -477,6 +559,8 @@
 					Kích hoạt
 				</label>
 			</div>
+
+			<CmsEnTranslationFields bind:fields={trackEnFields} specs={TRACK_EN_SPECS} />
 
 			<div class="form-actions">
 				<button

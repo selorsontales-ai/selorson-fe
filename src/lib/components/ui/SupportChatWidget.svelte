@@ -1,22 +1,28 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { page } from '$app/state';
 	import { isAuthenticated, getUser, getToken } from '$lib/stores/auth.svelte';
 	import { PUBLIC_API_BASE } from '$env/static/public';
 	import {
 		fetchActiveConversation, sendSupportMessage, fetchUnreadCount,
 		rateTicket, markSupportRead, getSupportMessages, getActiveConversation,
 		getSupportUnread, isSupportSending, createTicket, closeTicket,
-		isChatWidgetHidden, setChatWidgetHidden
+		isChatWidgetHidden, setChatWidgetHidden, isStaffOnline
 	} from '$lib/stores/support.svelte';
 	import * as m from '$lib/paraglide/messages';
+	import { dateLocale } from '$lib/i18n-labels';
 
 	let isOpen = $state(false);
 	let inputText = $state('');
 	let ratingValue = $state(0);
 	let ratingComment = $state('');
 	let hasRated = $state(false);
-	let isStaffOnline = $state(false);
 	let messagesEl = $state<HTMLDivElement>();
+	let shouldHideOnRoute = $derived(
+		page.url.pathname.startsWith('/support-workspace') ||
+		page.url.pathname.startsWith('/support') ||
+		page.url.pathname.startsWith('/admin')
+	);
 
 	// Drag to dismiss states
 	let isDragging = $state(false);
@@ -115,7 +121,7 @@
 		hasRated = true;
 	}
 
-	function formatTime(d: string) { return new Date(d).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); }
+	function formatTime(d: string) { return new Date(d).toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' }); }
 
 	let sse: EventSource | null = null;
 	let sseRetryCount = 0;
@@ -163,7 +169,7 @@
 	});
 </script>
 
-{#if isAuthenticated() && !isChatWidgetHidden()}
+{#if isAuthenticated() && !isChatWidgetHidden() && !shouldHideOnRoute}
 <div class="support-widget" style="transform: translate({dragX}px, {dragY}px);">
 	<!-- FAB Button -->
 	<div class="support-fab" class:active={isOpen} class:has-unread={getSupportUnread() > 0 && !isOpen} class:dragging={isDragging}
@@ -179,7 +185,7 @@
 			<span class="fab-icon">✕</span>
 		{:else}
 			<img src="/images/ST.jpg" alt="Support" class="fab-image" />
-			<button class="fab-close" onclick={closeWidget} title="Tắt hỗ trợ" aria-label="Close">✕</button>
+			<button class="fab-close" onclick={closeWidget} title={m.chat_hide_support()} aria-label="Close">✕</button>
 		{/if}
 		{#if getSupportUnread() > 0 && !isOpen}
 			<span class="fab-badge">{getSupportUnread() > 9 ? '9+' : getSupportUnread()}</span>
@@ -190,7 +196,7 @@
 	{#if showDismissZone}
 	<div class="dismiss-zone" class:hovering={isHoveringZone}>
 		<span class="dismiss-icon">🗑️</span>
-		<span>Kéo vào đây để tắt</span>
+		<span>{m.chat_drag_here_to_hide()}</span>
 	</div>
 	{/if}
 
@@ -199,10 +205,13 @@
 	<div class="chat-window">
 		<div class="chat-header">
 			<div class="chat-header-info">
-				<div class="chat-avatar">🎧<span class="online-dot" class:online={isStaffOnline}></span></div>
-				<div><h4>{m.support_title()}</h4><span class="online-text">{isStaffOnline ? m.support_online() : m.support_offline()}</span></div>
+				<div class="chat-avatar">🎧<span class="online-dot" class:online={isStaffOnline()}></span></div>
+				<div><h4>{m.support_widget_title()}</h4><span class="online-text">{isStaffOnline() ? m.support_online() : m.support_offline()}</span></div>
 			</div>
-			<button class="chat-minimize" onclick={toggle}>−</button>
+			<div class="chat-header-actions">
+				<a href="/support" class="chat-minimize" title={m.support_widget_open_full()} onclick={() => (isOpen = false)}>⤢</a>
+				<button class="chat-minimize" onclick={toggle}>−</button>
+			</div>
 		</div>
 
 		<!-- Resolved Banner -->
@@ -245,7 +254,7 @@
 		<!-- Input -->
 		{#if getActiveConversation()?.status !== 'resolved' || hasRated}
 			<div class="chat-input">
-				<input bind:value={inputText} placeholder={isStaffOnline ? m.support_input_online() : m.support_input_offline()}
+				<input bind:value={inputText} placeholder={isStaffOnline() ? m.support_input_online() : m.support_input_offline()}
 					onkeydown={(e) => { if (e.key === 'Enter') handleSend(); }} disabled={isSupportSending()} maxlength="2000" />
 				<button class="send-btn" onclick={handleSend} disabled={!inputText.trim() || isSupportSending()}>
 					{isSupportSending() ? '⏳' : '📤'}
@@ -291,7 +300,8 @@
 	.online-dot.online{background:#22c55e;box-shadow:0 0 6px rgba(34,197,94,.6)}
 	.chat-header h4{margin:0;font-size:.9rem;font-weight:700}
 	.online-text{font-size:.68rem;opacity:.8}
-	.chat-minimize{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:1.25rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}
+	.chat-header-actions{display:flex;gap:.35rem;align-items:center}
+	.chat-minimize{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:1rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;text-decoration:none}
 	.chat-minimize:hover{background:rgba(255,255,255,.25)}
 
 	.resolved-banner{padding:1rem;background:rgba(34,197,94,.06);border-bottom:1px solid rgba(34,197,94,.1);flex-shrink:0}
@@ -336,8 +346,9 @@
 	@keyframes badge-pop{0%{transform:scale(0)}50%{transform:scale(1.2)}100%{transform:scale(1)}}
 
 	@media(max-width:640px){
-		.support-widget{bottom:1rem;right:1rem}
-		.support-fab{width:50px;height:50px}
-		.chat-window{width:calc(100vw - 1.5rem);height:calc(100vh - 8rem);right:-.5rem}
+		.support-widget{bottom:0.85rem;right:0.85rem}
+		.support-fab{width:46px;height:46px}
+		.fab-icon{font-size:1.25rem}
+		.chat-window{position:fixed;left:0.75rem;right:0.75rem;bottom:4.35rem;width:auto;max-width:none;height:min(480px, calc(100dvh - 5.5rem));max-height:calc(100dvh - 5.5rem)}
 	}
 </style>

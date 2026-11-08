@@ -21,12 +21,22 @@
 	async function deleteBroadcast(id: number) { if (!confirm('Xóa?')) return; try { await adminDelete(`/admin/newsletter/broadcast/${id}`); toast_success('Đã xóa.'); fetchBroadcasts(); } catch { toast_error('Lỗi'); } }
 
 	function exportCsv() {
-		const token = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
-		const url = `${API_BASE}/admin/newsletter/export`;
+		const header = 'ID,Email,Status,Subscribed At,Unsubscribed At\n';
+		const rows = subs
+			.map((s: any) => {
+				const status = s.unsubscribed_at ? 'Unsubscribed' : 'Active';
+				const subAt = s.subscribed_at ?? s.created_at ?? '';
+				const unsubAt = s.unsubscribed_at ?? '';
+				return `${s.id},"${String(s.email || '').replace(/"/g, '""')}",${status},${subAt},${unsubAt}`;
+			})
+			.join('\n');
+		const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
-		a.href = url + (token ? `?token=${token}` : '');
+		a.href = url;
 		a.download = 'newsletter_subscribers.csv';
 		a.click();
+		URL.revokeObjectURL(url);
 	}
 
 	onMount(() => { fetchSubs(); fetchStats(); fetchBroadcasts(); });

@@ -4,8 +4,8 @@
 	 *
 	 * Reveal state drives the whole appearance: a hidden place is a formless
 	 * smudge of fog with no name and no hit target, a rumoured one is a dim pin,
-	 * and only a revealed one gets a bright ring, a beam and a label. That is
-	 * what stops the map from spoiling chapters the reader has not reached.
+	 * and an unlocked one (`revealed` or `explored`) gets a bright ring, a beam
+	 * and a label. Explored places also earn an emerald halo ring.
 	 *
 	 * Floating places (`alt > 0`) also draw a tether down to the surface, so
 	 * Skyland reads as genuinely airborne rather than painted on.
@@ -14,6 +14,7 @@
 	import { BufferGeometry, Vector3 } from 'three';
 	import { latLngToVector3 } from '../projection';
 	import type { WorldNode } from '../types';
+	import { isExploredState, isUnlockedState } from '../world-utils';
 
 	interface Props {
 		node: WorldNode & { lat: number; lng: number };
@@ -27,6 +28,7 @@
 	let { node, radius, selected = false, hovered = false, onselect, onhover }: Props = $props();
 
 	const REVEALED = '#00f0ff';
+	const EXPLORED = '#34d399';
 	const ACTIVE = '#ffb703';
 	const RUMORED = '#64748b';
 	const HIDDEN = '#334155';
@@ -34,6 +36,8 @@
 	let position = $derived(latLngToVector3(node.lat, node.lng, radius + 0.08, node.alt));
 	let isRegion = $derived(node.kind === 'region');
 	let interactive = $derived(node.state !== 'hidden');
+	let unlocked = $derived(isUnlockedState(node.state));
+	let explored = $derived(isExploredState(node.state));
 
 	let color = $derived(
 		node.state === 'hidden'
@@ -42,13 +46,15 @@
 				? RUMORED
 				: selected || hovered
 					? ACTIVE
-					: (node.palette?.[0] ?? REVEALED)
+					: explored
+						? (node.palette?.[0] ?? EXPLORED)
+						: (node.palette?.[0] ?? REVEALED)
 	);
 
 	// Regions read as anchors, individual places as pins.
 	let ringInner = $derived(isRegion ? 0.16 : 0.1);
 	let ringOuter = $derived(isRegion ? 0.26 : 0.17);
-	let opacity = $derived(node.state === 'hidden' ? 0.25 : node.state === 'rumored' ? 0.5 : 0.9);
+	let opacity = $derived(node.state === 'hidden' ? 0.25 : node.state === 'rumored' ? 0.5 : 0.92);
 
 	/** Tether from the surface up to a floating place. */
 	let tether = $derived.by(() => {
@@ -79,11 +85,18 @@
 		<T.MeshBasicMaterial {color} transparent {opacity} side={2} />
 	</T.Mesh>
 
-	{#if node.state === 'revealed'}
+	{#if unlocked}
 		<!-- Beam points outward from the planet, i.e. along local -Z after lookAt. -->
 		<T.Mesh position={[0, 0, selected ? 0.5 : 0.32]} rotation={[Math.PI / 2, 0, 0]}>
 			<T.CylinderGeometry args={[0.022, 0.022, selected ? 1 : 0.64, 12]} />
-			<T.MeshBasicMaterial {color} transparent opacity={0.55} />
+			<T.MeshBasicMaterial {color} transparent opacity={explored ? 0.72 : 0.55} />
+		</T.Mesh>
+	{/if}
+
+	{#if explored && !hovered && !selected}
+		<T.Mesh>
+			<T.RingGeometry args={[ringOuter + 0.03, ringOuter + 0.06, 32]} />
+			<T.MeshBasicMaterial color={EXPLORED} transparent opacity={0.55} side={2} />
 		</T.Mesh>
 	{/if}
 

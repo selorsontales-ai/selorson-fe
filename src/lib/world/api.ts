@@ -7,26 +7,40 @@ import { PUBLIC_API_BASE } from '$env/static/public';
 import { api } from '$lib/api';
 import { REGION_GEOMETRY_URL } from './config';
 import type { Journey, LocationDetail, RegionDetail, WorldMap, WorldNode } from './types';
+import { getLocalHighestReadChapter } from './world-utils';
+
+function withProgressQuery(path: string): string {
+	const localMax = getLocalHighestReadChapter();
+	if (localMax > 0) {
+		const sep = path.includes('?') ? '&' : '?';
+		return `${path}${sep}read_up_to=${localMax}`;
+	}
+	return path;
+}
 
 /** The whole map in one request — regions, places, characters, reveal state. */
 export async function fetchWorld(): Promise<WorldMap> {
-	const res = await api<WorldMap>('/world');
+	const res = await api<WorldMap>(withProgressQuery('/world'));
 	return res.data;
 }
 
 export async function fetchRegion(slug: string): Promise<RegionDetail> {
-	const res = await api<RegionDetail>(`/world/regions/${encodeURIComponent(slug)}`);
+	const res = await api<RegionDetail>(
+		withProgressQuery(`/world/regions/${encodeURIComponent(slug)}`)
+	);
 	return res.data;
 }
 
 /** `key` is the slug from the URL, or the numeric id when one is to hand. */
 export async function fetchLocation(key: string | number): Promise<LocationDetail> {
-	const res = await api<LocationDetail>(`/world/locations/${encodeURIComponent(String(key))}`);
+	const res = await api<LocationDetail>(
+		withProgressQuery(`/world/locations/${encodeURIComponent(String(key))}`)
+	);
 	return res.data;
 }
 
 export async function fetchJourney(characterId: number): Promise<Journey> {
-	const res = await api<Journey>(`/world/journey/${characterId}`);
+	const res = await api<Journey>(withProgressQuery(`/world/journey/${characterId}`));
 	return res.data;
 }
 
@@ -37,8 +51,30 @@ export async function fetchJourney(characterId: number): Promise<Journey> {
  * the badge is not awarded, which must never interrupt the visit itself.
  */
 export async function markVisited(libraryItemId: number): Promise<boolean> {
+	if (typeof localStorage !== 'undefined' && Number.isFinite(libraryItemId) && libraryItemId > 0) {
+		try {
+			const raw = localStorage.getItem('selorson:world-visited-ids');
+			const list: number[] = raw ? JSON.parse(raw) : [];
+			const normalized = Array.isArray(list)
+				? list.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0)
+				: [];
+			if (!normalized.includes(libraryItemId)) {
+				normalized.push(libraryItemId);
+				localStorage.setItem('selorson:world-visited-ids', JSON.stringify(normalized));
+			}
+		} catch {
+			// ignore storage quota errors
+		}
+	}
 	try {
-		await api('/world/visited', { method: 'POST', body: { library_item_id: libraryItemId } });
+		const localMax = getLocalHighestReadChapter();
+		await api('/world/visited', {
+			method: 'POST',
+			body: {
+				library_item_id: libraryItemId,
+				...(localMax > 0 ? { read_up_to: localMax } : {})
+			}
+		});
 		return true;
 	} catch {
 		return false;
@@ -51,7 +87,7 @@ export async function markVisited(libraryItemId: number): Promise<boolean> {
  */
 export interface RegionFeature {
 	type: 'Feature';
-	properties: { region: string; name?: string };
+	properties: { region: string; name?: string; color?: string | null };
 	geometry: {
 		type: 'Polygon' | 'MultiPolygon';
 		/** Polygon: ring[][]; MultiPolygon: polygon[][][] — both as [lng, lat]. */

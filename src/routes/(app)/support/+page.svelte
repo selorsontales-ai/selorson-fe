@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { isAuthenticated } from '$lib/stores/auth.svelte';
+	import * as m from '$lib/paraglide/messages';
+	import { dateLocale } from '$lib/i18n-labels';
 	import {
 		fetchTickets, createTicket, fetchMessages, sendSupportMessage,
 		rateTicket, getSupportTickets, getSupportMessages, getActiveTicket,
@@ -49,32 +51,32 @@
 	}
 </script>
 
-<svelte:head><title>Hỗ trợ — Selorson</title></svelte:head>
+<svelte:head><title>{m.support_title()}</title></svelte:head>
 
 <div class="support-page">
 	{#if !isAuthenticated()}
 		<div class="auth-required">
-			<h2>🔒 Bạn cần đăng nhập để sử dụng hỗ trợ</h2>
+			<h2>{m.support_login_required()}</h2>
 		</div>
 	{:else if view === 'list'}
 		<div class="support-header">
-			<h1>🎧 Trung tâm hỗ trợ</h1>
-			<button class="btn-primary" onclick={() => showNewTicket = true}>+ Tạo ticket mới</button>
+			<h1>{m.support_heading()}</h1>
+			<button class="btn-primary" onclick={() => showNewTicket = true}>{m.support_new_ticket_btn()}</button>
 		</div>
 
 		{#if showNewTicket}
 			<div class="new-ticket-card">
-				<h3>Mô tả vấn đề của bạn</h3>
-				<textarea bind:value={newTicketMsg} placeholder="Nhập nội dung..." rows="4"></textarea>
+				<h3>{m.support_describe_issue()}</h3>
+				<textarea bind:value={newTicketMsg} placeholder={m.support_input_ph()} rows="4"></textarea>
 				<div class="ticket-actions">
-					<button class="btn-ghost" onclick={() => showNewTicket = false}>Hủy</button>
-					<button class="btn-primary" onclick={handleCreateTicket} disabled={!newTicketMsg.trim()}>Gửi</button>
+					<button class="btn-ghost" onclick={() => showNewTicket = false}>{m.crop_cancel()}</button>
+					<button class="btn-primary" onclick={handleCreateTicket} disabled={!newTicketMsg.trim()}>{m.support_rating_submit()}</button>
 				</div>
 			</div>
 		{/if}
 
 		{#if isSupportLoading()}
-			<div class="loading">Đang tải...</div>
+			<div class="loading">{m.support_loading()}</div>
 		{:else}
 			<div class="ticket-list">
 				{#each getSupportTickets() as ticket}
@@ -86,26 +88,26 @@
 								<span class="unread-badge">{ticket.unread_count}</span>
 							{/if}
 						</div>
-						<p class="ticket-preview">{ticket.last_message?.message || 'Chưa có tin nhắn'}</p>
-						<span class="ticket-date">{new Date(ticket.created_at).toLocaleDateString('vi-VN')}</span>
+						<p class="ticket-preview">{ticket.last_message?.message || m.support_no_messages()}</p>
+						<span class="ticket-date">{new Date(ticket.created_at).toLocaleDateString(dateLocale())}</span>
 					</button>
 				{:else}
 					<div class="empty-state">
-						<p>Chưa có ticket nào. Hãy tạo ticket mới nếu bạn cần hỗ trợ!</p>
+						<p>{m.support_empty_tickets()}</p>
 					</div>
 				{/each}
 			</div>
 		{/if}
 	{:else}
 		<div class="chat-view">
-			<button class="back-btn" onclick={() => view = 'list'}>← Quay lại</button>
+			<button class="back-btn" onclick={() => view = 'list'}>{m.support_back_btn()}</button>
 
 			<div class="messages-container">
 				{#each getSupportMessages() as msg}
 					<div class="message" class:own={msg.sender_type === 'user'} class:manager={msg.sender_type === 'manager'}>
 						<div class="msg-header">
 							<strong>{msg.sender?.name || 'Support'}</strong>
-							<span class="msg-time">{new Date(msg.created_at).toLocaleTimeString('vi-VN')}</span>
+							<span class="msg-time">{new Date(msg.created_at).toLocaleTimeString(dateLocale())}</span>
 						</div>
 						<p>{msg.message}</p>
 					</div>
@@ -114,15 +116,15 @@
 
 			{#if getActiveTicket()?.status !== 'resolved'}
 				<div class="chat-input">
-					<input type="text" bind:value={newMessage} placeholder="Nhập tin nhắn..."
+					<input type="text" bind:value={newMessage} placeholder={m.support_input_online()}
 						onkeydown={(e) => { if (e.key === 'Enter') handleSend(); }} />
-					<button class="btn-primary" onclick={handleSend}>Gửi</button>
+					<button class="btn-primary" onclick={handleSend}>{m.support_rating_submit()}</button>
 				</div>
 			{:else}
 				<div class="resolved-banner">
-					<p>✅ Ticket đã được giải quyết</p>
+					<p>{m.support_resolved_banner()}</p>
 					<div class="rating-section">
-						<p>Đánh giá hỗ trợ:</p>
+						<p>{m.support_rate_prompt()}</p>
 						<div class="stars">
 							{#each [1,2,3,4,5] as star}
 								<button class="star" class:active={star <= selectedRating} onclick={() => handleRate(star)}>★</button>

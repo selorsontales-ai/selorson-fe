@@ -7,6 +7,7 @@
 -->
 <script lang="ts">
 	import { getToasts, dismissToast } from '$lib/stores/admin.svelte';
+	import * as m from '$lib/paraglide/messages';
 	import { flip } from 'svelte/animate';
 	import { fly } from 'svelte/transition';
 
@@ -26,7 +27,7 @@
 			>
 				<span class="toast-icon">{ICON[toast.type]}</span>
 				<span class="toast-message">{toast.message}</span>
-				<button class="toast-close" aria-label="Đóng" onclick={() => dismissToast(toast.id)}>×</button>
+				<button class="toast-close" aria-label={m.toast_close_aria()} onclick={() => dismissToast(toast.id)}>×</button>
 				<!-- Vạch đếm ngược khớp với 3.5s trong store. -->
 				<span class="toast-timer"></span>
 			</div>

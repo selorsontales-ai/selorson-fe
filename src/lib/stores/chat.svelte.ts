@@ -2,9 +2,10 @@ import { api } from '$lib/api';
 import { getToken } from '$lib/stores/auth.svelte';
 import { PUBLIC_API_BASE } from '$env/static/public';
 import { countUnread, markConversationRead, normalizeConversations } from '$lib/chat-model.js';
+import * as m from '$lib/paraglide/messages';
 
 export interface ConvData { id: number; other_user: { id: number; name: string; username: string; avatar: string|null; is_online: boolean }|null; last_message: string|null; last_message_at: string|null; unread: number }
-interface MsgData { id: number; sender_id: number; message: string; created_at: string }
+export interface MsgData { id: number; sender_id: number; receiver_id?: number; message: string; created_at: string }
 interface ChatWin { convId: number; otherUser: ConvData['other_user']; messages: MsgData[]; draft: string; loading: boolean; sending: boolean; unread: number; lastActivity: number; error: string }
 
 const MAX_WINDOWS = 2;
@@ -20,6 +21,8 @@ let conversationsError = $state('');
 let showOverflow = $state(false);
 let chatSSE: EventSource | null = null;
 let activePageConversationId: number | null = null;
+let pageMessageListener: ((convId: number, msg: MsgData) => void) | null = null;
+let pageStatusListener: ((userId: number, isOnline: boolean) => void) | null = null;
 
 export function getConversations() { return conversations; }
 export function getOpenWindows() { return openWindows; }
@@ -35,6 +38,12 @@ export function getTotalUnread() { return totalUnread; }
 export function setActivePageConversation(convId: number | null) {
 	activePageConversationId = convId;
 }
+export function setPageMessageListener(fn: ((convId: number, msg: MsgData) => void) | null) {
+	pageMessageListener = fn;
+}
+export function setPageStatusListener(fn: ((userId: number, isOnline: boolean) => void) | null) {
+	pageStatusListener = fn;
+}
 
 function updateTotalUnread() {
 	totalUnread = countUnread(conversations);
@@ -48,6 +57,20 @@ export function markConversationAsRead(convId: number) {
 	updateTotalUnread();
 }
 
+export async function deleteConversation(convId: number): Promise<boolean> {
+	try {
+		const r = await api<any>(`/chat/conversations/${convId}`, { method: 'DELETE' });
+		if (r.success !== false) {
+			conversations = conversations.filter((c) => c.id !== convId);
+			openWindows = openWindows.filter((w) => w.convId !== convId);
+			bubbles = bubbles.filter((b) => b.convId !== convId);
+			updateTotalUnread();
+			return true;
+		}
+	} catch {}
+	return false;
+}
+
 export async function fetchConversations() {
 	loadingConvs = true;
 	conversationsError = '';
@@ -56,7 +79,7 @@ export async function fetchConversations() {
 		conversations = normalizeConversations(r.data || []);
 		updateTotalUnread();
 	} catch (error) {
-		conversationsError = (error as { message?: string })?.message || 'Không thể tải danh sách tin nhắn';
+		conversationsError = (error as { message?: string })?.message || m.chat_err_open();
 	}
 	finally { loadingConvs = false; }
 	initChatSSE();
@@ -78,6 +101,23 @@ function initChatSSE() {
 			const data = JSON.parse(e.data);
 			if (data.type === 'private_message') {
 				handleIncomingMessage(data);
+				if (pageMessageListener && data.conversation_id && data.message) {
+					pageMessageListener(Number(data.conversation_id), data.message);
+				}
+			} else if (data.type === 'status' && data.user_id) {
+				const uid = Number(data.user_id);
+				const online = Boolean(data.is_online);
+				conversations = conversations.map((c) =>
+					c.other_user && c.other_user.id === uid
+						? { ...c, other_user: { ...c.other_user, is_online: online } }
+						: c
+				);
+				openWindows = openWindows.map((w) =>
+					w.otherUser && w.otherUser.id === uid
+						? { ...w, otherUser: { ...w.otherUser, is_online: online } }
+						: w
+				);
+				pageStatusListener?.(uid, online);
 			}
 		} catch {}
 	};
@@ -151,7 +191,7 @@ async function loadMessages(convId: number, showLoading = true) {
 			openWindows[winIdx] = {
 				...openWindows[winIdx],
 				loading: false,
-				error: (error as { message?: string })?.message || 'Không thể tải nội dung cuộc trò chuyện',
+				error: (error as { message?: string })?.message || m.chat_err_open(),
 			};
 			openWindows = [...openWindows];
 		}
@@ -184,7 +224,7 @@ export async function sendMsg(w: ChatWin) {
 		if (currentIdx !== -1) {
 			openWindows[currentIdx] = {
 				...openWindows[currentIdx],
-				error: (error as { message?: string })?.message || 'Không thể gửi tin nhắn',
+				error: (error as { message?: string })?.message || m.chat_err_send(),
 			};
 			openWindows = [...openWindows];
 		}

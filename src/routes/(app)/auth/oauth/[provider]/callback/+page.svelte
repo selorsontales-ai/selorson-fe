@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import { handleOAuthCallback } from '$lib/stores/security.svelte';
 	import { setAuth } from '$lib/stores/auth.svelte';
+	import * as m from '$lib/paraglide/messages';
 
 	let error = $state<string | null>(null);
 
@@ -13,7 +14,7 @@
 		const state = $page.url.searchParams.get('state');
 
 		if (!code) {
-			error = 'Không tìm thấy mã xác thực từ Google/Facebook.';
+			error = m.oauth_err_missing_code();
 			setTimeout(() => goto('/'), 3000);
 			return;
 		}
@@ -22,14 +23,14 @@
 			const res = await handleOAuthCallback(provider, code, state);
 			if (res.success) {
 				setAuth(res.data.token, res.data.user);
-				error = 'Đăng nhập thành công, đang chuyển hướng...';
+				error = m.oauth_success_redirect();
 				setTimeout(() => goto('/'), 1000);
 			} else {
-				error = res.message || 'Xác thực thất bại.';
+				error = res.message || m.oauth_err_failed();
 				setTimeout(() => goto('/'), 3000);
 			}
 		} catch (err: any) {
-			error = err.message || 'Lỗi hệ thống khi đăng nhập qua mạng xã hội.';
+			error = err.message || m.oauth_err_system();
 			setTimeout(() => goto('/'), 3000);
 		}
 	});
@@ -39,10 +40,10 @@
 	{#if error}
 		<div class="text-red-500 font-semibold mb-4 text-center">
 			<p>{error}</p>
-			<p class="text-sm mt-2 font-normal">Đang chuyển hướng về trang chủ...</p>
+			<p class="text-sm mt-2 font-normal">{m.oauth_redirecting_home()}</p>
 		</div>
 	{:else}
 		<div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
-		<span class="mt-4 text-muted-foreground font-medium animate-pulse">Đang xử lý đăng nhập...</span>
+		<span class="mt-4 text-muted-foreground font-medium animate-pulse">{m.oauth_processing()}</span>
 	{/if}
 </div>

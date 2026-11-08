@@ -1,6 +1,7 @@
 <script lang="ts">
+	import * as m from '$lib/paraglide/messages';
 	import { getDataMode, openSwitchPrompt } from "$lib/desktop-mode.svelte";
-
+	
 	const status = $derived(getDataMode());
 	const isAlpha = $derived(status?.mode === "production");
 	// Alpha was asked for and could not be honoured. Saying so is the whole
@@ -20,15 +21,15 @@
 		disabled={!canSwitch && !fellBack}
 		onclick={openSwitchPrompt}
 		title={isAlpha
-			? "Alpha — dữ liệu thật của trang web. Bấm để sang Beta."
+			? m.dm_alpha_live_production_data_click()
 			: fellBack
-				? `Đã yêu cầu Alpha nhưng thiếu tệp cấu hình, đang chạy Beta.\nCần tạo: ${status.config_path.replace(/backend\.env$/, "backend.production.env")}`
+				? m.dm_alpha_missing_cfg({ path: status.config_path.replace(/backend\.env$/, "backend.production.env") })
 				: canSwitch
-					? "Beta — dữ liệu trên máy này. Bấm để sang Alpha."
-					: "Beta — dữ liệu trên máy này. Chưa cấu hình Alpha."}
+					? m.dm_beta_local_machine_data_click()
+					: m.dm_beta_local_machine_data_alpha()}
 	>
 		<span class="dot" aria-hidden="true"></span>
-		{isAlpha ? "Alpha" : fellBack ? "Beta — thiếu cấu hình Alpha" : "Beta"}
+		{isAlpha ? "Alpha" : fellBack ? m.dm_beta_missing_alpha_config() : "Beta"}
 	</button>
 {/if}
 
@@ -140,6 +141,15 @@
 		.badge.alpha,
 		.badge.alpha .dot {
 			animation: none;
+		}
+	}
+
+	@media (max-width: 480px) {
+		.badge {
+			padding: 0.12rem 0.42rem 0.14rem;
+			font-size: 0.58rem;
+			gap: 0.25rem;
+			letter-spacing: 0.07em;
 		}
 	}
 </style>

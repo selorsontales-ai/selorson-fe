@@ -85,9 +85,17 @@
 	const HOME = new Vector3(0, 16, 22);
 	let camera = $state<PerspectiveCamera | undefined>();
 	let flyTarget = $state<Vector3 | null>(null);
+	let hadSelection = false;
 
 	$effect(() => {
-		if (!selected || selected.lat == null || selected.lng == null) return;
+		if (!selected || selected.lat == null || selected.lng == null) {
+			if (hadSelection) {
+				hadSelection = false;
+				flyTarget = new Vector3(HOME.x, HOME.y + groundLift, HOME.z);
+			}
+			return;
+		}
+		hadSelection = true;
 		const p = projection.project(selected.lat, selected.lng, region.alt);
 		flyTarget = new Vector3(p.x + 3.5, p.y + 5, p.z + 6.5);
 	});

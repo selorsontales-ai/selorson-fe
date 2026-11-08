@@ -63,7 +63,7 @@
 <div class="crop-modal-overlay" onmousedown={onCancel}>
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="crop-modal-content" onmousedown={(e) => e.stopPropagation()}>
-		<h3>✂️ Cắt hình</h3>
+		<h3>{m.crop_heading()}</h3>
 		<div class="crop-container">
 			<img bind:this={imageElement} src={imageSrc} alt="Crop" />
 		</div>
@@ -72,7 +72,7 @@
 				>{m.crop_cancel()}</button
 			>
 			<button class="btn-confirm" onclick={handleCrop} disabled={loading}>
-				{loading ? "⏳ Đang xử lý..." : "✅ Xong"}
+				{loading ? m.crop_processing() : m.crop_done()}
 			</button>
 		</div>
 	</div>
@@ -93,9 +93,11 @@
 	.crop-modal-content {
 		background: var(--color-surface-100, #1e293b);
 		border-radius: 1rem;
-		padding: 1.5rem;
+		padding: clamp(1rem, 3.5vw, 1.5rem);
 		width: 100%;
 		max-width: 500px;
+		max-height: calc(100dvh - 2rem);
+		overflow-y: auto;
 		box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		color: var(--color-text-primary, #f8fafc);
@@ -111,7 +113,7 @@
 	}
 	.crop-container {
 		width: 100%;
-		height: 350px;
+		height: min(350px, 52dvh);
 		background: #000;
 		border-radius: 0.5rem;
 		overflow: hidden;
@@ -123,6 +125,7 @@
 	}
 	.crop-actions {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0.75rem;
 		justify-content: flex-end;
 	}

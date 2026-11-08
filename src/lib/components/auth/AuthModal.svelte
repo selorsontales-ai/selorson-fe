@@ -3,7 +3,7 @@
 	import { login, register, forgotPassword, resetPassword, verifyEmail, resendVerification, setAuth } from '$lib/stores/auth.svelte';
 	import { loginWithGoogle, loginWithFacebook, isOAuthLoading, login2FA } from '$lib/stores/security.svelte';
 	import * as m from '$lib/paraglide/messages';
-
+	
 	let { open = $bindable(false) } = $props();
 
 	let mode = $state<'login' | 'register' | 'forgot' | 'reset' | 'verify' | '2fa'>('login');
@@ -49,8 +49,8 @@
 		successMsg = '';
 	}
 
-	function switchMode(m: 'login' | 'register' | 'forgot' | 'reset' | 'verify' | '2fa') {
-		mode = m;
+	function switchMode(nextMode: 'login' | 'register' | 'forgot' | 'reset' | 'verify' | '2fa') {
+		mode = nextMode;
 		resetForm();
 	}
 
@@ -166,7 +166,7 @@
 			successMsg = m.auth_success_verify();
 			setTimeout(() => {
 				switchMode('login');
-				successMsg = 'Email đã xác nhận thành công! Hãy đăng nhập. 🎉';
+				successMsg = m.auth_email_verified_please_log_in();
 			}, 1500);
 		} catch (err: any) {
 			error = err.message || m.auth_err_invalid_code();
@@ -209,7 +209,7 @@
 		get forgot() { return m.auth_title_forgot(); },
 		get reset() { return m.auth_title_reset(); },
 		get verify() { return m.auth_title_verify(); },
-		get '2fa'() { return '🔐 Xác thực 2 bước'; },
+		get '2fa'() { return m.auth_two_factor_authentication(); },
 	};
 </script>
 
@@ -299,7 +299,7 @@
 				</form>
 
 				<!-- Social Login -->
-				<div class="divider"><span>hoặc</span></div>
+				<div class="divider"><span>{m.auth_or()}</span></div>
 				<div class="social-buttons">
 					<button class="social-btn google" onclick={loginWithGoogle} disabled={isOAuthLoading()}>
 						<svg width="18" height="18" viewBox="0 0 18 18"
@@ -536,7 +536,7 @@
 			{#if mode === '2fa'}
 				<div class="verify-illustration">🔐</div>
 				<p class="mode-description">
-					Nhập mã 6 chữ số từ ứng dụng xác thực (Google Authenticator, Authy...) hoặc mã dự phòng để hoàn tất đăng nhập.
+					{m.auth_enter_the_6_digit_code()}
 				</p>
 				<form onsubmit={async (e) => {
 					e.preventDefault();
@@ -550,16 +550,16 @@
 							resetForm();
 							mode = 'login';
 						} else {
-							error = res.message || 'Mã xác thực không đúng';
+							error = res.message || m.auth_invalid_verification_code();
 						}
 					} catch {
-						error = 'Lỗi hệ thống';
+						error = m.settings_err_sys();
 					} finally {
 						loading = false;
 					}
 				}}>
 					<div class="field">
-						<label for="auth-2fa-code">Mã xác thực</label>
+						<label for="auth-2fa-code">{m.settings_email_code()}</label>
 						<input
 							id="auth-2fa-code"
 							type="text"
@@ -576,11 +576,11 @@
 						{#if loading}
 							<span class="spinner"></span>
 						{:else}
-							Xác nhận
+							{m.auth_verify()}
 						{/if}
 					</button>
 				</form>
-				<button class="back-link" onclick={() => { mode = 'login'; error = ''; }}>← Quay lại đăng nhập</button>
+				<button class="back-link" onclick={() => { mode = 'login'; error = ''; }}>{m.auth_back_login()}</button>
 			{/if}
 
 			<!-- Footer hint -->
@@ -611,18 +611,19 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		padding: 1rem;
 		animation: fadeIn 0.2s ease;
 	}
 
 	.modal-content {
 		width: 100%;
 		max-width: 420px;
-		max-height: 90vh;
+		max-height: calc(100dvh - 2rem);
 		overflow-y: auto;
 		background: linear-gradient(135deg, rgba(26, 26, 37, 0.95), rgba(18, 18, 26, 0.98));
 		border: 1px solid rgba(255, 255, 255, 0.08);
 		border-radius: var(--radius-xl);
-		padding: 2rem;
+		padding: clamp(1.25rem, 4vw, 2rem);
 		box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
 		animation: slideUp 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 	}

@@ -107,16 +107,21 @@ fn load_desktop_environment(app_data_dir: &Path) -> DataModeStatus {
 fn sync_portable_postgres(mode: DataMode) {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let pg_ctl = Path::new(r"E:\PostgreSQL\pgsql\bin\pg_ctl.exe");
-    let pg_data = Path::new(r"E:\PostgreSQL\pgsql\data");
-    let pg_log = Path::new(r"E:\PostgreSQL\pgsql\logfile.log");
+    let pg_root = std::env::var("SELORSON_PORTABLE_PG_DIR")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"E:\PostgreSQL\pgsql"));
+    let pg_ctl = pg_root.join(r"bin\pg_ctl.exe");
+    let pg_data = pg_root.join("data");
+    let pg_log = pg_root.join("logfile.log");
     if !pg_ctl.is_file() || !pg_data.is_dir() {
         return;
     }
 
-    let is_running = std::process::Command::new(pg_ctl)
+    let is_running = std::process::Command::new(&pg_ctl)
         .args(["status", "-D"])
-        .arg(pg_data)
+        .arg(&pg_data)
         .creation_flags(CREATE_NO_WINDOW)
         .status()
         .is_ok_and(|s| s.success());
@@ -124,11 +129,11 @@ fn sync_portable_postgres(mode: DataMode) {
     match mode {
         DataMode::Local => {
             if !is_running {
-                let _ = std::process::Command::new(pg_ctl)
+                let _ = std::process::Command::new(&pg_ctl)
                     .args(["start", "-D"])
-                    .arg(pg_data)
+                    .arg(&pg_data)
                     .arg("-l")
-                    .arg(pg_log)
+                    .arg(&pg_log)
                     .arg("-w")
                     .creation_flags(CREATE_NO_WINDOW)
                     .status();
@@ -136,9 +141,9 @@ fn sync_portable_postgres(mode: DataMode) {
         }
         DataMode::Production => {
             if is_running {
-                let _ = std::process::Command::new(pg_ctl)
+                let _ = std::process::Command::new(&pg_ctl)
                     .args(["stop", "-D"])
-                    .arg(pg_data)
+                    .arg(&pg_data)
                     .args(["-m", "fast"])
                     .creation_flags(CREATE_NO_WINDOW)
                     .status();

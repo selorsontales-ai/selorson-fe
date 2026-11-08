@@ -1,12 +1,31 @@
 <script lang="ts">
 	import AdminCrudTable from '$lib/components/admin/AdminCrudTable.svelte';
 	import AdminModal from '$lib/components/admin/AdminModal.svelte';
-	import { adminGet, adminPost, adminPut, adminDelete, toast_success, toast_error } from '$lib/stores/admin.svelte';
+	import CmsEnTranslationFields from '$lib/components/admin/CmsEnTranslationFields.svelte';
+	import {
+		adminGet,
+		adminPost,
+		adminPut,
+		adminDelete,
+		adminUpload,
+		extractCmsLocaleFields,
+		saveCmsLocaleFields,
+		toast_success,
+		toast_error
+	} from '$lib/stores/admin.svelte';
+	import { isDirectVideoSource, resolveVideoThumbnail } from '$lib/video/video-utils';
 	import { onMount } from 'svelte';
+
+	const EN_SPECS = [
+		{ key: 'video_name', label: 'Tên Video / Tập phim (EN)', placeholder: 'English video title...' },
+		{ key: 'description', label: 'Mô tả Video (EN)', placeholder: 'English video description...', multiline: true, rows: 3 }
+	];
 
 	let items = $state<Record<string, unknown>[]>([]);
 	let showForm = $state(false);
 	let editing = $state<Record<string, unknown> | null>(null);
+	let uploadingThumb = $state(false);
+	let thumbInput = $state<HTMLInputElement>();
 
 	let form = $state({
 		video_name: '',
@@ -16,41 +35,61 @@
 		video_type: 'main' as 'main' | 'side' | 'filler',
 		episode_number: null as number | null,
 		is_featured: false,
-		display_order: 0,
+		display_order: 0
 	});
+	let enFields = $state<Record<string, string>>({ video_name: '', description: '' });
+	let hadExistingEn = $state(false);
 
-	// Auto-detect YouTube/Vimeo from video_path
+	// Auto-detect YouTube / Vimeo / Direct Video from video_path
 	let detectedSource = $derived.by(() => {
 		const p = form.video_path;
 		if (!p) return '';
+		if (isDirectVideoSource(p)) return 'direct';
 		if (/(?:youtube\.com|youtu\.be)/i.test(p)) return 'youtube';
 		if (/vimeo\.com/i.test(p)) return 'vimeo';
 		return p ? 'unknown' : '';
 	});
 
+	let previewThumb = $derived(resolveVideoThumbnail(form));
+
 	const columns = [
 		{ key: 'id', label: 'ID' },
 		{ key: 'video_name', label: 'Tên Video' },
+		{ key: 'en_badge', label: 'Bản EN' },
 		{ key: 'video_type', label: 'Loại' },
 		{ key: 'episode_number', label: 'Tập' },
 		{ key: 'is_featured', label: 'Nổi bật', type: 'boolean' as const },
-		{ key: 'display_order', label: 'Thứ tự' },
+		{ key: 'display_order', label: 'Thứ tự' }
 	];
 
 	async function fetchItems() {
 		try {
 			const r = await adminGet<Record<string, unknown>[]>('/admin/videos');
-			if (r.success) items = r.data;
-		} catch { /* empty */ }
+			if (r.success && Array.isArray(r.data)) {
+				items = r.data.map((row) => {
+					const hasEn = extractCmsLocaleFields(row, ['video_name', 'description']).hasExisting;
+					return { ...row, en_badge: hasEn ? '🇬🇧 Có EN' : '—' };
+				});
+			}
+		} catch {
+			/* empty */
+		}
 	}
 
 	function openCreate() {
 		editing = null;
 		form = {
-			video_name: '', video_path: '', description: '', thumbnail_path: '',
-			video_type: 'main', episode_number: null,
-			is_featured: false, display_order: 0,
+			video_name: '',
+			video_path: '',
+			description: '',
+			thumbnail_path: '',
+			video_type: 'main',
+			episode_number: null,
+			is_featured: false,
+			display_order: 0
 		};
+		enFields = { video_name: '', description: '' };
+		hadExistingEn = false;
 		showForm = true;
 	}
 
@@ -63,24 +102,53 @@
 			thumbnail_path: (item.thumbnail_path as string) ?? '',
 			video_type: (item.video_type as 'main' | 'side' | 'filler') ?? 'main',
 			episode_number: (item.episode_number as number) ?? null,
-			is_featured: !!(item.is_featured),
-			display_order: (item.display_order as number) ?? 0,
+			is_featured: !!item.is_featured,
+			display_order: (item.display_order as number) ?? 0
 		};
+		const ex = extractCmsLocaleFields(item, ['video_name', 'description']);
+		enFields = ex.values;
+		hadExistingEn = ex.hasExisting;
 		showForm = true;
+	}
+
+	async function handleUploadThumbnail(e: Event) {
+		const file = (e.target as HTMLInputElement).files?.[0];
+		if (!file) return;
+		uploadingThumb = true;
+		try {
+			const fd = new FormData();
+			fd.append('image', file);
+			fd.append('folder', 'videos');
+			const r = await adminUpload<{ url: string }>('/upload/image', fd);
+			if (r.success) {
+				form.thumbnail_path = r.data.url;
+				toast_success('Upload thumbnail thành công!');
+			}
+		} catch {
+			toast_error('Upload thumbnail thất bại');
+		} finally {
+			uploadingThumb = false;
+		}
 	}
 
 	async function saveItem() {
 		try {
 			if (editing) {
-				await adminPut(`/admin/videos/${editing.id}`, form);
+				const r = await adminPut<any>(`/admin/videos/${editing.id}`, form);
+				if (!r.success) return;
+				await saveCmsLocaleFields('video', Number(editing.id), enFields, hadExistingEn);
 				toast_success('Cập nhật thành công!');
 			} else {
-				await adminPost('/admin/videos', form);
+				const r = await adminPost<any>('/admin/videos', form);
+				if (!r.success) return;
+				await saveCmsLocaleFields('video', Number(r.data?.id), enFields, false);
 				toast_success('Tạo mới thành công!');
 			}
 			showForm = false;
 			fetchItems();
-		} catch { toast_error('Có lỗi xảy ra.'); }
+		} catch {
+			toast_error('Có lỗi xảy ra.');
+		}
 	}
 
 	async function deleteItem(item: Record<string, unknown>) {
@@ -89,7 +157,9 @@
 			await adminDelete(`/admin/videos/${item.id}`);
 			toast_success('Đã xóa.');
 			fetchItems();
-		} catch { toast_error('Không thể xóa.'); }
+		} catch {
+			toast_error('Không thể xóa.');
+		}
 	}
 
 	onMount(fetchItems);
@@ -97,20 +167,71 @@
 
 <svelte:head><title>Admin - Videos</title></svelte:head>
 
-<AdminCrudTable title="🎬 Quản lý Videos" {columns} {items} showCreate showActions showDelete oncreate={openCreate} onedit={openEdit} ondelete={deleteItem} />
+<AdminCrudTable
+	title="🎬 Quản lý Videos"
+	{columns}
+	{items}
+	showCreate
+	showActions
+	showDelete
+	oncreate={openCreate}
+	onedit={openEdit}
+	ondelete={deleteItem}
+/>
 
 <AdminModal bind:open={showForm} title={editing ? 'Chỉnh sửa Video' : 'Tạo Video mới'}>
-	<form onsubmit={(e) => { e.preventDefault(); saveItem(); }} class="video-form">
+	<form
+		onsubmit={(e) => {
+			e.preventDefault();
+			saveItem();
+		}}
+		class="video-form"
+	>
 		<input bind:value={form.video_name} placeholder="Tên Video" required />
 
-		<input bind:value={form.video_path} placeholder="URL Video (YouTube / Vimeo / trực tiếp)" required />
+		<input
+			bind:value={form.video_path}
+			placeholder="URL Video (YouTube / Vimeo / .mp4 / .webm trực tiếp)"
+			required
+		/>
 		{#if detectedSource}
 			<p class="source-hint">
-				{detectedSource === 'youtube' ? '▶ YouTube — Thumbnail sẽ được tự động lấy' : detectedSource === 'vimeo' ? '▶ Vimeo' : '⚠ Không nhận diện nguồn'}
+				{#if detectedSource === 'direct'}
+					🎬 File Video trực tiếp (.mp4 / .webm) — Phát bằng trình phát Native HTML5 (tự lưu tiến độ & chuyển tập)
+				{:else if detectedSource === 'youtube'}
+					▶ YouTube — Thumbnail sẽ được tự động lấy nếu bỏ trống
+				{:else if detectedSource === 'vimeo'}
+					▶ Vimeo Embed
+				{:else}
+					ℹ Nguồn nhúng tùy chỉnh
+				{/if}
 			</p>
 		{/if}
 
-		<input bind:value={form.thumbnail_path} placeholder="URL Thumbnail (bỏ trống = tự lấy từ YouTube)" />
+		<div class="upload-row">
+			<input
+				type="file"
+				bind:this={thumbInput}
+				accept="image/*"
+				onchange={handleUploadThumbnail}
+				style="display:none"
+			/>
+			<button
+				type="button"
+				class="btn-upload"
+				onclick={() => thumbInput?.click()}
+				disabled={uploadingThumb}
+			>
+				{uploadingThumb ? '⏳ Đang tải...' : '📤 Upload Thumbnail'}
+			</button>
+			<input
+				bind:value={form.thumbnail_path}
+				placeholder="Hoặc dán URL Thumbnail (bỏ trống = tự lấy từ YouTube)"
+			/>
+		</div>
+		{#if previewThumb}
+			<img src={previewThumb} alt="Thumbnail preview" class="thumb-preview" />
+		{/if}
 
 		<textarea bind:value={form.description} placeholder="Mô tả" rows="3"></textarea>
 
@@ -125,7 +246,13 @@
 			</div>
 			<div class="form-group">
 				<label class="form-label" for="episode_number_input">Số tập</label>
-				<input id="episode_number_input" bind:value={form.episode_number} placeholder="VD: 1, 2, 3..." type="number" min="0" />
+				<input
+					id="episode_number_input"
+					bind:value={form.episode_number}
+					placeholder="VD: 1, 2, 3..."
+					type="number"
+					min="0"
+				/>
 			</div>
 		</div>
 
@@ -141,53 +268,160 @@
 		</div>
 
 		{#if form.is_featured}
-			<div class="featured-warning">
-				⚠ Chỉ có 1 video nổi bật. Video nổi bật cũ sẽ tự động bị gỡ.
+			<div class="featured-note">
+				⭐ Video này sẽ xuất hiện trong khu vực Phim Nổi Bật tại Trang Chủ (hiển thị tối đa 3 video nổi bật).
 			</div>
 		{/if}
 
+		<CmsEnTranslationFields bind:fields={enFields} specs={EN_SPECS} />
+
 		<div class="form-actions">
-			<button type="button" class="btn-cancel" onclick={() => showForm = false}>Hủy</button>
+			<button type="button" class="btn-cancel" onclick={() => (showForm = false)}>Hủy</button>
 			<button type="submit" class="btn-save">💾 {editing ? 'Cập nhật' : 'Tạo'}</button>
 		</div>
 	</form>
 </AdminModal>
 
 <style>
-	.video-form { display: flex; flex-direction: column; gap: 0.75rem; }
-	.video-form input, .video-form textarea, .video-form select {
-		padding: 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-md);
-		font-size: 0.875rem; font-family: inherit; background: var(--color-surface-200); color: var(--color-text-primary);
-		width: 100%; box-sizing: border-box;
+	.video-form {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
 	}
-	.video-form input:focus, .video-form textarea:focus, .video-form select:focus { outline: none; border-color: var(--color-brand-500); }
+	.video-form input,
+	.video-form textarea,
+	.video-form select {
+		padding: 0.75rem;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		font-size: 0.875rem;
+		font-family: inherit;
+		background: var(--color-surface-200);
+		color: var(--color-text-primary);
+		width: 100%;
+		box-sizing: border-box;
+	}
+	.video-form input:focus,
+	.video-form textarea:focus,
+	.video-form select:focus {
+		outline: none;
+		border-color: var(--color-brand-500);
+	}
 
-	.form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; align-items: start; }
-	.form-group { display: flex; flex-direction: column; gap: 0.25rem; }
-	.form-label { font-size: 0.75rem; font-weight: 600; color: var(--color-text-muted); }
+	.upload-row {
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
+	}
+	.upload-row input {
+		flex: 1;
+	}
+	.btn-upload {
+		padding: 0.7rem 0.9rem;
+		background: rgba(12, 113, 61, 0.15);
+		border: 1px solid rgba(12, 113, 61, 0.3);
+		border-radius: var(--radius-md);
+		color: var(--color-brand-300);
+		font-weight: 600;
+		font-size: 0.8rem;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.thumb-preview {
+		max-width: 180px;
+		max-height: 102px;
+		border-radius: var(--radius-md);
+		object-fit: cover;
+		border: 1px solid rgba(255, 255, 255, 0.1);
+	}
 
-	.checkbox-label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--color-text-primary); cursor: pointer; }
-	.checkbox-label input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--color-brand-500); }
+	.form-row-2 {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.75rem;
+		align-items: start;
+	}
+	.form-group {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.form-label {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--color-text-muted);
+	}
+
+	.checkbox-label {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.875rem;
+		color: var(--color-text-primary);
+		cursor: pointer;
+	}
+	.checkbox-label input[type='checkbox'] {
+		width: 18px;
+		height: 18px;
+		accent-color: var(--color-brand-500);
+	}
 
 	.source-hint {
-		margin: -0.25rem 0 0; padding: 0.375rem 0.75rem;
-		background: rgba(12,113,61,0.08); border-radius: var(--radius-sm);
-		font-size: 0.75rem; font-weight: 600; color: var(--color-brand-500);
+		margin: -0.25rem 0 0;
+		padding: 0.375rem 0.75rem;
+		background: rgba(12, 113, 61, 0.08);
+		border-radius: var(--radius-sm);
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--color-brand-400);
 	}
 
-	.featured-warning {
-		padding: 0.5rem 0.75rem; background: rgba(245,158,11,0.08);
-		border: 1px solid rgba(245,158,11,0.2); border-radius: var(--radius-md);
-		font-size: 0.8125rem; color: #b45309;
+	.featured-note {
+		padding: 0.5rem 0.75rem;
+		background: rgba(12, 113, 61, 0.1);
+		border: 1px solid rgba(12, 113, 61, 0.25);
+		border-radius: var(--radius-md);
+		font-size: 0.8125rem;
+		color: var(--color-brand-300);
 	}
 
-	.form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.5rem; }
-	.btn-cancel { padding: 0.625rem 1.25rem; background: var(--color-surface-200); color: var(--color-text-primary); border: 1px solid var(--color-border); border-radius: var(--radius-md); font-weight: 600; cursor: pointer; }
-	.btn-cancel:hover { background: var(--color-surface-300); }
-	.btn-save { padding: 0.625rem 1.25rem; background: linear-gradient(135deg, var(--color-brand-500), var(--color-brand-600)); color: #fff; border: none; border-radius: var(--radius-md); font-weight: 600; cursor: pointer; transition: all 0.2s; }
-	.btn-save:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(12,113,61,0.3); }
+	.form-actions {
+		display: flex;
+		gap: 0.75rem;
+		justify-content: flex-end;
+		margin-top: 0.5rem;
+	}
+	.btn-cancel {
+		padding: 0.625rem 1.25rem;
+		background: var(--color-surface-200);
+		color: var(--color-text-primary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.btn-cancel:hover {
+		background: var(--color-surface-300);
+	}
+	.btn-save {
+		padding: 0.625rem 1.25rem;
+		background: linear-gradient(135deg, var(--color-brand-500), var(--color-brand-600));
+		color: #fff;
+		border: none;
+		border-radius: var(--radius-md);
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.btn-save:hover {
+		filter: brightness(1.1);
+		transform: translateY(-1px);
+		box-shadow: 0 4px 12px rgba(12, 113, 61, 0.3);
+	}
 
 	@media (max-width: 768px) {
-		.form-row-2 { grid-template-columns: 1fr; }
+		.form-row-2 {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

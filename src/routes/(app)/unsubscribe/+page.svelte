@@ -9,16 +9,16 @@
 	import { onMount } from 'svelte';
 	onMount(async () => {
 		const token = $page.url.searchParams.get('token');
-		if (!token) { status = 'error'; message = 'Token không hợp lệ'; return; }
+		if (!token) { status = 'error'; message = m.unsub_err_invalid_token(); return; }
 		try {
 			const res = await fetch(`${PUBLIC_API_BASE}/newsletter/unsubscribe`, {
 				method: 'POST', headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ token }),
 			});
 			const data = await res.json();
-			if (data.success) { status = 'success'; message = 'Bạn đã hủy đăng ký thành công.'; }
-			else { status = 'error'; message = data.message || 'Có lỗi xảy ra'; }
-		} catch { status = 'error'; message = 'Lỗi kết nối'; }
+			if (data.success) { status = 'success'; message = m.unsub_success_msg(); }
+			else { status = 'error'; message = data.message || m.unsub_err_generic(); }
+		} catch { status = 'error'; message = m.unsub_err_conn(); }
 	});
 </script>
 
@@ -28,7 +28,7 @@
 	<div class="unsub-card">
 		{#if status === 'loading'}
 			<div class="spinner"></div>
-			<p>Đang xử lý...</p>
+			<p>{m.unsub_processing()}</p>
 		{:else if status === 'success'}
 			<div class="icon">✅</div>
 			<h2>{m.unsub_title()}</h2>
@@ -36,7 +36,7 @@
 			<a href="/" class="btn">{m.err404_home()}</a>
 		{:else}
 			<div class="icon">❌</div>
-			<h2>Lỗi</h2>
+			<h2>{m.unsub_err_heading()}</h2>
 			<p>{message}</p>
 			<a href="/" class="btn">{m.err404_home()}</a>
 		{/if}

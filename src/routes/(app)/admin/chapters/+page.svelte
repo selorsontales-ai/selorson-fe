@@ -1,11 +1,51 @@
 <script lang="ts">
 	import AdminCrudTable from '$lib/components/admin/AdminCrudTable.svelte';
+	import BetaToAlphaPromoteModal from '$lib/components/desktop/BetaToAlphaPromoteModal.svelte';
 	import { adminGet, adminPost, adminDelete, toast_success, toast_error } from '$lib/stores/admin.svelte';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 
 	let items = $state<Record<string, unknown>[]>([]);
+	let statusFilter = $state<'all' | 'draft' | 'published'>('all');
+	let batchPublishing = $state(false);
 	let importingBundle = $state(false);
+	let showPromoteModal = $state(false);
+
+	let draftItems = $derived(items.filter((ch) => String(ch.status || 'draft') === 'draft'));
+	let publishedItems = $derived(items.filter((ch) => String(ch.status || 'draft') === 'published'));
+	let filteredItems = $derived(
+		statusFilter === 'draft'
+			? draftItems
+			: statusFilter === 'published'
+				? publishedItems
+				: items
+	);
+
+	async function publishAllDraftChapters() {
+		const ids = draftItems.map((ch) => Number(ch.id)).filter((n) => Number.isFinite(n) && n > 0);
+		if (ids.length === 0 || batchPublishing) return;
+		if (!confirm(`Xuất bản công khai toàn bộ ${ids.length} chương chữ đang ở trạng thái Nháp?`))
+			return;
+		batchPublishing = true;
+		try {
+			const res = await adminPost<any>('/admin/publish-batch', {
+				chapter_ids: ids,
+				manga_chapter_ids: [],
+				library_item_ids: [],
+				action: 'publish'
+			});
+			if (res.success) {
+				toast_success(`Đã xuất bản ${res.data?.updated_chapters ?? ids.length} chương truyện chữ!`);
+				await fetchItems();
+			} else {
+				toast_error(res.message || 'Lỗi khi xuất bản hàng loạt');
+			}
+		} catch {
+			toast_error('Lỗi khi xuất bản hàng loạt');
+		} finally {
+			batchPublishing = false;
+		}
+	}
 
 	// Trạng thái Hộp thoại Đồng bộ Chương Chữ & Thực thể trực tiếp từ Co-Writer trên cùng máy
 	let showLocalSyncModal = $state(false);
@@ -24,6 +64,7 @@
 		{ key: 'title', label: 'Tiêu đề' },
 		{ key: 'prose_summary', label: 'Độ dài Chữ' },
 		{ key: 'status', label: 'Trạng thái Chương', type: 'status' as const },
+		{ key: 'en_summary', label: 'Bản EN' },
 		{ key: 'created_at', label: 'Ngày tạo', type: 'date' as const }
 	];
 
@@ -40,7 +81,14 @@
 						.filter(Boolean).length;
 					const prose_summary =
 						words > 0 ? `${words.toLocaleString('vi-VN')} từ (${pCount} đoạn)` : pCount > 0 ? `${pCount} đoạn` : 'Chưa có chữ';
-					return { ...ch, prose_summary };
+					const trStatus = (ch.translations_status as Record<string, string> | undefined)?.en;
+					const en_summary =
+						trStatus === 'published'
+							? '🇬🇧 Đã XB'
+							: trStatus === 'draft'
+								? '⏳ EN Nháp'
+								: '—';
+					return { ...ch, prose_summary, en_summary };
 				});
 			}
 		} catch {}
@@ -242,13 +290,68 @@
 				onchange={handleImportCoWriterBundle}
 			/>
 		</label>
+		<button
+			type="button"
+			class="sync-promote-btn"
+			onclick={() => (showPromoteModal = true)}
+			title="Đẩy chọn lọc Chương Chữ, Manga & Thư viện đã duyệt từ Beta lên Alpha"
+		>
+			🚀 Đẩy lên Alpha
+		</button>
 	</div>
+</div>
+
+{#if showPromoteModal}
+	<BetaToAlphaPromoteModal
+		open={showPromoteModal}
+		onclose={() => (showPromoteModal = false)}
+		onpromoted={fetchItems}
+	/>
+{/if}
+
+<div class="chapters-filter-bar">
+	<div class="chapters-filter-tabs">
+		<button
+			type="button"
+			class:active={statusFilter === 'all'}
+			onclick={() => (statusFilter = 'all')}
+		>
+			Tất cả ({items.length})
+		</button>
+		<button
+			type="button"
+			class:active={statusFilter === 'draft'}
+			onclick={() => (statusFilter = 'draft')}
+		>
+			⏳ Bản Nháp chờ duyệt ({draftItems.length})
+		</button>
+		<button
+			type="button"
+			class:active={statusFilter === 'published'}
+			onclick={() => (statusFilter = 'published')}
+		>
+			✅ Đã xuất bản ({publishedItems.length})
+		</button>
+	</div>
+
+	{#if draftItems.length > 0}
+		<button
+			type="button"
+			class="btn-publish-all-drafts"
+			disabled={batchPublishing}
+			onclick={publishAllDraftChapters}
+		>
+			{batchPublishing
+				? '⏳ Đang xuất bản...'
+				: `✨ Xuất bản tất cả Chương Nháp (${draftItems.length})`}
+		</button>
+	{/if}
 </div>
 
 <AdminCrudTable
 	title="📖 Quản lý Chapters (Truyện Chữ)"
 	{columns}
-	{items}
+	items={filteredItems}
 	showCreate
 	showActions
 	showDelete
@@ -435,6 +538,65 @@
 	.sync-upload-btn:hover {
 		border-color: var(--color-brand-500);
 	}
+	.sync-promote-btn {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.5rem 1rem;
+		border-radius: 0.5rem;
+		background: linear-gradient(135deg, #c43e2a, #991b1b);
+		border: 1px solid rgba(248, 113, 113, 0.45);
+		color: #fff;
+		font-size: 0.82rem;
+		font-weight: 700;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.sync-promote-btn:hover {
+		filter: brightness(1.1);
+	}
+
+	.chapters-filter-bar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+		margin-bottom: 1rem;
+	}
+	.chapters-filter-tabs {
+		display: flex;
+		gap: 0.45rem;
+		flex-wrap: wrap;
+	}
+	.chapters-filter-tabs button {
+		padding: 0.42rem 0.9rem;
+		border-radius: 999px;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface-100);
+		color: var(--color-text-secondary);
+		font-size: 0.8rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.chapters-filter-tabs button.active {
+		background: var(--color-brand-500);
+		border-color: var(--color-brand-500);
+		color: #fff;
+	}
+	.btn-publish-all-drafts {
+		padding: 0.48rem 1rem;
+		border-radius: 0.5rem;
+		border: none;
+		background: linear-gradient(135deg, #0c713d, #059669);
+		color: #fff;
+		font-size: 0.82rem;
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.btn-publish-all-drafts:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
 
 	/* Modal */
 	.sync-modal-overlay {
@@ -453,7 +615,9 @@
 		border-radius: 0.85rem;
 		width: 600px;
 		max-width: 95vw;
-		padding: 1.35rem 1.5rem;
+		max-height: calc(100dvh - 2rem);
+		overflow-y: auto;
+		padding: clamp(1rem, 3vw, 1.35rem) clamp(1rem, 3vw, 1.5rem);
 		box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
 	}
 	.sync-modal-head {

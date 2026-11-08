@@ -28,27 +28,54 @@
 	let detached = $state<string[]>([]);
 	let selectedPart = $state<string | null>(null);
 	let xray = $state(false);
+	let loadedSlug = $state<string | null>(null);
 
-	onMount(async () => {
-		const resolvedQuality = resolveQuality(new URLSearchParams(location.search));
+	async function loadLocationData(targetSlug: string) {
+		if (!targetSlug) return;
+		loading = true;
+		notFound = false;
+		parts = [];
+		explode = 0;
+		detached = [];
+		selectedPart = null;
+		xray = false;
+
+		const resolvedQuality = quality ?? resolveQuality(new URLSearchParams(location.search));
 		quality = resolvedQuality;
 		const canvasPromise =
-			resolvedQuality.tier !== 'none'
-				? import('$lib/world/engine/LocationCanvas.svelte')
-						.then((module) => module.default)
-						.catch(() => null)
-				: Promise.resolve(null);
+			CanvasComponent !== null
+				? Promise.resolve(CanvasComponent)
+				: resolvedQuality.tier !== 'none'
+					? import('$lib/world/engine/LocationCanvas.svelte')
+							.then((module) => module.default)
+							.catch(() => null)
+					: Promise.resolve(null);
 
 		try {
-			const [loadedDetail, canvas] = await Promise.all([fetchLocation(slug), canvasPromise]);
+			const [loadedDetail, canvas] = await Promise.all([
+				fetchLocation(targetSlug),
+				canvasPromise
+			]);
 			detail = loadedDetail;
 			CanvasComponent = canvas;
+			loadedSlug = targetSlug;
 			// Fire and forget: failing to earn a badge must not block the scene.
 			void markVisited(loadedDetail.place.id);
 		} catch {
 			notFound = true;
 		} finally {
 			loading = false;
+		}
+	}
+
+	onMount(() => {
+		void loadLocationData(slug);
+	});
+
+	$effect(() => {
+		const currentSlug = slug;
+		if (loadedSlug !== null && currentSlug && currentSlug !== loadedSlug) {
+			void loadLocationData(currentSlug);
 		}
 	});
 
@@ -69,23 +96,35 @@
 			<p>{m.world_place_not_found()}</p>
 			<a class="fallback-link" href="/world">{m.world_back_to_globe()}</a>
 		</div>
-	{:else if CanvasComponent && quality}
+	{:else}
 		<div class="stage">
-			<CanvasComponent
-				node={detail.place}
-				{quality}
-				{explode}
-				{detached}
-				{selectedPart}
-				{xray}
-				onparts={(list) => (parts = list)}
-				onselectpart={(id) => (selectedPart = id)}
-			/>
+			{#if CanvasComponent && quality && quality.tier !== 'none'}
+				{#key detail.place.id}
+					<CanvasComponent
+						node={detail.place}
+						{quality}
+						{explode}
+						{detached}
+						{selectedPart}
+						{xray}
+						onparts={(list) => (parts = list)}
+						onselectpart={(id) => (selectedPart = id)}
+					/>
+				{/key}
+			{:else}
+				<div class="place-2d-backdrop">
+					{#if detail.place.image_url}
+						<img src={detail.place.image_url} alt={detail.place.name ?? ''} class="backdrop-img" />
+					{/if}
+				</div>
+			{/if}
 			<LocationHud
 				place={detail.place}
 				region={detail.region}
 				neighbours={detail.neighbours}
 				chapters={detail.chapters}
+				visitors={detail.visitors ?? []}
+				linkedItems={detail.linked_items ?? []}
 				{parts}
 				{explode}
 				{detached}
@@ -96,11 +135,6 @@
 				onselectpart={(id) => (selectedPart = id)}
 				onxray={(v) => (xray = v)}
 			/>
-		</div>
-	{:else}
-		<div class="place-msg">
-			<p>{m.world_no_webgl()}</p>
-			<a class="fallback-link" href="/library">{m.world_open_library()}</a>
 		</div>
 	{/if}
 </section>
@@ -117,6 +151,17 @@
 	.stage {
 		position: absolute;
 		inset: 0;
+	}
+	.place-2d-backdrop {
+		position: absolute;
+		inset: 0;
+		background: radial-gradient(ellipse at center, #0d1f33 0%, #060d15 100%);
+	}
+	.backdrop-img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		opacity: 0.28;
 	}
 	.place-msg {
 		position: absolute;

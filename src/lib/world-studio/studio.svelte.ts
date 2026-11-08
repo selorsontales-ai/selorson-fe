@@ -36,6 +36,9 @@ export class Studio {
 	saveState = $state<SaveState>('idle');
 	saveMessage = $state<string | null>(null);
 
+	/** Whether to include draft (`is_active = false`) items synced from Co-Writer. */
+	showDraftItems = $state(true);
+
 	/** Selected library item id, shared by every pane. */
 	selectedId = $state<number | null>(null);
 
@@ -48,10 +51,10 @@ export class Studio {
 
 	// ── derived views ──
 
-	/** Catalogue entries that are active, with their layout attached. */
+	/** Catalogue entries (active + optional draft items), with their layout attached. */
 	entries = $derived(
 		this.catalogue.items
-			.filter((item) => item.is_active)
+			.filter((item) => this.showDraftItems || item.is_active)
 			.map((item) => {
 				const layout = this.doc.nodes[String(item.id)];
 				return { item, layout, kind: kindOf(item, layout) };
@@ -152,6 +155,46 @@ export class Studio {
 		this.touch();
 	}
 
+	/** Suggested coordinates for an unplaced item (near parent region if assigned, or deterministic spread). */
+	suggestedCoordsFor(id: number): { lat: number; lng: number } {
+		const layout = this.doc.nodes[String(id)];
+		if (layout?.region) {
+			const parent = this.regions.find((r) => regionSlugOf(r) === layout.region);
+			if (typeof parent?.layout?.lat === 'number' && typeof parent?.layout?.lng === 'number') {
+				const angle = ((id * 137.5) % 360) * (Math.PI / 180);
+				const dist = 4 + (id % 5) * 1.5;
+				const lat = Math.max(-75, Math.min(75, Math.round((parent.layout.lat + Math.sin(angle) * dist) * 100) / 100));
+				const lng = Math.max(-175, Math.min(175, Math.round((parent.layout.lng + Math.cos(angle) * dist) * 100) / 100));
+				return { lat, lng };
+			}
+		}
+		return deterministicFallbackLatLng(id);
+	}
+
+	/** Place all unplaced regions and locations onto the map at suggested coordinates. */
+	autoPlaceUnplacedLocations(): number {
+		let count = 0;
+		const nextNodes = { ...this.doc.nodes };
+		for (const entry of this.entries) {
+			if (entry.kind !== 'region' && entry.kind !== 'place') continue;
+			const cur = nextNodes[String(entry.item.id)] ?? {};
+			if (typeof cur.lat === 'number' && typeof cur.lng === 'number') continue;
+			const coords = this.suggestedCoordsFor(entry.item.id);
+			nextNodes[String(entry.item.id)] = {
+				...cur,
+				slug: cur.slug || slugify(entry.item.name, entry.item.id),
+				lat: coords.lat,
+				lng: coords.lng
+			};
+			count += 1;
+		}
+		if (count > 0) {
+			this.doc.nodes = nextNodes;
+			this.touch();
+		}
+		return count;
+	}
+
 	/** Neighbours of an item in either direction — drives Focus mode. */
 	neighbours(id: number): Set<number> {
 		const out = new Set<number>([id]);
@@ -162,11 +205,13 @@ export class Studio {
 		// A place is a neighbour of its region even without an explicit edge.
 		const layout = this.doc.nodes[String(id)];
 		if (layout?.region) {
-			const region = this.regions.find((r) => r.layout?.slug === layout.region);
+			const region = this.regions.find((r) => regionSlugOf(r) === layout.region);
 			if (region) out.add(region.item.id);
 		}
+		const selfEntry = this.byId.get(id);
+		const selfSlug = selfEntry ? regionSlugOf(selfEntry) : layout?.slug;
 		for (const entry of this.entries) {
-			if (entry.layout?.region && this.doc.nodes[String(id)]?.slug === entry.layout.region) {
+			if (entry.layout?.region && selfSlug === entry.layout.region) {
 				out.add(entry.item.id);
 			}
 		}
@@ -236,6 +281,24 @@ export function slugify(name: string, fallbackId: number): string {
 		.replace(/[^a-z0-9]+/g, '-')
 		.replace(/^-+|-+$/g, '');
 	return slug || `item-${fallbackId}`;
+}
+
+/** Resolve a stable slug for a region entry even if `layout.slug` has not been manually saved yet. */
+export function regionSlugOf(entry: StudioEntry): string {
+	const explicit = typeof entry.layout?.slug === 'string' ? entry.layout.slug.trim() : '';
+	return explicit || slugify(entry.item.name, entry.item.id);
+}
+
+/** Deterministic fallback coordinates matching backend `deterministic_fallback_lat_lng`. */
+export function deterministicFallbackLatLng(id: number): { lat: number; lng: number } {
+	const absId = Math.abs(Math.trunc(id)) || 1;
+	const latSeed = (Math.imul(absId, 2654435761) >>> 0) ^ 0x9e3779b9;
+	const lngSeed = (Math.imul(absId, 1597334677) >>> 0) ^ 0x85ebca6b;
+	const latNorm = ((latSeed >>> 0) % 10000) / 10000;
+	const lngNorm = ((lngSeed >>> 0) % 10000) / 10000;
+	const lat = Math.round(latNorm * 84 - 42);
+	const lng = Math.round(lngNorm * 300 - 150);
+	return { lat, lng };
 }
 
 export type StudioEntry = {

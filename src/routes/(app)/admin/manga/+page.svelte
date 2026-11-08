@@ -29,6 +29,35 @@
 	// Xem thử nhanh ngay trên danh sách
 	let previewChapter = $state<ChapterWithManga | null>(null);
 	let togglingId = $state<number | null>(null);
+	let batchPublishingManga = $state(false);
+
+	async function publishAllDraftManga() {
+		const ids = chapters
+			.filter((ch) => hasMangaPages(ch) && ch.manga?.manga_status !== 'published')
+			.map((ch) => ch.id);
+		if (ids.length === 0 || batchPublishingManga) return;
+		if (!confirm(`Xuất bản công khai toàn bộ ${ids.length} bản Manga đang ở trạng thái Nháp?`))
+			return;
+		batchPublishingManga = true;
+		try {
+			const res = await adminPost<any>('/admin/publish-batch', {
+				chapter_ids: [],
+				manga_chapter_ids: ids,
+				library_item_ids: [],
+				action: 'publish'
+			});
+			if (res.success) {
+				toast_success(`Đã xuất bản công khai ${res.data?.updated_manga ?? ids.length} bản Manga!`);
+				await fetchChapters();
+			} else {
+				toast_error(res.message || 'Lỗi khi xuất bản hàng loạt');
+			}
+		} catch {
+			toast_error('Lỗi khi xuất bản hàng loạt');
+		} finally {
+			batchPublishingManga = false;
+		}
+	}
 
 	// Đồng bộ từ Co-Writer (Chuyên biệt cho Manga)
 	let showLocalSyncModal = $state(false);
@@ -408,12 +437,26 @@
 			</button>
 		</div>
 
-		<input
-			type="text"
-			class="manga-search-input"
-			bind:value={searchQuery}
-			placeholder="Tìm theo số chương hoặc tiêu đề..."
-		/>
+		<div class="manga-toolbar-right">
+			{#if stats.draft > 0}
+				<button
+					type="button"
+					class="btn-batch-pub-manga"
+					disabled={batchPublishingManga}
+					onclick={publishAllDraftManga}
+				>
+					{batchPublishingManga
+						? '⏳ Đang xuất bản...'
+						: `✨ Publish tất cả Manga Nháp (${stats.draft})`}
+				</button>
+			{/if}
+			<input
+				type="text"
+				class="manga-search-input"
+				bind:value={searchQuery}
+				placeholder="Tìm theo số chương hoặc tiêu đề..."
+			/>
+		</div>
 	</div>
 
 	<!-- MANGA CARDS GRID -->
@@ -783,8 +826,29 @@
 		border-color: var(--color-brand-500);
 		color: #fff;
 	}
+	.manga-toolbar-right {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+	}
+	.btn-batch-pub-manga {
+		padding: 0.48rem 0.95rem;
+		border-radius: 0.5rem;
+		border: none;
+		background: linear-gradient(135deg, #0c713d, #059669);
+		color: #fff;
+		font-size: 0.8rem;
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.btn-batch-pub-manga:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
 	.manga-search-input {
-		min-width: 250px;
+		flex: 1 1 min(100%, 240px);
+		min-width: 0;
 		padding: 0.48rem 0.85rem;
 		border-radius: 0.5rem;
 		border: 1px solid var(--color-border);
@@ -805,7 +869,7 @@
 	/* Cards Grid */
 	.manga-cards-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 275px), 1fr));
 		gap: 1rem;
 	}
 	.manga-ch-card {
@@ -1001,7 +1065,9 @@
 		border-radius: 0.85rem;
 		width: 640px;
 		max-width: 95vw;
-		padding: 1.35rem 1.5rem;
+		max-height: calc(100dvh - 2rem);
+		overflow-y: auto;
+		padding: clamp(1rem, 3vw, 1.35rem) clamp(1rem, 3vw, 1.5rem);
 		box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
 	}
 	.preview-modal-box {
@@ -1094,6 +1160,11 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 0.75rem;
+	}
+	@media (max-width: 640px) {
+		.sync-grid-2 {
+			grid-template-columns: 1fr;
+		}
 	}
 	.sync-checks {
 		display: flex;

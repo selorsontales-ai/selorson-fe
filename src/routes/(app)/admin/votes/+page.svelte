@@ -120,14 +120,14 @@
 
 <style>
 	.admin-page { max-width: 900px; }
-	.page-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+	.page-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; }
 	.page-head h1 { font-size: 1.5rem; font-weight: 800; margin: 0; }
 	.loading-text { text-align: center; padding: 2rem; color: var(--color-text-muted); }
 	.items-list { display: flex; flex-direction: column; gap: .75rem; }
 	.item-row { display: flex; align-items: center; gap: .75rem; padding: 1rem 1.25rem; background: var(--color-surface-100); border-radius: var(--radius-lg); border: 1px solid rgba(255,255,255,.04); }
 	:global(html[data-theme='light']) .item-row { background: #fff; border-color: rgba(0,0,0,.04); }
 	.vote-icon { font-size: 1.75rem; }
-	.item-detail { flex: 1; display: flex; flex-direction: column; }
+	.item-detail { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 	.item-detail strong { font-size: .9375rem; }
 	.meta { font-size: .75rem; color: var(--color-text-muted); }
 	.badge-off { display: inline-block; padding: .125rem .5rem; border-radius: 1rem; background: rgba(239,68,68,.1); color: #f87171; font-size: .6875rem; font-weight: 700; margin-top: .25rem; width: fit-content; }
@@ -138,8 +138,13 @@
 	.stats-section h2 { font-size: 1.25rem; font-weight: 700; margin: 0 0 1rem; }
 	.stat-row { display: flex; align-items: center; gap: .75rem; margin-bottom: .75rem; }
 	.slabel { min-width: 160px; font-size: .8125rem; font-weight: 600; }
-	.bar-bg { flex: 1; height: 10px; background: var(--color-surface-300); border-radius: 5px; overflow: hidden; }
+	.bar-bg { flex: 1; min-width: 80px; height: 10px; background: var(--color-surface-300); border-radius: 5px; overflow: hidden; }
 	.bar-fill { height: 100%; background: linear-gradient(90deg, var(--color-brand-500), var(--color-brand-300)); border-radius: 5px; transition: width .5s; }
 	.scount { min-width: 80px; text-align: right; font-size: .75rem; color: var(--color-text-muted); font-weight: 600; }
 	.stotal { text-align: right; font-size: .8125rem; color: var(--color-text-muted); margin: .75rem 0 0; }
+	@media (max-width: 520px) {
+		.stat-row { flex-wrap: wrap; gap: 0.35rem; }
+		.slabel { min-width: 0; flex: 1; }
+		.bar-bg { flex-basis: 100%; order: 3; }
+	}
 </style>

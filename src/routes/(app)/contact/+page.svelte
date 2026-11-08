@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { api } from '$lib/api';
 	import * as m from '$lib/paraglide/messages';
-
+	
 	let form = $state({ name: '', email: '', subject: '', message: '' });
 	let loading = $state(false);
 	let sent = $state(false);
@@ -11,7 +11,7 @@
 		e.preventDefault();
 		error = '';
 		if (!form.name || !form.email || !form.message) {
-			error = 'Vui lòng điền đầy đủ thông tin';
+			error = m.ui_please_fill_in_all_required();
 			return;
 		}
 		loading = true;
@@ -19,7 +19,7 @@
 			await api('/public/contact', { method: 'POST', body: form });
 			sent = true;
 		} catch (err: any) {
-			error = err.message || 'Có lỗi xảy ra, vui lòng thử lại';
+			error = err.message || m.ui_something_went_wrong_please_try();
 		}
 		loading = false;
 	}

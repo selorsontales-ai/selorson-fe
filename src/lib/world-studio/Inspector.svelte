@@ -13,8 +13,9 @@
 		TERRAIN_KINDS,
 		TERRAIN_LABELS
 	} from '$lib/world/terrains';
+	import type { WorldPart } from '$lib/world/types';
 	import AssetSlots from './AssetSlots.svelte';
-	import { slugify, type Studio } from './studio.svelte';
+	import { regionSlugOf, slugify, type Studio } from './studio.svelte';
 	import { EDGE_RULES, KIND_ICONS, KIND_LABELS } from './types';
 
 	interface Props {
@@ -28,6 +29,17 @@
 	let layout = $derived(entry?.layout ?? {});
 	let placed = $derived(typeof layout.lat === 'number' && typeof layout.lng === 'number');
 
+	const PART_PRESETS = [
+		{ id: 'base', label: 'Nền đá / Bệ móng' },
+		{ id: 'body', label: 'Thân công trình chính' },
+		{ id: 'roof', label: 'Mái vòm / Đỉnh mái' },
+		{ id: 'spire', label: 'Ngọn tháp cao' },
+		{ id: 'arch', label: 'Cổng vòm cổ' },
+		{ id: 'crystal', label: 'Lõi tinh thể năng lượng' },
+		{ id: 'ring', label: 'Vòng hào quang lơ lửng' },
+		{ id: 'foliage', label: 'Thảm thực vật / Tán rừng' }
+	];
+
 	function patch(patchValue: Record<string, unknown>) {
 		if (!entry) return;
 		studio.patchNode(entry.item.id, patchValue);
@@ -39,26 +51,95 @@
 		return Number.isFinite(value) ? value : undefined;
 	}
 
-	/** Put an unplaced item somewhere visible so it can be dragged into place. */
-	function placeAtCentre() {
+	/** Place an unplaced item at its suggested coordinates (near parent region or deterministic spread). */
+	function placeSuggested() {
 		if (!entry) return;
-		patch({ lat: 0, lng: 0 });
+		const coords = studio.suggestedCoordsFor(entry.item.id);
+		patch({
+			slug: layout.slug || slugify(entry.item.name, entry.item.id),
+			lat: coords.lat,
+			lng: coords.lng
+		});
 	}
 
+	function handleSelectRegion(slugValue: string) {
+		const slug = slugValue || undefined;
+		if (slug) {
+			const matched = studio.regions.find((r) => regionSlugOf(r) === slug);
+			if (matched && !matched.layout?.slug) {
+				studio.patchNode(matched.item.id, { slug });
+			}
+		}
+		patch({ region: slug });
+	}
+
+	let partsMode = $state<'visual' | 'json'>('visual');
+	let partsList = $state<WorldPart[]>([]);
 	let partsText = $state('');
 	let partsError = $state('');
 	let partsFor = $state<number | null>(null);
 
-	// Reseed the JSON box when a different item is selected, not on every keystroke.
+	// Reseed the parts state when a different item is selected.
 	$effect(() => {
 		if (!entry || entry.item.id === partsFor) return;
 		partsFor = entry.item.id;
-		partsText = layout.parts ? JSON.stringify(layout.parts, null, 2) : '';
+		const rawParts = Array.isArray(layout.parts) ? (layout.parts as WorldPart[]) : [];
+		partsList = rawParts.map((p) => ({
+			id: p.id || 'body',
+			label: p.label ?? '',
+			lore: p.lore ?? '',
+			chapter: p.chapter,
+			dir: p.dir
+		}));
+		partsText = rawParts.length ? JSON.stringify(rawParts, null, 2) : '';
 		partsError = '';
 	});
 
+	function syncVisualPartsToDoc(nextParts: WorldPart[]) {
+		partsList = nextParts;
+		const cleaned = nextParts
+			.filter((p) => p.id.trim().length > 0)
+			.map((p) => {
+				const out: WorldPart = {
+					id: p.id.trim(),
+					label: p.label?.trim() || p.id.trim(),
+					dir: p.dir ?? [0, 1.5, 0]
+				};
+				if (p.lore?.trim()) out.lore = p.lore.trim();
+				if (typeof p.chapter === 'number' && Number.isFinite(p.chapter)) out.chapter = p.chapter;
+				return out;
+			});
+		partsText = cleaned.length ? JSON.stringify(cleaned, null, 2) : '';
+		patch({ parts: cleaned.length ? cleaned : undefined });
+	}
+
+	function addVisualPart(presetId = 'roof') {
+		const preset = PART_PRESETS.find((p) => p.id === presetId);
+		const next: WorldPart[] = [
+			...partsList,
+			{
+				id: presetId,
+				label: preset?.label ?? 'Bộ phận mới',
+				dir: [0, 1.5, 0],
+				lore: ''
+			}
+		];
+		syncVisualPartsToDoc(next);
+	}
+
+	function updateVisualPart(index: number, partial: Partial<WorldPart>) {
+		const next = partsList.map((item, i) => (i === index ? { ...item, ...partial } : item));
+		syncVisualPartsToDoc(next);
+	}
+
+	function removeVisualPart(index: number) {
+		const next = partsList.filter((_, i) => i !== index);
+		syncVisualPartsToDoc(next);
+	}
+
 	function commitParts() {
 		if (!partsText.trim()) {
+			partsList = [];
 			patch({ parts: undefined });
 			partsError = '';
 			return;
@@ -66,6 +147,7 @@
 		try {
 			const parsed = JSON.parse(partsText);
 			if (!Array.isArray(parsed)) throw new Error('Phải là một mảng');
+			partsList = parsed;
 			patch({ parts: parsed });
 			partsError = '';
 		} catch (err) {
@@ -89,10 +171,15 @@
 		</div>
 	{:else}
 		<header class="head">
-			<span class="kind" style="--c:{KIND_ICONS[entry.kind]}">
-				{KIND_ICONS[entry.kind]}
-				{KIND_LABELS[entry.kind]}
-			</span>
+			<div class="head-meta">
+				<span class="kind" style="--c:{KIND_ICONS[entry.kind]}">
+					{KIND_ICONS[entry.kind]}
+					{KIND_LABELS[entry.kind]}
+				</span>
+				{#if !entry.item.is_active}
+					<span class="draft-badge">Bản nháp Co-Writer</span>
+				{/if}
+			</div>
 			<h2>{entry.item.name}</h2>
 			<a class="edit-link" href="/admin/library">Sửa nội dung ↗</a>
 		</header>
@@ -132,13 +219,11 @@
 					Thuộc vùng
 					<select
 						value={layout.region ?? ''}
-						onchange={(e) => patch({ region: e.currentTarget.value || undefined })}
+						onchange={(e) => handleSelectRegion(e.currentTarget.value)}
 					>
 						<option value="">— chưa gán —</option>
 						{#each studio.regions as region (region.item.id)}
-							{#if region.layout?.slug}
-								<option value={region.layout.slug}>{region.item.name}</option>
-							{/if}
+							<option value={regionSlugOf(region)}>{region.item.name}</option>
 						{/each}
 					</select>
 				</label>
@@ -187,8 +272,8 @@
 					</button>
 				</div>
 			{:else}
-				<p class="hint">Mục này chưa có toạ độ nên không hiện trên bản đồ.</p>
-				<button type="button" onclick={placeAtCentre}>Đặt lên bản đồ</button>
+				<p class="hint">Mục này chưa có toạ độ riêng trên bản đồ Studio.</p>
+				<button type="button" onclick={placeSuggested}>🧭 Đặt lên bản đồ (Tọa độ gợi ý)</button>
 			{/if}
 		</section>
 
@@ -276,15 +361,84 @@
 
 		{#if entry.kind !== 'character'}
 			<section class="group">
-				<h3>Bộ phận tháo lắp</h3>
-				<textarea
-					rows="7"
-					bind:value={partsText}
-					onblur={commitParts}
-					placeholder={'[\n  { "id": "roof", "label": "Mái tháp", "lore": "…", "chapter": 34 }\n]'}
-				></textarea>
-				{#if partsError}<p class="error">{partsError}</p>{/if}
-				<small>Bỏ trống thì công trình vẫn tháo lắp được, chỉ dùng tên mặc định.</small>
+				<div class="group-head-row">
+					<h3>Bộ phận tháo lắp 3D</h3>
+					<button
+						type="button"
+						class="mode-switch"
+						onclick={() => (partsMode = partsMode === 'visual' ? 'json' : 'visual')}
+					>
+						{partsMode === 'visual' ? '{ } JSON' : '✨ Trực quan'}
+					</button>
+				</div>
+
+				{#if partsMode === 'visual'}
+					{#if partsList.length === 0}
+						<small>Chưa cấu hình riêng — công trình vẫn tự động tháo lắp theo nhãn mặc định.</small>
+					{:else}
+						<div class="parts-cards">
+							{#each partsList as part, idx (idx)}
+								<div class="part-card">
+									<div class="part-row">
+										<select
+											value={part.id}
+											onchange={(e) => {
+												const nextId = e.currentTarget.value;
+												const preset = PART_PRESETS.find((p) => p.id === nextId);
+												updateVisualPart(idx, {
+													id: nextId,
+													label: part.label || preset?.label || nextId
+												});
+											}}
+										>
+											{#each PART_PRESETS as preset}
+												<option value={preset.id}>{preset.id} ({preset.label})</option>
+											{/each}
+											{#if !PART_PRESETS.some((p) => p.id === part.id)}
+												<option value={part.id}>{part.id}</option>
+											{/if}
+										</select>
+										<button
+											type="button"
+											class="danger icon-btn"
+											title="Xoá bộ phận"
+											onclick={() => removeVisualPart(idx)}
+										>
+											✕
+										</button>
+									</div>
+									<input
+										placeholder="Tên hiển thị (VD: Mái tháp cổ)"
+										value={part.label ?? ''}
+										oninput={(e) => updateVisualPart(idx, { label: e.currentTarget.value })}
+									/>
+									<textarea
+										rows="2"
+										placeholder="Bí sử / Lore của bộ phận này khi độc giả tách ra…"
+										value={part.lore ?? ''}
+										oninput={(e) => updateVisualPart(idx, { lore: e.currentTarget.value })}
+									></textarea>
+									<input
+										type="number"
+										placeholder="Gắn với Chương (tuỳ chọn)"
+										value={part.chapter ?? ''}
+										oninput={(e) => updateVisualPart(idx, { chapter: num(e.currentTarget.value) })}
+									/>
+								</div>
+							{/each}
+						</div>
+					{/if}
+					<button type="button" onclick={() => addVisualPart('roof')}>+ Thêm bộ phận</button>
+				{:else}
+					<textarea
+						rows="7"
+						bind:value={partsText}
+						onblur={commitParts}
+						placeholder={'[\n  { "id": "roof", "label": "Mái tháp", "lore": "…", "chapter": 34 }\n]'}
+					></textarea>
+					{#if partsError}<p class="error">{partsError}</p>{/if}
+					<small>Bỏ trống thì công trình vẫn tháo lắp được, chỉ dùng tên mặc định.</small>
+				{/if}
 			</section>
 		{/if}
 
@@ -308,7 +462,7 @@
 
 <style>
 	.inspector {
-		width: 20rem;
+		width: 20.5rem;
 		flex: none;
 		overflow-y: auto;
 		background: rgba(8, 14, 24, 0.9);
@@ -335,6 +489,20 @@
 	.head {
 		margin-bottom: 1rem;
 	}
+	.head-meta {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		flex-wrap: wrap;
+	}
+	.draft-badge {
+		font-size: 0.62rem;
+		padding: 0.08rem 0.4rem;
+		border-radius: 99px;
+		background: rgba(251, 191, 36, 0.16);
+		color: #fbbf24;
+		border: 1px solid rgba(251, 191, 36, 0.35);
+	}
 	.head h2 {
 		font-size: 1.02rem;
 		margin: 0.15rem 0 0.3rem;
@@ -358,6 +526,12 @@
 		flex-direction: column;
 		gap: 0.6rem;
 	}
+	.group-head-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.4rem;
+	}
 	.group h3 {
 		font-size: 0.68rem;
 		text-transform: uppercase;
@@ -365,28 +539,60 @@
 		color: #94a3b8;
 		margin: 0;
 	}
+	.mode-switch {
+		font-size: 0.66rem;
+		padding: 0.18rem 0.45rem;
+	}
+
+	.parts-cards {
+		display: flex;
+		flex-direction: column;
+		gap: 0.55rem;
+	}
+	.part-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		padding: 0.5rem;
+		border-radius: 6px;
+		background: rgba(255, 255, 255, 0.03);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+	}
+	.part-row {
+		display: flex;
+		gap: 0.35rem;
+	}
+	.part-row select {
+		flex: 1;
+		min-width: 0;
+	}
+	.icon-btn {
+		padding: 0.2rem 0.45rem;
+	}
 
 	label {
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
 	}
-	label small {
+	label small,
+	.group > small {
 		color: #94a3b8;
 		font-size: 0.68rem;
 		line-height: 1.4;
 	}
 	.pair {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 0.5rem;
 	}
 	.row {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0.4rem;
 	}
 	.row input {
-		flex: 1;
+		flex: 1 1 120px;
 		min-width: 0;
 	}
 

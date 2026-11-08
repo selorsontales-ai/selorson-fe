@@ -71,10 +71,19 @@
 		);
 	}
 
+	let hadSelection = false;
+
 	$effect(() => {
+		const group = globeGroup;
 		if (!selected || selected.lat == null || selected.lng == null) {
+			if (hadSelection) {
+				hadSelection = false;
+				flyTarget = HOME.clone();
+			}
 			return;
 		}
+		if (!group) return;
+		hadSelection = true;
 		const target = worldPositionOf(selected as WorldNode & { lat: number; lng: number });
 		flyTarget = target.normalize().multiplyScalar(FOCUS_DISTANCE);
 	});

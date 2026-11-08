@@ -4,7 +4,7 @@
 	import { onMount } from 'svelte';
 	import ImageCropper from '$lib/components/ui/ImageCropper.svelte';
 	import * as m from '$lib/paraglide/messages';
-
+	
 	let { onProfileSaved }: { onProfileSaved?: (user: User) => void } = $props();
 
 	let saving = $state(false);
@@ -13,20 +13,32 @@
 	let messageType = $state<'success' | 'error'>('success');
 
 	// Profile fields
-	let form = $state({ name: '', nickname: '', biography: '', occupation: '', hobbies: '', phone_number: '', birthday: '', gender: '', address: '' });
+	let form = $state({
+		name: '',
+		nickname: '',
+		biography: '',
+		occupation: '',
+		hobbies: '',
+		phone_number: '',
+		birthday: '',
+		gender: '',
+		address: ''
+	});
 
-	// Privacy
+	// Smart Privacy Defaults: Social/Reader fields default to true (opt-out),
+	// Sensitive personal fields default to false (opt-in).
 	const privacyItems = [
-		{ key: 'show_email', label: () => m.priv_show_email() },
-		{ key: 'show_phone', label: () => m.priv_show_phone() },
-		{ key: 'show_bio', label: () => m.priv_show_bio() },
-		{ key: 'show_hobbies', label: () => m.priv_show_hobbies() },
-		{ key: 'show_occupation', label: () => m.priv_show_occupation() },
-		{ key: 'show_birthday', label: () => m.priv_show_birthday() },
-		{ key: 'show_gender', label: () => m.priv_show_gender() },
-		{ key: 'show_address', label: () => m.priv_show_address() },
-		{ key: 'show_online_status', label: () => m.priv_show_online_status() },
-		{ key: 'private_account', label: () => m.priv_private_account() },
+		{ key: 'show_bio', label: () => m.priv_show_bio(), defaultVal: true },
+		{ key: 'show_hobbies', label: () => m.priv_show_hobbies(), defaultVal: true },
+		{ key: 'show_occupation', label: () => m.priv_show_occupation(), defaultVal: true },
+		{ key: 'show_gender', label: () => m.priv_show_gender(), defaultVal: true },
+		{ key: 'show_online_status', label: () => m.priv_show_online_status(), defaultVal: true },
+		{ key: 'show_activity', label: () => m.ui_show_reading_activity_achievements(), defaultVal: true },
+		{ key: 'show_email', label: () => m.priv_show_email(), defaultVal: false },
+		{ key: 'show_phone', label: () => m.priv_show_phone(), defaultVal: false },
+		{ key: 'show_birthday', label: () => m.priv_show_birthday(), defaultVal: false },
+		{ key: 'show_address', label: () => m.priv_show_address(), defaultVal: false },
+		{ key: 'private_account', label: () => m.priv_private_account(), defaultVal: false }
 	];
 	let privacy = $state<Record<string, boolean>>({});
 
@@ -62,15 +74,35 @@
 	onMount(async () => {
 		const u = getUser();
 		if (u) {
-			form = { name: u.name || '', nickname: (u as any).nickname || '', biography: (u as any).biography || '', occupation: (u as any).occupation || '', hobbies: (u as any).hobbies || '', phone_number: (u as any).phone_number || '', birthday: (u as any).birthday || '', gender: (u as any).gender || '', address: (u as any).address || '' };
+			form = {
+				name: u.name || '',
+				nickname: (u as any).nickname || '',
+				biography: (u as any).biography || '',
+				occupation: (u as any).occupation || '',
+				hobbies: (u as any).hobbies || '',
+				phone_number: (u as any).phone_number || '',
+				birthday: (u as any).birthday || '',
+				gender: (u as any).gender || '',
+				address: (u as any).address || ''
+			};
 			const p = u.privacy_settings || {};
-			privacyItems.forEach(i => privacy[i.key] = p[i.key] ?? false);
+			privacyItems.forEach((i) => {
+				privacy[i.key] = typeof p[i.key] === 'boolean' ? p[i.key] : i.defaultVal;
+			});
 		}
-		try { const r = await api<any[]>('/social/blocked'); blockedUsers = r.data; } catch {} finally { loadingBlocked = false; }
+		try {
+			const r = await api<any[]>('/social/blocked');
+			blockedUsers = r.data || [];
+		} catch {
+			blockedUsers = [];
+		} finally {
+			loadingBlocked = false;
+		}
 	});
 
 	async function saveProfile() {
-		saving = true; message = '';
+		saving = true;
+		message = '';
 		try {
 			const r = await api<User>('/auth/profile', { method: 'PUT', body: form });
 			updateUser(r.data);
@@ -88,9 +120,10 @@
 		try {
 			const r = await api<User>('/auth/privacy', {
 				method: 'PUT',
-				body: { privacy_settings: privacy },
+				body: { privacy_settings: privacy }
 			});
 			updateUser(r.data);
+			onProfileSaved?.(r.data);
 			notify(r.message || m.settings_priv_saved(), 'success');
 		} catch (error) {
 			notify((error as { message?: string })?.message || m.settings_prof_err(), 'error');
@@ -111,23 +144,50 @@
 		avatarPreview = URL.createObjectURL(blob);
 		showAvatarCrop = false;
 	}
-	function cancelAvatarCrop() { showAvatarCrop = false; avatarCropSrc = ''; }
+	function cancelAvatarCrop() {
+		showAvatarCrop = false;
+		avatarCropSrc = '';
+	}
 
 	async function uploadAvatar() {
-		if (!avatarFile) return; uploadingAvatar = true;
+		if (!avatarFile) return;
+		uploadingAvatar = true;
 		try {
 			const fd = new FormData();
 			fd.append('avatar', avatarFile);
 			const res = await apiUpload<{ url: string }>('/upload/avatar', fd);
 			notify(m.settings_ava_updated(), 'success');
 			avatarFile = null;
-			if (res.success && res.data?.url) avatarPreview = res.data.url;
-		} catch { notify(m.settings_err_upload(), 'error'); } finally { uploadingAvatar = false; }
+			if (res.success && res.data?.url) {
+				avatarPreview = res.data.url;
+				const current = getUser();
+				if (current) {
+					const updated = { ...current, avatar: res.data.url } as User;
+					updateUser(updated);
+					onProfileSaved?.(updated);
+				}
+			}
+		} catch {
+			notify(m.settings_err_upload(), 'error');
+		} finally {
+			uploadingAvatar = false;
+		}
 	}
 
 	async function deleteAvatar() {
 		if (!confirm(m.settings_ava_delete_conf())) return;
-		try { await api('/auth/avatar', { method: 'DELETE' }); notify(m.settings_ava_deleted(), 'success'); } catch { notify(m.settings_prof_err(), 'error'); }
+		try {
+			const r = await api<User>('/auth/avatar', { method: 'DELETE' });
+			avatarPreview = '';
+			avatarFile = null;
+			if (r.data) {
+				updateUser(r.data);
+				onProfileSaved?.(r.data);
+			}
+			notify(m.settings_ava_deleted(), 'success');
+		} catch {
+			notify(m.settings_prof_err(), 'error');
+		}
 	}
 
 	function onCoverSelect(e: Event) {
@@ -142,34 +202,65 @@
 		coverPreview = URL.createObjectURL(blob);
 		showCoverCrop = false;
 	}
-	function cancelCoverCrop() { showCoverCrop = false; coverCropSrc = ''; }
+	function cancelCoverCrop() {
+		showCoverCrop = false;
+		coverCropSrc = '';
+	}
 
 	async function uploadCover() {
-		if (!coverFile) return; uploadingCover = true;
+		if (!coverFile) return;
+		uploadingCover = true;
 		try {
 			const fd = new FormData();
-			fd.append('image', coverFile);
-			fd.append('folder', 'covers');
-			const res = await apiUpload<{ url: string }>('/upload/image', fd);
+			fd.append('cover', coverFile);
+			const res = await apiUpload<{ url: string }>('/upload/cover', fd);
 			if (res.success && res.data?.url) {
-				await api('/profile/me', { method: 'PUT', body: { cover_image: res.data.url } });
 				notify(m.settings_cover_updated(), 'success');
 				coverPreview = res.data.url;
+				const current = getUser();
+				if (current) {
+					const updated = { ...current, cover_image: res.data.url } as User;
+					updateUser(updated);
+					onProfileSaved?.(updated);
+				}
 			} else {
 				notify(m.settings_err_cover(), 'error');
 			}
 			coverFile = null;
-		} catch { notify(m.settings_err_upload(), 'error'); } finally { uploadingCover = false; }
+		} catch {
+			notify(m.settings_err_upload(), 'error');
+		} finally {
+			uploadingCover = false;
+		}
 	}
 
 	async function deleteCover() {
 		if (!confirm(m.settings_cover_delete_conf())) return;
-		try { await api('/auth/cover', { method: 'DELETE' }); notify(m.settings_cover_deleted(), 'success'); } catch { notify(m.settings_prof_err(), 'error'); }
+		try {
+			const r = await api<User>('/auth/cover', { method: 'DELETE' });
+			coverPreview = '';
+			coverFile = null;
+			if (r.data) {
+				updateUser(r.data);
+				onProfileSaved?.(r.data);
+			}
+			notify(m.settings_cover_deleted(), 'success');
+		} catch {
+			notify(m.settings_prof_err(), 'error');
+		}
 	}
 
 	async function unblockUser(userId: number) {
 		unblocking = userId;
-		try { await api(`/social/block/${userId}`, { method: 'POST' }); blockedUsers = blockedUsers.filter(u => u.id !== userId); notify(m.settings_unblock_success(), 'success'); } catch { notify(m.settings_prof_err(), 'error'); } finally { unblocking = null; }
+		try {
+			await api(`/social/block/${userId}`, { method: 'POST' });
+			blockedUsers = blockedUsers.filter((u) => u.id !== userId);
+			notify(m.settings_unblock_success(), 'success');
+		} catch {
+			notify(m.settings_prof_err(), 'error');
+		} finally {
+			unblocking = null;
+		}
 	}
 </script>
 
@@ -249,7 +340,7 @@
 						<div class="blocked-avatar">
 							{#if user.avatar}<img src={user.avatar} alt="" />{:else}<span>{user.name?.charAt(0) || '?'}</span>{/if}
 						</div>
-						<div class="blocked-info"><a href="/profile/{user.username}" class="blocked-name">{user.name}</a><span class="blocked-username">@{user.username}</span></div>
+						<div class="blocked-info"><a href="/profile/{user.id}" class="blocked-name">{user.name}</a><span class="blocked-username">@{user.username}</span></div>
 						<button class="btn-unblock" onclick={() => unblockUser(user.id)} disabled={unblocking === user.id}>{unblocking === user.id ? '⏳...' : m.settings_btn_unblock()}</button>
 					</div>
 				{/each}
@@ -270,7 +361,7 @@
 	.profile-settings{max-width:900px}
 	.toast-msg{position:fixed;top:80px;right:1.5rem;z-index:10001;max-width:360px;background:rgba(12,113,61,.92);border:1px solid rgba(255,255,255,.18);color:#fff;padding:.75rem 1rem;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.28);font-size:.85rem}
 	.toast-msg.error{background:rgba(185,28,28,.94)}
-	.card{background:var(--color-surface-100);border-radius:1rem;padding:2rem;border:1px solid rgba(255,255,255,.04);margin-bottom:1.5rem;transition:border-color .3s}
+	.card{background:var(--color-surface-100);border-radius:1rem;padding:clamp(1.1rem, 3.5vw, 2rem);border:1px solid rgba(255,255,255,.04);margin-bottom:1.5rem;transition:border-color .3s}
 	.card:hover{border-color:rgba(255,255,255,.08)}
 	.card h3{font-size:1.125rem;font-weight:700;color:var(--color-brand-400);margin:0 0 1.5rem}
 	.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.5rem}
@@ -285,12 +376,12 @@
 	.btn-save:disabled{opacity:.5;cursor:not-allowed;transform:none}
 	.media-row{display:grid;grid-template-columns:auto 1fr;gap:2.5rem;margin-bottom:1.5rem}
 	.media-block .media-label{display:block;font-size:.8rem;font-weight:600;color:var(--color-text-muted);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.05em}
-	.avatar-upload{display:flex;align-items:center;gap:1.25rem}
+	.avatar-upload{display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap}
 	.avatar-preview{width:72px;height:72px;border-radius:50%;overflow:hidden;background:var(--color-surface-300);display:flex;align-items:center;justify-content:center;border:3px solid rgba(12,113,61,.2);flex-shrink:0}
 	.avatar-preview img{width:100%;height:100%;object-fit:cover}
 	.avatar-fallback{font-size:1.5rem;font-weight:800;color:var(--color-brand-400)}
-	.cover-upload{display:flex;align-items:flex-end;gap:1rem}
-	.cover-preview{width:200px;height:80px;border-radius:.5rem;background-size:cover;background-position:center;flex-shrink:0;border:2px solid rgba(255,255,255,.08)}
+	.cover-upload{display:flex;align-items:flex-end;gap:1rem;flex-wrap:wrap}
+	.cover-preview{width:min(200px, 100%);height:80px;border-radius:.5rem;background-size:cover;background-position:center;flex-shrink:0;border:2px solid rgba(255,255,255,.08)}
 	.media-actions{display:flex;gap:.5rem;flex-wrap:wrap}
 	.btn-upload{padding:.5rem 1rem;border:2px solid rgba(255,255,255,.08);border-radius:.5rem;background:var(--color-surface-200);color:var(--color-text-secondary);font-size:.8rem;font-weight:600;cursor:pointer;transition:all .15s}
 	.btn-upload:hover{border-color:var(--color-brand-500)}

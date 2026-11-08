@@ -6,9 +6,11 @@
 	import Newsletter from "$lib/components/ui/Newsletter.svelte";
 	import PrivateChat from "$lib/components/ui/PrivateChat.svelte";
 	import SupportChatWidget from "$lib/components/ui/SupportChatWidget.svelte";
+	import GlobalAudioPlayer from "$lib/components/ui/GlobalAudioPlayer.svelte";
 	import Toast from "$lib/components/ui/Toast.svelte";
 	import ApiProgress from "$lib/components/ui/ApiProgress.svelte";
 	import LanguageSwitcher from "$lib/components/ui/LanguageSwitcher.svelte";
+	import NotificationBell from "$lib/components/ui/NotificationBell.svelte";
 	import {
 		initAuth,
 		getUser,
@@ -36,6 +38,7 @@
 		? import("$lib/components/desktop/DesktopDataMode.svelte")
 		: null;
 	import * as m from "$lib/paraglide/messages";
+	import { formatRoleBadge } from '$lib/i18n-labels';
 	import { onMount } from "svelte";
 	import { page } from "$app/stores";
 
@@ -114,6 +117,7 @@
 				<a href="/videos" class="nav-link" class:active={$page.url.pathname.startsWith('/videos')}>{m.nav_videos()}</a>
 				<a href="/music" class="nav-link" class:active={$page.url.pathname.startsWith('/music')}>{m.nav_music()}</a>
 				<a href="/library" class="nav-link" class:active={$page.url.pathname.startsWith('/library')}>{m.nav_library()}</a>
+				<a href="/world" class="nav-link" class:active={$page.url.pathname.startsWith('/world')}>{m.search_3d_map()}</a>
 				<a href="/about" class="nav-link" class:active={$page.url.pathname.startsWith('/about')}>{m.nav_about()}</a>
 			</nav>
 
@@ -121,27 +125,30 @@
 				<a
 					href="/search"
 					class="search-btn"
-					title="Tìm kiếm"
+					title={m.nav_search()}
 					aria-label="Search">🔍</a
 				>
 				{#if isAuthenticated() && (getUser()?.role === "admin" || getUser()?.role === "manager")}
 					<a
 						href="/support-workspace"
-						class="search-btn"
-						title="CSKH Workspace"
+						class="search-btn support-header-btn"
+						title={m.support_workspace_title()}
 						aria-label="Support">🎧</a
 					>
 				{/if}
 				<button
-					class="theme-toggle"
+					class="theme-toggle theme-header-btn"
 					onclick={toggleTheme}
-					title={isDark() ? "Chế độ sáng" : "Chế độ tối"}
+					title={isDark() ? m.ui_light_mode() : m.ui_dark_mode()}
 					aria-label="Toggle theme"
 				>
 					{isDark() ? "☀️" : "🌙"}
 				</button>
-				{#if !isAuthenticated()}
+				<div class="lang-header-wrap">
 					<LanguageSwitcher />
+				</div>
+				{#if isAuthenticated()}
+					<NotificationBell />
 				{/if}
 				{#if isLoading()}
 					<div class="auth-skeleton"></div>
@@ -176,7 +183,7 @@
 								<div class="dropdown-header">
 									<strong>{getUser()?.name}</strong>
 									<span class="dropdown-role"
-										>{getUser()?.role}</span
+										>{formatRoleBadge(getUser()?.role, true)}</span
 									>
 								</div>
 								<hr class="dropdown-divider" />
@@ -240,11 +247,36 @@
 			onmousedown={() => (showMobileMenu = false)}
 		></div>
 		<nav class="mobile-nav">
+			<div class="mobile-quick-tools">
+				<button
+					type="button"
+					class="mobile-tool-btn"
+					onclick={toggleTheme}
+					title={isDark() ? m.ui_light_mode() : m.ui_dark_mode()}
+				>
+					<span>{isDark() ? "☀️" : "🌙"}</span>
+					<span>{isDark() ? m.ui_light_mode() : m.ui_dark_mode()}</span>
+				</button>
+				<LanguageSwitcher />
+				{#if isAuthenticated() && (getUser()?.role === "admin" || getUser()?.role === "manager")}
+					<a
+						href="/support-workspace"
+						class="mobile-tool-btn"
+						onclick={() => (showMobileMenu = false)}
+						title={m.support_workspace_title()}
+					>
+						<span>🎧</span>
+						<span>CSKH</span>
+					</a>
+				{/if}
+			</div>
+			<hr class="mobile-divider mobile-tools-divider" />
 			<a href="/" class:active={$page.url.pathname === '/'} onclick={() => (showMobileMenu = false)}>{m.nav_home()}</a>
 			<a href="/stories" class:active={$page.url.pathname.startsWith('/stories')} onclick={() => (showMobileMenu = false)}>{m.nav_stories()}</a>
 			<a href="/videos" class:active={$page.url.pathname.startsWith('/videos')} onclick={() => (showMobileMenu = false)}>{m.nav_videos()}</a>
 			<a href="/music" class:active={$page.url.pathname.startsWith('/music')} onclick={() => (showMobileMenu = false)}>{m.nav_music()}</a>
 			<a href="/library" class:active={$page.url.pathname.startsWith('/library')} onclick={() => (showMobileMenu = false)}>{m.nav_library()}</a>
+			<a href="/world" class:active={$page.url.pathname.startsWith('/world')} onclick={() => (showMobileMenu = false)}>{m.search_3d_map()}</a>
 			<a href="/about" class:active={$page.url.pathname.startsWith('/about')} onclick={() => (showMobileMenu = false)}>{m.nav_about()}</a>
 			{#if isAuthenticated()}
 				<hr class="mobile-divider" />
@@ -279,6 +311,7 @@
 	</main>
 
 	<!-- Global Components -->
+	<GlobalAudioPlayer />
 	<PrivateChat />
 	<SupportChatWidget />
 	<Toast />
@@ -309,6 +342,7 @@
 						<a href="/videos">{m.nav_videos()}</a>
 						<a href="/music">{m.nav_music()}</a>
 						<a href="/library">{m.nav_library()}</a>
+						<a href="/world">{m.search_3d_map()}</a>
 					</div>
 				</div>
 				<div class="footer-col">
@@ -382,25 +416,27 @@
 	.header-inner {
 		max-width: 1280px;
 		margin: 0 auto;
-		padding: 0 1.5rem;
+		padding: 0 clamp(0.75rem, 2.5vw, 1.5rem);
 		height: 64px;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		gap: 0.5rem;
 	}
 
 	.brand {
 		display: flex;
 		align-items: center;
-		gap: 0.55rem;
-		min-width: 0;
+		gap: 0.45rem;
+		flex-shrink: 0;
 	}
 
 	.logo-link {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 0.45rem;
 		text-decoration: none;
+		flex-shrink: 0;
 	}
 
 	.logo-text {
@@ -411,6 +447,7 @@
 		-webkit-text-fill-color: transparent;
 		background-clip: text;
 		letter-spacing: -0.02em;
+		white-space: nowrap;
 	}
 
 	:global(html[data-theme="light"]) .logo-text {
@@ -422,9 +459,10 @@
 
 	.logo-image {
 		display: none;
-		height: 32px;
-		width: 32px;
+		height: 36px;
+		width: 36px;
 		object-fit: contain;
+		flex-shrink: 0;
 	}
 
 	.logo-text-group {
@@ -433,14 +471,22 @@
 		gap: 0.5rem;
 	}
 
+	.main-nav {
+		display: flex;
+		align-items: center;
+		gap: clamp(0.1rem, 0.35vw, 0.3rem);
+		flex-shrink: 0;
+	}
+
 	.nav-link {
-		padding: 0.5rem 0.875rem;
+		padding: 0.45rem clamp(0.45rem, 0.8vw, 0.85rem);
 		color: var(--color-text-secondary);
 		text-decoration: none;
-		font-size: 0.875rem;
+		font-size: clamp(0.8125rem, 0.9vw, 0.875rem);
 		font-weight: 500;
 		border-radius: var(--radius-md);
 		transition: all 0.2s ease;
+		white-space: nowrap;
 	}
 
 	.nav-link:hover, .nav-link.active {
@@ -463,7 +509,13 @@
 
 	.header-actions {
 		display: flex;
-		gap: 0.5rem;
+		gap: clamp(0.3rem, 0.7vw, 0.5rem);
+		align-items: center;
+		flex-shrink: 0;
+	}
+
+	.lang-header-wrap {
+		display: inline-flex;
 		align-items: center;
 	}
 
@@ -830,11 +882,11 @@
 		position: fixed;
 		top: 64px;
 		right: 0;
-		width: 260px;
-		max-height: calc(100vh - 64px);
+		width: min(280px, 85vw);
+		max-height: calc(100dvh - 64px);
 		background: var(--color-surface-100);
 		border-left: 1px solid rgba(255, 255, 255, 0.06);
-		padding: 1rem 0;
+		padding: 0.75rem 0 1.25rem;
 		z-index: 200;
 		overflow-y: auto;
 		animation: slideRight 0.2s ease;
@@ -842,7 +894,31 @@
 	:global(html[data-theme="light"]) .mobile-nav {
 		border-left-color: rgba(0, 0, 0, 0.1);
 	}
-	.mobile-nav a {
+	.mobile-quick-tools {
+		display: none;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.25rem 1rem 0.5rem;
+		flex-wrap: wrap;
+	}
+	.mobile-tools-divider {
+		display: none;
+	}
+	.mobile-tool-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.35rem 0.65rem;
+		border-radius: var(--radius-md);
+		border: 1px solid var(--color-border);
+		background: var(--color-surface-200);
+		color: var(--color-text-primary);
+		font-size: 0.78rem;
+		font-weight: 600;
+		cursor: pointer;
+		text-decoration: none;
+	}
+	.mobile-nav > a {
 		display: block;
 		padding: 0.65rem 1.25rem;
 		color: var(--color-text-secondary);
@@ -851,14 +927,14 @@
 		font-weight: 500;
 		transition: all 0.15s;
 	}
-	.mobile-nav a:hover,
-	.mobile-nav a.active {
+	.mobile-nav > a:hover,
+	.mobile-nav > a.active {
 		background: rgba(255, 255, 255, 0.04);
 		color: var(--color-brand-400);
 		box-shadow: inset 4px 0 0 var(--color-brand-400);
 	}
-	:global(html[data-theme="light"]) .mobile-nav a:hover,
-	:global(html[data-theme="light"]) .mobile-nav a.active {
+	:global(html[data-theme="light"]) .mobile-nav > a:hover,
+	:global(html[data-theme="light"]) .mobile-nav > a.active {
 		background: rgba(0, 0, 0, 0.04);
 		color: var(--color-brand-600);
 		box-shadow: inset 4px 0 0 var(--color-brand-600);
@@ -899,18 +975,22 @@
 		font-size: 1.1rem;
 	}
 
-	@media (max-width: 1024px) {
-		.logo-text {
-			font-size: 1.85rem;
+	@media (max-width: 1240px) {
+		.user-name {
+			display: none;
 		}
+		.user-btn {
+			padding: 0.22rem;
+		}
+	}
+
+	@media (max-width: 1120px) {
 		.main-nav {
 			display: none;
 		}
 		.mobile-toggle {
 			display: block;
-		}
-		.user-name {
-			display: none;
+			flex-shrink: 0;
 		}
 		.login-text {
 			display: none;
@@ -926,19 +1006,22 @@
 			background: rgba(255, 255, 255, 0.04);
 			border: 1px solid rgba(255, 255, 255, 0.08);
 		}
-		.logo-text-group {
-			display: none;
-		}
 		.logo-image {
 			display: block;
-			height: 52px;
-			width: 52px;
+			height: 36px;
+			width: 36px;
 			border-radius: 8px;
+		}
+		.logo-text {
+			font-size: 1.25rem;
 		}
 		.footer-container {
 			grid-template-columns: 1fr;
-			gap: 40px;
-			padding: 40px 20px 20px;
+			gap: 2.25rem;
+			padding: 2.5rem 1.25rem 1.25rem;
+		}
+		.footer-newsletter {
+			margin-top: 0;
 		}
 		.footer-columns {
 			grid-template-columns: repeat(2, 1fr);
@@ -959,14 +1042,36 @@
 			display: flex;
 			gap: 12px;
 			justify-content: center;
-			flex-wrap: nowrap;
+			flex-wrap: wrap;
+			margin-bottom: 0.5rem;
+		}
+	}
+
+	@media (max-width: 640px) {
+		.logo-text-group {
+			display: none;
+		}
+		.logo-image {
+			height: 34px;
+			width: 34px;
+		}
+		.support-header-btn,
+		.theme-header-btn,
+		.lang-header-wrap {
+			display: none;
+		}
+		.mobile-quick-tools {
+			display: flex;
+		}
+		.mobile-tools-divider {
+			display: block;
 		}
 	}
 
 	@media (max-width: 480px) {
 		.footer-columns {
 			grid-template-columns: 1fr;
-			gap: 2.5rem;
+			gap: 2rem;
 		}
 	}
 </style>

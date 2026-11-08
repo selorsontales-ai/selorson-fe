@@ -55,7 +55,7 @@
 		border: 1px solid rgba(255, 255, 255, 0.08);
 		border-radius: var(--radius-xl);
 		box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
-		max-height: 85vh;
+		max-height: calc(100dvh - 2rem);
 		overflow-y: auto;
 		width: 100%;
 	}
@@ -74,7 +74,7 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 1.25rem 1.5rem;
+		padding: clamp(0.9rem, 2.5vw, 1.25rem) clamp(1rem, 3vw, 1.5rem);
 		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 	}
 
@@ -114,7 +114,7 @@
 	}
 
 	.modal-body {
-		padding: 1.5rem;
+		padding: clamp(1rem, 3vw, 1.5rem);
 	}
 
 	/* ---- Form Elements inside modal ---- */

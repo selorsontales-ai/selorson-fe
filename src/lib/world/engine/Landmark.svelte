@@ -15,6 +15,7 @@
 	import { buildLandmark } from '../builders';
 	import { disposeGroup } from '../builders/kit';
 	import type { WorldNode } from '../types';
+	import { isExploredState, isUnlockedState } from '../world-utils';
 
 	interface Props {
 		node: WorldNode & { lat: number; lng: number };
@@ -32,6 +33,8 @@
 	let rise = $state(0);
 
 	let buildable = $derived(node.state !== 'hidden');
+	let unlocked = $derived(isUnlockedState(node.state));
+	let explored = $derived(isExploredState(node.state));
 	let wanted = $derived(buildable && (active || selected));
 
 	$effect(() => {
@@ -67,7 +70,12 @@
 	);
 
 	const PIN_COLOR = '#00f0ff';
+	const EXPLORED_COLOR = '#34d399';
 	const ACTIVE_COLOR = '#ffb703';
+
+	let pinColor = $derived(
+		selected ? ACTIVE_COLOR : explored ? EXPLORED_COLOR : unlocked ? PIN_COLOR : '#475569'
+	);
 </script>
 
 <T.Group position={[position.x, position.y, position.z]}>
@@ -85,9 +93,9 @@
 	>
 		<T.CylinderGeometry args={[0.12, 0.12, 0.32, 8]} />
 		<T.MeshStandardMaterial
-			color={node.state === 'revealed' ? (selected ? ACTIVE_COLOR : PIN_COLOR) : '#475569'}
-			emissive={node.state === 'revealed' ? (selected ? ACTIVE_COLOR : PIN_COLOR) : '#000000'}
-			emissiveIntensity={node.state === 'revealed' ? 0.5 : 0}
+			color={pinColor}
+			emissive={unlocked ? pinColor : '#000000'}
+			emissiveIntensity={unlocked ? 0.55 : 0}
 			transparent
 			opacity={node.state === 'hidden' ? 0.3 : 1}
 		/>

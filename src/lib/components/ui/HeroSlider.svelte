@@ -3,7 +3,7 @@
 	import { isAuthenticated } from '$lib/stores/auth.svelte';
 	import { onMount } from 'svelte';
 	import * as m from '$lib/paraglide/messages';
-
+	
 	// ── Types ──
 
 	interface HeroSlide {
@@ -51,9 +51,12 @@
 		isWelcome?: boolean;
 	}
 
-	// ── State ──
+	// ── Props & State ──
 
-	let heroSlides = $state<HeroSlide[]>([]);
+	let { initialSlides = null }: { initialSlides?: HeroSlide[] | null } = $props();
+
+	let fetchedSlides = $state<HeroSlide[]>([]);
+	let heroSlides = $derived(initialSlides !== null ? initialSlides : fetchedSlides);
 	let notifications = $state<Notification[]>([]);
 	let current = $state(0);
 	let intervalId: ReturnType<typeof setInterval>;
@@ -69,7 +72,7 @@
 				title: n.title,
 				description: n.content,
 				image: n.image_url,
-				badge: n.type === 'vote' ? '🗳️ Bình Chọn' : n.type === 'announcement' ? '📢 Thông Báo' : '📋 Tin Tức',
+				badge: n.type === 'vote' ? m.ui_poll() : n.type === 'announcement' ? m.ui_announcement() : m.ui_news(),
 				buttonText: null,
 				linkUrl: null,
 				isNotification: true,
@@ -116,16 +119,16 @@
 		let isMounted = true;
 
 		const loadHeroSlides = async () => {
+			if (initialSlides !== null) return;
 			try {
 				const res = await api<any>('/homepage');
-				if (isMounted) heroSlides = res.data?.hero_slides || [];
+				if (isMounted) fetchedSlides = res.data?.hero_slides || [];
 			} catch {
-				if (isMounted) heroSlides = [];
+				if (isMounted) fetchedSlides = [];
 			}
 		};
 
 		const loadNotifications = async () => {
-			if (!isAuthenticated()) return;
 			try {
 				const res = await api<any>('/notifications');
 				if (isMounted) notifications = res.data || [];
@@ -224,6 +227,7 @@
 						</p>
 						<div class="welcome-actions">
 							<a href="/stories" class="welcome-btn-primary">{m.home_read_stories()}</a>
+							<a href="/world" class="welcome-btn-ghost">🌐 {m.ui_3d_map()}</a>
 							<a href="/about" class="welcome-btn-ghost">{m.home_learn_more()}</a>
 						</div>
 					</div>
@@ -263,7 +267,7 @@
 										</div>
 									</button>
 								{/each}
-								<p class="vote-total">{slide.totalVotes || 0} lượt bình chọn</p>
+								<p class="vote-total">{slide.totalVotes || 0} {m.ui_votes()}</p>
 							</div>
 						{/if}
 					</div>
@@ -301,23 +305,32 @@
 	.hero-slider {
 		position: relative;
 		width: 100%;
-		height: 65vh;
-		min-height: 400px;
-		max-height: 700px;
+		display: grid;
+		grid-template-areas: 'slide';
+		min-height: clamp(22rem, 58dvh, 38rem);
 		overflow: hidden;
 	}
 
 	/* ══════════════ Slide ══════════════ */
 	.slide {
-		position: absolute;
-		inset: 0;
+		grid-area: slide;
+		position: relative;
+		width: 100%;
+		min-height: clamp(22rem, 58dvh, 38rem);
+		display: flex;
+		align-items: center;
 		background-size: cover;
 		background-position: center;
 		background-color: #0c713d;
 		opacity: 0;
+		pointer-events: none;
 		transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 	}
-	.slide.active { opacity: 1; }
+	.slide.active {
+		opacity: 1;
+		pointer-events: auto;
+		z-index: 1;
+	}
 
 	.slide.welcome-slide {
 		background: linear-gradient(135deg, rgba(12, 113, 61, 0.95) 0%, rgba(12, 113, 61, 0.85) 50%, rgba(20, 90, 50, 0.9) 100%);
@@ -336,9 +349,9 @@
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
-		height: 100%;
-		padding: 3rem 4rem;
-		max-width: 700px;
+		width: 100%;
+		padding: clamp(2rem, 4.5vw, 3.5rem) clamp(1.25rem, 6vw, 4rem) clamp(3.5rem, 6vw, 4.5rem);
+		max-width: 720px;
 	}
 
 	.slide-content.vote-layout {
@@ -362,7 +375,7 @@
 
 	/* ══════════════ Title & Desc ══════════════ */
 	.slide-title {
-		font-size: 2.5rem;
+		font-size: clamp(1.45rem, 3.8vw, 2.5rem);
 		font-weight: 800;
 		color: #fff;
 		margin: 0 0 0.75rem;
@@ -371,9 +384,9 @@
 	}
 
 	.slide-desc {
-		font-size: 1.0625rem;
+		font-size: clamp(0.92rem, 1.8vw, 1.0625rem);
 		color: rgba(255,255,255,0.85);
-		margin: 0 0 1.5rem;
+		margin: 0 0 1.35rem;
 		line-height: 1.6;
 		max-width: 500px;
 	}
@@ -508,17 +521,18 @@
 		flex-direction: column;
 		justify-content: center;
 		align-items: center;
-		height: 100%;
-		padding: 3rem 4rem 6rem 4rem; /* Extra bottom padding to stay away from dots */
+		width: 100%;
+		margin: auto;
+		padding: clamp(2.25rem, 5vw, 3.5rem) clamp(1.25rem, 6vw, 4rem) clamp(3.75rem, 7vw, 5.5rem);
 		text-align: center;
 	}
 
 	.welcome-title {
 		font-family: 'Playfair Display', serif;
-		font-size: 4rem;
-		margin: 20px 0;
+		font-size: clamp(1.85rem, 5.5vw, 4rem);
+		margin: 0 0 0.65rem;
 		text-transform: uppercase;
-		letter-spacing: 3px;
+		letter-spacing: clamp(1px, 0.35vw, 3px);
 		font-weight: 900;
 		text-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.5);
 		line-height: 1.2;
@@ -526,37 +540,39 @@
 	}
 
 	:global(html[data-theme='light']) .welcome-title {
-		color: #000;
+		color: #fff;
 	}
 
 	.welcome-desc {
-		font-size: 1.3rem;
+		font-size: clamp(0.95rem, 2.2vw, 1.3rem);
 		color: rgba(255, 255, 255, 0.95);
-		margin: 25px auto 40px;
-		line-height: 1.8;
+		margin: 0.5rem auto clamp(1.25rem, 3.5vw, 2.25rem);
+		line-height: 1.65;
 		max-width: 600px;
 		text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 	}
 
 	:global(html[data-theme='light']) .welcome-desc {
-		color: #000;
+		color: rgba(255, 255, 255, 0.95);
 	}
 
 	.welcome-actions {
 		display: flex;
-		gap: 1rem;
+		flex-wrap: wrap;
+		gap: 0.75rem 1rem;
 		align-items: center;
 		justify-content: center;
 	}
 
 	.welcome-btn-primary {
-		padding: 0.75rem 1.5rem;
+		padding: 0.72rem 1.35rem;
 		background: #fff;
 		color: #0c713d;
 		border-radius: 0.5rem;
 		text-decoration: none;
 		font-weight: 700;
-		font-size: 0.9375rem;
+		font-size: 0.9rem;
+		white-space: nowrap;
 		transition: all 0.2s ease;
 		box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 	}
@@ -567,14 +583,15 @@
 	}
 
 	.welcome-btn-ghost {
-		padding: 0.75rem 1.5rem;
+		padding: 0.72rem 1.35rem;
 		background: rgba(255, 255, 255, 0.1);
 		color: #fff;
 		border: 2px solid #fff;
 		border-radius: 0.5rem;
 		text-decoration: none;
 		font-weight: 700;
-		font-size: 0.9375rem;
+		font-size: 0.9rem;
+		white-space: nowrap;
 		transition: all 0.2s ease;
 	}
 	.welcome-btn-ghost:hover {
@@ -585,19 +602,40 @@
 
 	/* ══════════════ Responsive ══════════════ */
 	@media (max-width: 768px) {
-		.hero-slider { height: 50vh; min-height: 320px; }
-		.slide-content, .welcome-content { padding: 2rem; }
-		.slide-title { font-size: 1.75rem; }
-		.welcome-title { font-size: 2.5rem; }
-		.welcome-actions { flex-direction: row; flex-wrap: nowrap; gap: 0.5rem; justify-content: center; width: 100%; }
-		.welcome-actions a { width: auto; flex: 1; padding: 0.75rem 0.5rem; font-size: 0.85rem; text-align: center; white-space: nowrap; max-width: 180px; }
-		.vote-panel { max-width: 100%; }
+		.hero-slider,
+		.slide {
+			min-height: clamp(19rem, 48dvh, 28rem);
+		}
+		.welcome-actions {
+			width: 100%;
+			gap: 0.65rem;
+		}
+		.welcome-actions a {
+			flex: 1 1 135px;
+			max-width: 200px;
+			padding: 0.68rem 0.85rem;
+			font-size: 0.84rem;
+			text-align: center;
+		}
+		.vote-panel {
+			max-width: 100%;
+		}
 	}
 
 	@media (max-width: 480px) {
-		.slide-content, .welcome-content { padding: 1.5rem; }
-		.slide-title { font-size: 1.375rem; }
-		.welcome-title { font-size: 2rem; }
-		.slider-arrow { width: 36px; height: 36px; font-size: 1.25rem; }
+		.slider-arrow {
+			width: 34px;
+			height: 34px;
+			font-size: 1.15rem;
+		}
+		.prev {
+			left: 0.5rem;
+		}
+		.next {
+			right: 0.5rem;
+		}
+		.dots {
+			bottom: 1rem;
+		}
 	}
 </style>

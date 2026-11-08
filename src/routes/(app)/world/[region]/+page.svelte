@@ -2,10 +2,11 @@
 	/** L2 — a single region. Same load-on-demand shape as the globe page. */
 	import { page } from '$app/state';
 	import * as m from '$lib/paraglide/messages';
-	import { fetchRegion } from '$lib/world/api';
+	import { fetchRegion, markVisited } from '$lib/world/api';
 	import { resolveQuality, type QualitySettings } from '$lib/world/quality';
 	import type { RegionDetail, WorldNode } from '$lib/world/types';
 	import RegionHud from '$lib/world/ui/RegionHud.svelte';
+	import { findNodeByFocusParam } from '$lib/world/world-utils';
 	import { onMount } from 'svelte';
 
 	let slug = $derived(page.params.region ?? '');
@@ -20,25 +21,59 @@
 
 	let selected = $state<WorldNode | null>(null);
 	let hovered = $state<WorldNode | null>(null);
+	let loadedSlug = $state<string | null>(null);
 
-	onMount(async () => {
-		const resolvedQuality = resolveQuality(new URLSearchParams(location.search));
+	async function loadRegionData(targetSlug: string) {
+		if (!targetSlug) return;
+		loading = true;
+		notFound = false;
+		selected = null;
+		hovered = null;
+
+		const params = new URLSearchParams(location.search);
+		const resolvedQuality = quality ?? resolveQuality(params);
 		quality = resolvedQuality;
 		const canvasPromise =
-			resolvedQuality.tier !== 'none'
-				? import('$lib/world/engine/RegionCanvas.svelte')
-						.then((module) => module.default)
-						.catch(() => null)
-				: Promise.resolve(null);
+			CanvasComponent !== null
+				? Promise.resolve(CanvasComponent)
+				: resolvedQuality.tier !== 'none'
+					? import('$lib/world/engine/RegionCanvas.svelte')
+							.then((module) => module.default)
+							.catch(() => null)
+					: Promise.resolve(null);
 
 		try {
-			const [loadedDetail, canvas] = await Promise.all([fetchRegion(slug), canvasPromise]);
+			const [loadedDetail, canvas] = await Promise.all([
+				fetchRegion(targetSlug),
+				canvasPromise
+			]);
 			detail = loadedDetail;
 			CanvasComponent = canvas;
+			loadedSlug = targetSlug;
+			void markVisited(loadedDetail.region.id);
+
+			const focusParam = params.get('focus') ?? params.get('id');
+			if (focusParam) {
+				const matched = findNodeByFocusParam(loadedDetail.places, focusParam);
+				if (matched && matched.state !== 'hidden') {
+					selected = matched;
+				}
+			}
 		} catch {
 			notFound = true;
 		} finally {
 			loading = false;
+		}
+	}
+
+	onMount(() => {
+		void loadRegionData(slug);
+	});
+
+	$effect(() => {
+		const currentSlug = slug;
+		if (loadedSlug !== null && currentSlug && currentSlug !== loadedSlug) {
+			void loadRegionData(currentSlug);
 		}
 	});
 </script>
@@ -55,17 +90,33 @@
 			<p>{m.world_region_not_found()}</p>
 			<a class="fallback-link" href="/world">{m.world_back_to_globe()}</a>
 		</div>
-	{:else if CanvasComponent && quality}
+	{:else}
 		<div class="stage">
-			<CanvasComponent
-				region={detail.region}
-				places={detail.places}
-				{quality}
-				{selected}
-				{hovered}
-				onselect={(node) => (selected = node)}
-				onhover={(node) => (hovered = node)}
-			/>
+			{#if CanvasComponent && quality && quality.tier !== 'none'}
+				{#key detail.region.id}
+					<CanvasComponent
+						region={detail.region}
+						places={detail.places}
+						{quality}
+						{selected}
+						{hovered}
+						onselect={(node) => (selected = node)}
+						onhover={(node) => (hovered = node)}
+					/>
+				{/key}
+			{:else}
+				<div class="region-2d-backdrop">
+					{#if detail.region.image_url}
+						<img src={detail.region.image_url} alt={detail.region.name ?? ''} class="backdrop-img" />
+					{/if}
+					<div class="backdrop-card">
+						<h2>🗺️ {detail.region.name}</h2>
+						{#if detail.region.description}
+							<p>{detail.region.description}</p>
+						{/if}
+					</div>
+				</div>
+			{/if}
 			<RegionHud
 				region={detail.region}
 				places={detail.places}
@@ -73,11 +124,6 @@
 				{selected}
 				onselect={(node) => (selected = node)}
 			/>
-		</div>
-	{:else}
-		<div class="region-msg">
-			<p>{m.world_no_webgl()}</p>
-			<a class="fallback-link" href="/library">{m.world_open_library()}</a>
 		</div>
 	{/if}
 </section>
@@ -94,6 +140,50 @@
 	.stage {
 		position: absolute;
 		inset: 0;
+	}
+	.region-2d-backdrop {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: clamp(3.5rem, 6vw, 5rem) clamp(1rem, 16vw, 21rem);
+		background: radial-gradient(ellipse at center, #0c2238 0%, #04101a 100%);
+	}
+	@media (max-width: 1024px) {
+		.region-2d-backdrop {
+			padding: 4rem 1rem 2rem;
+		}
+	}
+	.backdrop-img {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		opacity: 0.22;
+		filter: blur(4px);
+	}
+	.backdrop-card {
+		position: relative;
+		z-index: 2;
+		max-width: 34rem;
+		padding: 1.5rem;
+		border-radius: 14px;
+		background: rgba(8, 16, 28, 0.84);
+		border: 1px solid rgba(56, 189, 248, 0.2);
+		color: #e2e8f0;
+		text-align: center;
+	}
+	.backdrop-card h2 {
+		margin: 0 0 0.6rem;
+		font-size: 1.35rem;
+	}
+	.backdrop-card p {
+		margin: 0;
+		font-size: 0.9rem;
+		line-height: 1.65;
+		color: #cbd5e1;
 	}
 	.region-msg {
 		position: absolute;

@@ -527,7 +527,8 @@
 		margin-bottom: 1rem;
 	}
 	.search {
-		min-width: 14rem;
+		flex: 1 1 min(100%, 14rem);
+		min-width: 0;
 	}
 
 	button,
@@ -738,10 +739,12 @@
 	}
 	.upload-row {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0.5rem;
 	}
 	.upload-row input {
-		flex: 1;
+		flex: 1 1 180px;
+		min-width: 0;
 	}
 	fieldset {
 		border: 1px solid rgba(255, 255, 255, 0.12);

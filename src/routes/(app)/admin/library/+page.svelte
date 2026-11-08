@@ -1,6 +1,8 @@
 <script lang="ts">
 	import AdminModal from '$lib/components/admin/AdminModal.svelte';
+	import CmsEnTranslationFields from '$lib/components/admin/CmsEnTranslationFields.svelte';
 	import WorldPlacementFields from '$lib/components/admin/WorldPlacementFields.svelte';
+	import BetaToAlphaPromoteModal from '$lib/components/desktop/BetaToAlphaPromoteModal.svelte';
 	import {
 		adminGet,
 		adminPost,
@@ -22,8 +24,42 @@
 		display_order: number;
 		is_active: boolean;
 		extra_data?: Record<string, unknown> | null;
+		translations?: Record<
+			string,
+			{
+				name?: string;
+				description?: string | null;
+				role?: string | null;
+				aliases?: string[];
+			}
+		>;
 		[key: string]: unknown;
 	}
+
+	const LIB_EN_SPECS = [
+		{
+			key: 'name',
+			label: 'Tên thực thể Tiếng Anh (EN — bắt buộc nếu bật bản dịch EN)',
+			placeholder: 'VD: Dipterocarp Forest, Hokabe Pha...'
+		},
+		{
+			key: 'role',
+			label: 'Vai trò / Phân loại phụ (EN)',
+			placeholder: 'VD: Protagonist, Origin Zone, Ancient Relic...'
+		},
+		{
+			key: 'aliases',
+			label: 'Bí danh Tiếng Anh (cách nhau bằng dấu phẩy — dùng gạch chân tra cứu trong câu văn EN)',
+			placeholder: 'VD: Southern Woods, The Blind Wanderer'
+		},
+		{
+			key: 'description',
+			label: 'Mô tả thực thể (EN)',
+			placeholder: 'Mô tả tiếng Anh hiển thị trong Thư Viện Thế Giới & Bản Đồ 3D...',
+			multiline: true,
+			rows: 4
+		}
+	];
 
 	let items = $state<LibraryItemRow[]>([]);
 	let loading = $state(true);
@@ -34,6 +70,7 @@
 	let syncFileInput = $state<HTMLInputElement>();
 	let syncingBundle = $state(false);
 	let syncingLocal = $state(false);
+	let showPromoteModal = $state(false);
 
 	// Filters (World-Bible style)
 	let searchQuery = $state('');
@@ -46,6 +83,10 @@
 		{ value: 'location', label: 'Địa điểm', icon: '🗺️' },
 		{ value: 'item', label: 'Vật phẩm', icon: '⚔️' },
 		{ value: 'faction', label: 'Thế lực', icon: '🏛️' },
+		{ value: 'creature', label: 'Sinh vật', icon: '🐉' },
+		{ value: 'magic', label: 'Cổ pháp / Kỹ năng', icon: '✨' },
+		{ value: 'event', label: 'Sự kiện', icon: '⏳' },
+		{ value: 'concept', label: 'Khái niệm', icon: '🔮' },
 		{ value: 'lore', label: 'Truyền thuyết / Lore', icon: '📜' }
 	];
 
@@ -83,6 +124,7 @@
 
 	let pendingCount = $derived(items.filter((i) => !i.is_active).length);
 	let activeCount = $derived(items.filter((i) => i.is_active).length);
+	let batchPublishingLore = $state(false);
 
 	let filteredItems = $derived(
 		items.filter((item) => {
@@ -96,9 +138,49 @@
 			const inAliases = getAliases(item).some((a) => a.toLowerCase().includes(q));
 			const inRole = getRole(item).toLowerCase().includes(q);
 			const inKey = getCowriterKey(item).toLowerCase().includes(q);
-			return inName || inDesc || inAliases || inRole || inKey;
+			const enTr = item.translations?.en;
+			const inEn =
+				(enTr?.name ?? '').toLowerCase().includes(q) ||
+				(enTr?.role ?? '').toLowerCase().includes(q) ||
+				(Array.isArray(enTr?.aliases) &&
+					enTr.aliases.some((a) => String(a).toLowerCase().includes(q)));
+			return inName || inDesc || inAliases || inRole || inKey || inEn;
 		})
 	);
+
+	let pendingInFiltered = $derived(filteredItems.filter((i) => !i.is_active));
+
+	async function publishFilteredPendingLore() {
+		const ids = pendingInFiltered.map((i) => i.id);
+		if (ids.length === 0 || batchPublishingLore) return;
+		if (
+			!confirm(
+				`Xuất bản công khai ${ids.length} thực thể Thư viện đang ẩn (theo bộ lọc hiện tại) ra Thư Viện & Bản Đồ 3D?`
+			)
+		)
+			return;
+		batchPublishingLore = true;
+		try {
+			const res = await adminPost<any>('/admin/publish-batch', {
+				chapter_ids: [],
+				manga_chapter_ids: [],
+				library_item_ids: ids,
+				action: 'publish'
+			});
+			if (res.success) {
+				toast_success(
+					`Đã xuất bản công khai ${res.data?.updated_library ?? ids.length} thực thể Thư viện!`
+				);
+				await fetchItems();
+			} else {
+				toast_error(res.message || 'Lỗi khi xuất bản hàng loạt');
+			}
+		} catch {
+			toast_error('Lỗi khi xuất bản hàng loạt');
+		} finally {
+			batchPublishingLore = false;
+		}
+	}
 
 	const emptyForm = () => ({
 		name: '',
@@ -116,6 +198,13 @@
 	});
 
 	let form = $state(emptyForm());
+	let enFields = $state<Record<string, string>>({
+		name: '',
+		role: '',
+		aliases: '',
+		description: ''
+	});
+	let hadExistingEn = $state(false);
 
 	async function fetchItems() {
 		loading = true;
@@ -131,6 +220,8 @@
 	function openCreate() {
 		editing = null;
 		form = emptyForm();
+		enFields = { name: '', role: '', aliases: '', description: '' };
+		hadExistingEn = false;
 		showForm = true;
 	}
 
@@ -151,6 +242,16 @@
 			cowriter_key: getCowriterKey(item),
 			extra_data: extra
 		};
+		const en = item.translations?.en;
+		enFields = {
+			name: en?.name ?? '',
+			role: en?.role ?? '',
+			aliases: Array.isArray(en?.aliases) ? en.aliases.join(', ') : '',
+			description: en?.description ?? ''
+		};
+		hadExistingEn = Boolean(
+			en?.name?.trim() || en?.role?.trim() || en?.description?.trim() || en?.aliases?.length
+		);
 		showForm = true;
 	}
 
@@ -193,22 +294,45 @@
 		};
 	}
 
+	async function syncLibraryEnTranslation(itemId: number | undefined | null) {
+		const id = Number(itemId);
+		if (!Number.isFinite(id) || id <= 0) return;
+		const hasAny =
+			Boolean(enFields.name?.trim()) ||
+			Boolean(enFields.role?.trim()) ||
+			Boolean(enFields.aliases?.trim()) ||
+			Boolean(enFields.description?.trim());
+		if (!hasAny && !hadExistingEn) return;
+		if (hasAny && !enFields.name?.trim()) {
+			toast_error('Nếu nhập bản dịch Tiếng Anh cho thực thể, vui lòng điền Tên thực thể (EN).');
+			return;
+		}
+		await adminPut(`/admin/library/${id}/translations/en`, {
+			name: enFields.name ?? '',
+			role: enFields.role ?? '',
+			aliases: enFields.aliases ?? '',
+			description: enFields.description ?? ''
+		});
+	}
+
 	async function saveItem() {
 		try {
 			const payload = buildPayload();
 			if (editing) {
-				const r = await adminPut(`/admin/library/${editing.id}`, payload);
+				const r = await adminPut<any>(`/admin/library/${editing.id}`, payload);
 				if (!r.success) {
 					toast_error(r.message || 'Lỗi cập nhật');
 					return;
 				}
+				await syncLibraryEnTranslation(editing.id);
 				toast_success('Đã cập nhật thực thể Thư viện!');
 			} else {
-				const r = await adminPost('/admin/library', payload);
+				const r = await adminPost<any>('/admin/library', payload);
 				if (!r.success) {
 					toast_error(r.message || 'Lỗi tạo mới');
 					return;
 				}
+				await syncLibraryEnTranslation(Number(r.data?.id));
 				toast_success('Đã tạo thực thể mới!');
 			}
 			showForm = false;
@@ -324,7 +448,7 @@
 				manga_pages_synced: number;
 			}>('/admin/sync/cowriter/local', {
 				chapter_source_kind: 'none',
-				chapter_id: null,
+				chapter_source_id: null,
 				chapter_number: null,
 				manga_episode_id: null,
 				manga_reading_mode: null,
@@ -362,10 +486,15 @@
 					}
 				}
 			}
-			if (payload.manga_episode && Array.isArray(payload.manga_episode.pages)) {
-				for (const pg of payload.manga_episode.pages) {
-					if (typeof pg.image_base64 === 'string' && pg.image_base64.length > 650_000) {
-						pg.image_base64 = await compressBase64Image(pg.image_base64, 1600, 0.88);
+			if (payload.manga) {
+				for (const key of ['pages', 'color_pages', 'bw_pages'] as const) {
+					const list = payload.manga[key];
+					if (Array.isArray(list)) {
+						for (const pg of list) {
+							if (typeof pg?.image_base64 === 'string' && pg.image_base64.length > 650_000) {
+								pg.image_base64 = await compressBase64Image(pg.image_base64, 1600, 0.88);
+							}
+						}
 					}
 				}
 			}
@@ -436,9 +565,25 @@
 			>
 				{syncingBundle ? '⏳ Đang nhập gói...' : '📥 Nhập gói .json (Khác máy)'}
 			</button>
+			<button
+				type="button"
+				class="btn-promote-alpha"
+				onclick={() => (showPromoteModal = true)}
+				title="Đẩy chọn lọc Thực thể Thư viện, Bản đồ 3D & Chương truyện từ Beta lên Alpha"
+			>
+				🚀 Đẩy lên Alpha
+			</button>
 			<button type="button" class="btn-create" onclick={openCreate}>+ Thêm Thực Thể</button>
 		</div>
 	</header>
+
+	{#if showPromoteModal}
+		<BetaToAlphaPromoteModal
+			open={showPromoteModal}
+			onclose={() => (showPromoteModal = false)}
+			onpromoted={fetchItems}
+		/>
+	{/if}
 
 	<!-- Thanh lọc Trạng thái & Danh mục (Kiểu Kinh Thánh Thế Giới) -->
 	<div class="filter-panel">
@@ -467,6 +612,19 @@
 			>
 				✅ Đã xuất bản ({activeCount})
 			</button>
+
+			{#if pendingInFiltered.length > 0}
+				<button
+					type="button"
+					class="btn-batch-publish-lore"
+					disabled={batchPublishingLore}
+					onclick={publishFilteredPendingLore}
+				>
+					{batchPublishingLore
+						? '⏳ Đang xuất bản...'
+						: `✨ Xuất bản ${pendingInFiltered.length} thực thể đang lọc`}
+				</button>
+			{/if}
 		</div>
 
 		<div class="filter-bar">
@@ -522,9 +680,14 @@
 					<div class="card-body">
 						<div class="card-title-row">
 							<h3>{item.name}</h3>
-							{#if firstCh}
-								<span class="first-ch-badge" title="Chương xuất hiện đầu tiên">Ch.{firstCh}</span>
-							{/if}
+							<div style="display:flex;gap:0.35rem;align-items:center;">
+								{#if item.translations?.en?.name}
+									<span class="en-lib-badge" title="Tên EN: {item.translations.en.name}">🇬🇧 EN</span>
+								{/if}
+								{#if firstCh}
+									<span class="first-ch-badge" title="Chương xuất hiện đầu tiên">Ch.{firstCh}</span>
+								{/if}
+							</div>
 						</div>
 
 						{#if role}
@@ -593,6 +756,10 @@
 						<option value="location">🗺️ Địa điểm (Location)</option>
 						<option value="item">⚔️ Vật phẩm (Item)</option>
 						<option value="faction">🏛️ Thế lực / Tổ chức (Faction)</option>
+						<option value="creature">🐉 Sinh vật (Creature)</option>
+						<option value="magic">✨ Cổ pháp / Kỹ năng (Magic)</option>
+						<option value="event">⏳ Sự kiện lịch sử (Event)</option>
+						<option value="concept">🔮 Khái niệm / Quy luật (Concept)</option>
 						<option value="lore">📜 Truyền thuyết / Lore</option>
 					</select>
 				</label>
@@ -677,6 +844,12 @@
 
 		<WorldPlacementFields bind:extraData={form.extra_data} itemKey={(editing?.id as number) ?? 'new'} />
 
+		<CmsEnTranslationFields
+			bind:fields={enFields}
+			specs={LIB_EN_SPECS}
+			title="🇬🇧 Bản dịch Tiếng Anh cho Thực Thể (EN — Thư Viện & Gạch chân Lore)"
+		/>
+
 		<label class="checkbox-label">
 			<input type="checkbox" bind:checked={form.is_active} />
 			<span>✅ Xuất bản công khai trên Thư Viện & Bản Đồ 3D (Bỏ chọn để giữ ở trạng thái Nháp/Ẩn)</span>
@@ -749,6 +922,18 @@
 	.btn-sync:hover {
 		border-color: var(--color-brand-400);
 	}
+	.btn-promote-alpha {
+		background: linear-gradient(135deg, #c43e2a, #991b1b);
+		color: #fff;
+		border: 1px solid rgba(248, 113, 113, 0.45);
+		padding: 0.55rem 1rem;
+		border-radius: var(--radius-md);
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.btn-promote-alpha:hover {
+		filter: brightness(1.08);
+	}
 
 	.filter-panel {
 		background: var(--color-surface-100);
@@ -784,6 +969,21 @@
 		background: #d97706;
 		color: #fff;
 	}
+	.btn-batch-publish-lore {
+		margin-left: auto;
+		padding: 0.42rem 0.95rem;
+		border-radius: var(--radius-md);
+		border: none;
+		background: linear-gradient(135deg, #0c713d, #059669);
+		color: #fff;
+		font-size: 0.8rem;
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.btn-batch-publish-lore:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
 
 	.filter-bar {
 		display: flex;
@@ -816,8 +1016,8 @@
 		font-weight: 600;
 	}
 	.search-box {
-		flex: 1;
-		min-width: 240px;
+		flex: 1 1 min(100%, 240px);
+		min-width: 0;
 		max-width: 360px;
 	}
 	.search-box input {
@@ -832,7 +1032,7 @@
 
 	.entity-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
 		gap: 1rem;
 	}
 	.entity-card {
@@ -1078,6 +1278,18 @@
 		color: #fff;
 		font-weight: 600;
 		cursor: pointer;
+	}
+	.en-lib-badge {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.1rem 0.42rem;
+		border-radius: 999px;
+		font-size: 0.68rem;
+		font-weight: 700;
+		background: rgba(59, 130, 246, 0.16);
+		color: #93c5fd;
+		border: 1px solid rgba(59, 130, 246, 0.32);
+		white-space: nowrap;
 	}
 	@media (max-width: 768px) {
 		.form-row-2,

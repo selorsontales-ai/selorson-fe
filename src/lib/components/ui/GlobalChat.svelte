@@ -1,8 +1,10 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount } from 'svelte';
 	import { isAuthenticated, getUser, getToken } from '$lib/stores/auth.svelte';
 	import { PUBLIC_API_BASE } from '$env/static/public';
+	import UserQuickCard from '$lib/components/ui/UserQuickCard.svelte';
 	import * as m from '$lib/paraglide/messages';
+	import { dateLocale } from '$lib/i18n-labels';
 
 	let isOpen = $state(false);
 	let isMinimized = $state(true);
@@ -12,10 +14,14 @@
 	let ws: WebSocket | null = null;
 	let reconnectTimer: ReturnType<typeof setTimeout>;
 	let chatContainer = $state<HTMLElement | null>(null);
+	let selectedChatUser = $state<any | null>(null);
 
 	onMount(() => {
 		if (isAuthenticated()) connectWebSocket();
-		return () => { if (ws) ws.close(); if (reconnectTimer) clearTimeout(reconnectTimer); };
+		return () => {
+			if (ws) ws.close();
+			if (reconnectTimer) clearTimeout(reconnectTimer);
+		};
 	});
 
 	function connectWebSocket() {
@@ -27,21 +33,24 @@
 		try {
 			ws = new WebSocket(wsUrl);
 
-			ws.onopen = () => { onlineCount = 1; };
+			ws.onopen = () => {
+				onlineCount = 1;
+			};
 
 			ws.onmessage = (event) => {
 				try {
 					const data = JSON.parse(event.data);
 					if (data.type === 'chat_message') {
 						if (data.conversation_id === 0 || !data.conversation_id) {
-							messages = [...messages.slice(-99), data]; // Keep last 100
+							messages = [...messages.slice(-99), data];
 							scrollToBottom();
 						} else {
-							// It's a Private Chat message!
-							import('$lib/stores/chat.svelte').then(m => m.handleIncomingMessage({
-								conversation_id: data.conversation_id,
-								message: data.message
-							}));
+							import('$lib/stores/chat.svelte').then((mod) =>
+								mod.handleIncomingMessage({
+									conversation_id: data.conversation_id,
+									message: data.message
+								})
+							);
 						}
 					} else if (data.type === 'user_count') {
 						onlineCount = data.count || 0;
@@ -52,7 +61,6 @@
 			};
 
 			ws.onclose = () => {
-				// Auto-reconnect after 3s
 				reconnectTimer = setTimeout(() => {
 					if (isAuthenticated()) connectWebSocket();
 				}, 3000);
@@ -62,10 +70,12 @@
 
 	function sendMessage() {
 		if (!newMsg.trim() || !ws || ws.readyState !== WebSocket.OPEN) return;
-		ws.send(JSON.stringify({
-			type: 'chat_message',
-			content: newMsg.trim(),
-		}));
+		ws.send(
+			JSON.stringify({
+				type: 'chat_message',
+				content: newMsg.trim()
+			})
+		);
 		newMsg = '';
 	}
 
@@ -76,13 +86,19 @@
 	}
 
 	function toggleChat() {
-		if (isMinimized) { isMinimized = false; isOpen = true; scrollToBottom(); }
-		else { isMinimized = true; isOpen = false; }
+		if (isMinimized) {
+			isMinimized = false;
+			isOpen = true;
+			scrollToBottom();
+		} else {
+			isMinimized = true;
+			isOpen = false;
+		}
 	}
 
 	function timeStr(ts: string) {
 		if (!ts) return '';
-		return new Date(ts).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+		return new Date(ts).toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' });
 	}
 </script>
 
@@ -117,17 +133,40 @@
 							{@const isSelf = msg.user_id === getUser()?.id}
 							<div class="msg" class:self={isSelf}>
 								{#if !isSelf}
-									<div class="msg-avatar">
+									<button
+										type="button"
+										class="msg-avatar"
+										onclick={() =>
+											(selectedChatUser = {
+												id: msg.user_id,
+												name: msg.username,
+												username: msg.username,
+												avatar: msg.avatar
+											})}
+										title={m.cmt_view_reader_profile()}
+									>
 										{#if msg.avatar}
 											<img src={msg.avatar} alt="" />
 										{:else}
 											<span>{msg.username?.charAt(0) || '?'}</span>
 										{/if}
-									</div>
+									</button>
 								{/if}
 								<div class="msg-body">
 									{#if !isSelf}
-										<span class="msg-name">{msg.username || 'User'}</span>
+										<button
+											type="button"
+											class="msg-name"
+											onclick={() =>
+												(selectedChatUser = {
+													id: msg.user_id,
+													name: msg.username,
+													username: msg.username,
+													avatar: msg.avatar
+												})}
+										>
+											{msg.username || 'User'}
+										</button>
 									{/if}
 									<p class="msg-text">{msg.content}</p>
 									<span class="msg-time">{timeStr(msg.timestamp)}</span>
@@ -144,7 +183,9 @@
 						type="text"
 						bind:value={newMsg}
 						placeholder={m.gchat_input()}
-						onkeydown={(e) => { if (e.key === 'Enter') sendMessage(); }}
+						onkeydown={(e) => {
+							if (e.key === 'Enter') sendMessage();
+						}}
 					/>
 					<button class="send-btn" onclick={sendMessage} disabled={!newMsg.trim()}>
 						➤
@@ -154,6 +195,13 @@
 		{/if}
 	</div>
 {/if}
+
+<UserQuickCard
+	open={Boolean(selectedChatUser)}
+	userId={selectedChatUser?.id ?? selectedChatUser?.username}
+	initialUser={selectedChatUser}
+	onClose={() => (selectedChatUser = null)}
+/>
 
 <style>
 	.global-chat {
@@ -166,7 +214,6 @@
 		align-items: flex-end;
 	}
 
-	/* Toggle Button */
 	.chat-toggle {
 		display: flex;
 		align-items: center;
@@ -192,7 +239,6 @@
 	}
 	@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
 
-	/* Chat Panel */
 	.chat-panel {
 		width: 340px;
 		max-height: 450px;
@@ -222,7 +268,6 @@
 	}
 	.online-count { font-size: 0.7rem; color: var(--color-text-muted); }
 
-	/* Messages */
 	.chat-messages {
 		flex: 1;
 		overflow-y: auto;
@@ -242,16 +287,28 @@
 		overflow: hidden; flex-shrink: 0;
 		background: var(--color-surface-300);
 		display: flex; align-items: center; justify-content: center;
+		border: none; padding: 0; cursor: pointer;
 	}
 	.msg-avatar img { width: 100%; height: 100%; object-fit: cover; }
 	.msg-avatar span { font-size: 0.65rem; font-weight: 700; color: var(--color-text-muted); }
 
 	.msg-body { max-width: 75%; }
-	.msg-name { font-size: 0.65rem; font-weight: 600; color: var(--color-brand-400); display: block; margin-bottom: 0.1rem; }
+	.msg-name {
+		font-size: 0.68rem;
+		font-weight: 600;
+		color: var(--color-brand-400);
+		display: block;
+		margin-bottom: 0.1rem;
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+	}
+	.msg-name:hover { color: #fbbf24; text-decoration: underline; }
 	.msg-text {
 		font-size: 0.8rem; line-height: 1.4; padding: 0.4rem 0.65rem;
 		background: rgba(255,255,255,0.05); border-radius: 10px;
-		color: var(--color-text-primary); word-break: break-word;
+		color: var(--color-text-primary); word-break: break-word; margin: 0;
 	}
 	.msg.self .msg-text { background: rgba(12,113,61,0.2); border: 1px solid rgba(12,113,61,0.25); }
 	.msg-time { font-size: 0.6rem; color: var(--color-text-muted); display: block; margin-top: 0.1rem; }
@@ -268,7 +325,6 @@
 		color: var(--color-text-muted); padding: 2rem 0.5rem;
 	}
 
-	/* Input */
 	.chat-input {
 		display: flex; gap: 0.5rem;
 		padding: 0.5rem 0.75rem;
@@ -298,7 +354,7 @@
 	.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 	@media (max-width: 480px) {
-		.chat-panel { width: calc(100vw - 2rem); }
-		.global-chat { right: 1rem; }
+		.chat-panel { width: calc(100vw - 1.5rem); max-height: calc(100dvh - 6rem); }
+		.global-chat { right: 0.75rem; }
 	}
 </style>

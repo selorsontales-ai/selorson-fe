@@ -2,69 +2,81 @@
 	import AdminModal from '$lib/components/admin/AdminModal.svelte';
 	import { adminGet, formatDateTime } from '$lib/stores/admin.svelte';
 	import { onMount } from 'svelte';
+	import * as m from '$lib/paraglide/messages';
+	import { formatRoleBadge } from '$lib/i18n-labels';
 
 	let loading = $state(true); let activeFilter = $state('all_active'); let showPerf = $state(false);
 	let stats = $state<any>(null); let managers = $state<any[]>([]); let conversations = $state<any[]>([]); let performance = $state<any>(null);
 
-	const filters = [{ key: 'pending', label: '⏳ Chờ nhận' }, { key: 'all_active', label: '💬 Đang xử lý' }, { key: 'resolved', label: '✅ Đã giải quyết' }];
-	const statusLabels: Record<string, string> = { pending: 'Chờ nhận', active: 'Đang xử lý', resolved: 'Đã giải quyết', closed: 'Đã đóng' };
+	let filters = $derived([
+		{ key: 'pending', label: m.admin_support_filter_pending() },
+		{ key: 'all_active', label: m.admin_support_filter_active() },
+		{ key: 'resolved', label: m.admin_support_filter_resolved() }
+	]);
+	function getStatusLabel(s: string) {
+		if (s === 'pending') return m.cskh_status_pending();
+		if (s === 'active') return m.cskh_status_active();
+		if (s === 'resolved') return m.cskh_status_resolved();
+		if (s === 'closed') return m.cskh_status_closed();
+		return s;
+	}
 
 	async function fetchStats() { try { const r = await adminGet<any>('/manager/support/stats'); if (r.success) stats = r.data; } catch {} }
 	async function fetchManagers() { try { const r = await adminGet<any>('/manager/support/managers'); if (r.success) managers = r.data ?? []; } catch {} }
 	async function fetchConversations(filter = 'all_active') { loading = true; try { const r = await adminGet<any[]>(`/manager/support?status=${filter}`); if (r.success) conversations = r.data ?? []; } catch {} finally { loading = false; } }
-	async function fetchPerformance(managerId: number) { try { const r = await adminGet<any>(`/manager/support/managers`); if (r.success) { performance = (r.data ?? []).find((m: any) => m.id === managerId) ?? null; } } catch {} }
+	async function fetchPerformance(managerId: number) { try { const r = await adminGet<any>(`/manager/support/managers`); if (r.success) { performance = (r.data ?? []).find((mgr: any) => mgr.id === managerId) ?? null; } } catch {} }
 	async function changeFilter(key: string) { activeFilter = key; await fetchConversations(key); }
 	async function viewPerformance(managerId: number) { showPerf = true; performance = null; await fetchPerformance(managerId); }
 
 	onMount(async () => { await Promise.all([fetchStats(), fetchManagers(), fetchConversations('all_active')]); });
 </script>
-<svelte:head><title>Admin - Giám Sát CSKH</title></svelte:head>
+<svelte:head><title>{m.admin_support_page_title()}</title></svelte:head>
 <div class="support-page">
-	<h1>📊 Giám Sát CSKH</h1><p class="subtitle">Theo dõi hiệu suất nhân viên chăm sóc khách hàng</p>
+	<h1>{m.admin_support_heading()}</h1><p class="subtitle">{m.admin_support_subtitle()}</p>
 
 	<div class="stats-grid">
-		<div class="stat-card"><span class="si pending">⏳</span><div><span class="sv">{stats?.pending ?? 0}</span><span class="sl">Chờ nhận</span></div></div>
-		<div class="stat-card"><span class="si active">💬</span><div><span class="sv">{stats?.active ?? 0}</span><span class="sl">Đang xử lý</span></div></div>
-		<div class="stat-card"><span class="si resolved">✅</span><div><span class="sv">{stats?.today ?? 0}</span><span class="sl">Giải quyết hôm nay</span></div></div>
-		<div class="stat-card"><span class="si rating">⭐</span><div><span class="sv">{stats?.avg_rating ? Number(stats.avg_rating).toFixed(1) : '—'}</span><span class="sl">Rating TB</span></div></div>
+		<div class="stat-card"><span class="si pending">⏳</span><div><span class="sv">{stats?.pending ?? 0}</span><span class="sl">{m.admin_support_stat_pending()}</span></div></div>
+		<div class="stat-card"><span class="si active">💬</span><div><span class="sv">{stats?.active ?? 0}</span><span class="sl">{m.admin_support_stat_active()}</span></div></div>
+		<div class="stat-card"><span class="si resolved">✅</span><div><span class="sv">{stats?.today ?? 0}</span><span class="sl">{m.admin_support_stat_today()}</span></div></div>
+		<div class="stat-card"><span class="si rating">⭐</span><div><span class="sv">{stats?.avg_rating ? Number(stats.avg_rating).toFixed(1) : '—'}</span><span class="sl">{m.admin_support_stat_avg_rating()}</span></div></div>
 	</div>
 
 	<div class="section-card">
-		<h2>👥 Hiệu Suất Nhân Viên</h2>
-		{#if !managers.length}<p class="empty-text">Chưa có nhân viên CSKH.</p>
+		<h2>{m.admin_support_tab_performance()}</h2>
+		{#if !managers.length}<p class="empty-text">{m.admin_support_perf_empty()}</p>
 		{:else}
-			<table class="perf-table"><thead><tr><th>Nhân viên</th><th>Vai trò</th><th>Đang xử lý</th><th>Đã giải quyết</th><th>Rating TB</th><th></th></tr></thead>
-			<tbody>{#each managers as m (m.id)}
-				<tr><td data-label="Nhân viên"><div class="mgr-info"><span class="mgr-av">{(m.name ?? '?').charAt(0).toUpperCase()}</span><span class="mgr-name">{m.name}</span></div></td><td data-label="Vai trò"><span class="role-tag {m.role}">{m.role}</span></td><td data-label="Đang xử lý" class="num">{m.active_count ?? '—'}</td><td data-label="Đã giải quyết" class="num">{m.resolved_count ?? '—'}</td><td data-label="Rating TB" class="num">{m.avg_rating ? Number(m.avg_rating).toFixed(1) : '—'}</td><td data-label="Thao tác"><button class="view-btn" onclick={() => viewPerformance(m.id)}>📈 Chi tiết</button></td></tr>
+			<table class="perf-table"><thead><tr><th>{m.admin_support_perf_staff()}</th><th>{m.admin_support_role()}</th><th>{m.admin_support_stat_active()}</th><th>{m.admin_support_perf_resolved()}</th><th>{m.admin_support_perf_avg_rating()}</th><th></th></tr></thead>
+			<tbody>{#each managers as mgr (mgr.id)}
+				<tr><td data-label={m.admin_support_perf_staff()}><div class="mgr-info"><span class="mgr-av">{(mgr.name ?? '?').charAt(0).toUpperCase()}</span><span class="mgr-name">{mgr.name}</span></div></td><td data-label={m.admin_support_role()}><span class="role-tag {mgr.role}">{formatRoleBadge(mgr.role)}</span></td><td data-label={m.admin_support_stat_active()} class="num">{mgr.active_count ?? '—'}</td><td data-label={m.admin_support_perf_resolved()} class="num">{mgr.resolved_count ?? '—'}</td><td data-label={m.admin_support_perf_avg_rating()} class="num">{mgr.avg_rating ? Number(mgr.avg_rating).toFixed(1) : '—'}</td><td data-label=""><button class="view-btn" onclick={() => viewPerformance(mgr.id)}>{m.admin_support_details()}</button></td></tr>
 			{/each}</tbody></table>
 		{/if}
 	</div>
 
 	<div class="section-card">
-		<h2>📋 Tổng Quan Cuộc Hội Thoại</h2>
+		<h2>{m.admin_support_overview()}</h2>
 		<div class="filter-row">{#each filters as f}<button class:active={activeFilter===f.key} onclick={() => changeFilter(f.key)}>{f.label}</button>{/each}</div>
-		{#if loading}<p class="empty-text">Đang tải...</p>
-		{:else if !conversations.length}<p class="empty-text">Không có cuộc hội thoại nào.</p>
+		{#if loading}<p class="empty-text">{m.cskh_loading()}</p>
+		{:else if !conversations.length}<p class="empty-text">{m.admin_support_empty_convs()}</p>
 		{:else}
-			<table class="conv-table"><thead><tr><th>ID</th><th>Khách</th><th>Nhân viên</th><th>Trạng thái</th><th>Ưu tiên</th><th>Cập nhật</th><th>Rating</th></tr></thead>
+			<table class="conv-table"><thead><tr><th>ID</th><th>{m.admin_support_customer()}</th><th>{m.admin_support_perf_staff()}</th><th>{m.admin_support_status()}</th><th>{m.admin_support_priority()}</th><th>{m.admin_support_updated()}</th><th>{m.admin_support_perf_avg_rating()}</th></tr></thead>
 			<tbody>{#each conversations as c (c.id)}
-				<tr><td data-label="ID" class="id-cell">#{c.id}</td><td data-label="Khách">{c.user?.name ?? 'User #' + c.user_id}</td><td data-label="Nhân viên">{c.manager?.name ?? '—'}</td><td data-label="Trạng thái"><span class="status-tag {c.status}">{statusLabels[c.status] ?? c.status}</span></td><td data-label="Ưu tiên"><span class="priority-tag {c.priority}">{c.priority}</span></td><td data-label="Cập nhật" class="time-cell">{formatDateTime(c.updated_at)}</td>
-				<td data-label="Rating">{#if c.rating}<span style="color:#fbbf24;font-weight:bold">⭐ {c.rating}/5</span>{#if c.rating_comment}<div style="font-size:.75rem;color:var(--color-text-muted);margin-top:4px;font-style:italic">"{c.rating_comment}"</div>{/if}{:else}—{/if}</td></tr>
+				<tr><td data-label="ID" class="id-cell">#{c.id}</td><td data-label={m.admin_support_customer()}>{c.user?.name ?? 'User #' + c.user_id}</td><td data-label={m.admin_support_perf_staff()}>{c.manager?.name ?? '—'}</td><td data-label={m.admin_support_status()}><span class="status-tag {c.status}">{getStatusLabel(c.status)}</span></td><td data-label={m.admin_support_priority()}><span class="priority-tag {c.priority}">{c.priority}</span></td><td data-label={m.admin_support_updated()} class="time-cell">{formatDateTime(c.updated_at)}</td>
+				<td data-label={m.admin_support_perf_avg_rating()}>{#if c.rating}<span style="color:#fbbf24;font-weight:bold">⭐ {c.rating}/5</span>{#if c.rating_comment}<div style="font-size:.75rem;color:var(--color-text-muted);margin-top:4px;font-style:italic">"{c.rating_comment}"</div>{/if}{:else}—{/if}</td></tr>
 			{/each}</tbody></table>
 		{/if}
 	</div>
 </div>
 
-<AdminModal bind:open={showPerf} title="📈 Chi tiết hiệu suất" size="sm">
+<AdminModal bind:open={showPerf} title={m.admin_support_perf_modal()} size="sm">
 	{#if performance}
 		<div class="perf-grid">
-			<div class="perf-item"><span class="pn">{performance.total_conversations}</span><span class="pl">Tổng hội thoại</span></div>
-			<div class="perf-item"><span class="pn">{performance.resolved_conversations}</span><span class="pl">Đã giải quyết</span></div>
-			<div class="perf-item"><span class="pn">{performance.avg_resolution_time ?? '—'}</span><span class="pl">Thời gian TB (phút)</span></div>
-			<div class="perf-item"><span class="pn">{performance.avg_rating ? Number(performance.avg_rating).toFixed(1) : '—'}</span><span class="pl">Rating TB</span></div>
+			<div class="perf-item"><span class="pn">{performance.total_conversations}</span><span class="pl">{m.admin_support_perf_total()}</span></div>
+			<div class="perf-item"><span class="pn">{performance.resolved_conversations}</span><span class="pl">{m.admin_support_perf_resolved()}</span></div>
+			<div class="perf-item"><span class="pn">{performance.avg_resolution_time ?? '—'}</span><span class="pl">{m.admin_support_perf_avg_time()}</span></div>
+			<div class="perf-item"><span class="pn">{performance.avg_rating ? Number(performance.avg_rating).toFixed(1) : '—'}</span><span class="pl">{m.admin_support_perf_avg_rating()}</span></div>
 		</div>
-	{:else}<p class="empty-text">Đang tải...</p>{/if}
-	<div class="form-actions"><button class="btn-cancel" onclick={() => showPerf = false}>Đóng</button></div>
+	{:else}<p class="empty-text">{m.cskh_loading()}</p>{/if}
+	<div class="form-actions"><button class="btn-cancel" onclick={() => showPerf = false}>{m.cskh_btn_close()}</button></div>
 </AdminModal>
 
 <style>

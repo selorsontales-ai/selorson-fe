@@ -1,11 +1,14 @@
 <script lang="ts">
+	import * as m from '$lib/paraglide/messages';
 	import {
 		closeSwitchPrompt,
 		getDataMode,
 		switchDataMode,
 	} from "$lib/desktop-mode.svelte";
-
+	import BetaToAlphaPromoteModal from "$lib/components/desktop/BetaToAlphaPromoteModal.svelte";
+	
 	let switching = $state(false);
+	let showPromoteModal = $state(false);
 	let error = $state<string | null>(null);
 
 	const status = $derived(getDataMode());
@@ -23,45 +26,67 @@
 	}
 </script>
 
-<div class="overlay" role="dialog" aria-modal="true" aria-labelledby="switch-title">
-	<div class="sheet" class:to-alpha={toAlpha}>
-		<span class="eyebrow">{toAlpha ? "Beta → Alpha" : "Alpha → Beta"}</span>
+{#if showPromoteModal}
+	<BetaToAlphaPromoteModal
+		open={showPromoteModal}
+		onclose={() => {
+			showPromoteModal = false;
+			closeSwitchPrompt();
+		}}
+	/>
+{:else}
+	<div class="overlay" role="dialog" aria-modal="true" aria-labelledby="switch-title">
+		<div class="sheet" class:to-alpha={toAlpha}>
+			<span class="eyebrow">{toAlpha ? "Beta → Alpha" : "Alpha → Beta"}</span>
 
-		<h2 id="switch-title">
-			{toAlpha ? "Chuyển sang dữ liệu thật?" : "Quay về dữ liệu trên máy?"}
-		</h2>
+			<h2 id="switch-title">
+				{toAlpha
+					? m.ui_switch_to_live_production_data()
+					: m.ui_switch_back_to_local_machine()}
+			</h2>
 
-		{#if toAlpha}
-			<p>
-				App sẽ khởi động lại và kết nối tới cơ sở dữ liệu của trang web. Từ
-				lúc đó, mọi thay đổi có hiệu lực ngay với người đọc.
+			{#if toAlpha}
+				<p>
+					{m.ui_the_app_will_restart_and_2()}
+				</p>
+			{:else}
+				<p>
+					{m.ui_the_app_will_restart_and()}
+				</p>
+			{/if}
+
+			<p class="muted">
+				{m.ui_your_login_session_in_the()}
 			</p>
-		{:else}
-			<p>
-				App sẽ khởi động lại và quay về cơ sở dữ liệu trên máy này. Không gì
-				bạn làm ở đó chạm tới trang web.
-			</p>
-		{/if}
 
-		<p class="muted">
-			Phiên đăng nhập của chế độ kia vẫn được giữ, không phải đăng nhập lại
-			khi quay sang.
-		</p>
+			{#if error}
+				<p class="error" role="alert">{error}</p>
+			{/if}
 
-		{#if error}
-			<p class="error" role="alert">{error}</p>
-		{/if}
+			{#if toAlpha}
+				<button
+					type="button"
+					class="promote-btn"
+					onclick={() => (showPromoteModal = true)}
+					disabled={switching}
+				>
+					{m.ui_selectively_push_data_to_alpha()}
+				</button>
+			{/if}
 
-		<div class="actions">
-			<button class="go" class:danger={toAlpha} onclick={apply} disabled={switching}>
-				{switching ? "Đang khởi động lại..." : "Chuyển và khởi động lại"}
-			</button>
-			<button class="btn-ghost" onclick={closeSwitchPrompt} disabled={switching}>
-				Ở lại
-			</button>
+			<div class="actions">
+				<button class="go" class:danger={toAlpha} onclick={apply} disabled={switching}>
+					{switching
+						? m.ui_restarting()
+						: m.ui_switch_and_restart()}
+				</button>
+				<button class="btn-ghost" onclick={closeSwitchPrompt} disabled={switching}>
+					{m.ui_stay_here()}
+				</button>
+			</div>
 		</div>
 	</div>
-</div>
+{/if}
 
 <style>
 	.overlay {
@@ -144,6 +169,32 @@
 		border-radius: var(--radius-sm);
 	}
 
+	.promote-btn {
+		width: 100%;
+		padding: 0.65rem 1rem;
+		border-radius: var(--radius-md);
+		border: 1px solid rgba(245, 158, 11, 0.45);
+		background: linear-gradient(
+			135deg,
+			rgba(217, 119, 6, 0.25),
+			rgba(180, 83, 9, 0.18)
+		);
+		color: #fde68a;
+		font-weight: 700;
+		font-size: 0.86rem;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.promote-btn:hover:not(:disabled) {
+		background: linear-gradient(
+			135deg,
+			rgba(217, 119, 6, 0.38),
+			rgba(180, 83, 9, 0.28)
+		);
+		transform: translateY(-1px);
+	}
+
 	.actions {
 		display: flex;
 		gap: 0.7rem;
@@ -181,7 +232,8 @@
 	}
 
 	.go:disabled,
-	.btn-ghost:disabled {
+	.btn-ghost:disabled,
+	.promote-btn:disabled {
 		opacity: 0.55;
 		cursor: not-allowed;
 	}
