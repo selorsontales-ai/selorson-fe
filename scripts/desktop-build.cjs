@@ -48,5 +48,14 @@ execSync("npx vite build --mode desktop", {
 	env,
 });
 
+// Ensure Tauri custom-protocol reload on `/world` resolves SPA `index.html` cleanly
+// even though `build/world/` exists as a static asset directory (`models/`, `data/`).
+const buildDir = path.join(ROOT, "build");
+const rootIndex = path.join(buildDir, "index.html");
+const worldSubdir = path.join(buildDir, "world");
+if (fs.existsSync(rootIndex) && fs.existsSync(worldSubdir)) {
+	fs.copyFileSync(rootIndex, path.join(worldSubdir, "index.html"));
+}
+
 verifyFlavorBundle(appFlavor, path.join(svelteKitDir, "output"));
 console.log(`\ndesktop-${audience} build successful!\n`);

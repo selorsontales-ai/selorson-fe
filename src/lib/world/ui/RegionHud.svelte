@@ -44,7 +44,9 @@
 		{#if isExploredState(region.state)}
 			<span class="explored-chip">{m.rhud_explored()}</span>
 		{/if}
-		<a class="dossier-chip" href="/library?id={region.id}">{m.rhud_region_dossier()}</a>
+		{#if region.id > 0}
+			<a class="dossier-chip" href="/library?id={region.id}">{m.rhud_region_dossier()}</a>
+		{/if}
 	</header>
 
 	<aside class="panel list-panel" class:mobile-open={mobileListOpen}>
@@ -120,9 +122,11 @@
 				<a class="enter-btn" href="/world/{region.slug}/{selected.slug}">
 					🏔️ {m.world_enter_place()}
 				</a>
-				<a class="dossier-btn" href="/library?id={selected.id}">
-					{m.rhud_encyclopedia_dossier()}
-				</a>
+				{#if selected.id > 0}
+					<a class="dossier-btn" href="/library?id={selected.id}">
+						{m.rhud_encyclopedia_dossier()}
+					</a>
+				{/if}
 				{#if selected.story_link}
 					<a class="chapter-link" href={selected.story_link}>{m.world_read_chapter()}</a>
 				{/if}
@@ -144,6 +148,10 @@
 		grid-template-rows: auto 1fr;
 		gap: 1rem;
 		padding: 1rem;
+		--color-text-primary: #f1f5f9;
+		--color-text-secondary: #cbd5e1;
+		--color-text-muted: #94a3b8;
+		color: #f1f5f9;
 	}
 	.panel {
 		pointer-events: auto;
@@ -152,7 +160,7 @@
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		border-radius: var(--radius-lg, 12px);
 		padding: 1rem;
-		color: var(--color-text-primary, #e2e8f0);
+		color: #f1f5f9;
 	}
 	.top-bar {
 		grid-column: 1 / -1;

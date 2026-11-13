@@ -12,15 +12,19 @@
 	 */
 	import { T, useTask } from '@threlte/core';
 	import { OrbitControls, interactivity } from '@threlte/extras';
+	import type { OrbitControls as ThreeOrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 	import { BufferGeometry, Group, PerspectiveCamera, Vector3 } from 'three';
 	import { resolveAvatar } from '../avatar';
 	import { GLOBE_RADIUS } from '../config';
+	import { resolveNodePlanet } from '../cosmos';
 	import { arcPoints, latLngToVector3 } from '../projection';
 	import type { QualitySettings } from '../quality';
 	import type { JourneyStop, WorldNode } from '../types';
 	import Avatar from './Avatar.svelte';
 	import Marker from './Marker.svelte';
+	import { releaseOrbitControlsDocumentListeners } from './orbit-controls-release';
 	import Planet from './Planet.svelte';
+	import type { GeoPlanetKey, PlanetGeoBundle } from './geo-data.svelte';
 
 	type PlacedNode = WorldNode & { lat: number; lng: number };
 
@@ -37,6 +41,8 @@
 	let { character, stops, quality, position = 0, onstop }: Props = $props();
 
 	interactivity();
+
+	let geoBundle = $state<PlanetGeoBundle | null>(null);
 
 	function placedIn(stop: JourneyStop): PlacedNode | null {
 		return (
@@ -67,18 +73,34 @@
 		});
 	});
 
-	/** One arc per hop. Hops that do not move are kept for indexing but not drawn. */
+	let planetKey = $derived<GeoPlanetKey>(
+		resolveNodePlanet(waypoints[0]?.place ?? character) === 'earth' ? 'earth' : 'akunalia'
+	);
+
+	function surfaceRadiusAt(lat: number, lng: number): number {
+		return geoBundle
+			? geoBundle.sampleSurfaceRadius(lat, lng, GLOBE_RADIUS, quality.displacement)
+			: GLOBE_RADIUS;
+	}
+
+	function totalAltAt(place: PlacedNode, liftUnits = 0.06): number {
+		const surfR = surfaceRadiusAt(place.lat, place.lng);
+		const terrainAlt = (surfR - GLOBE_RADIUS) / GLOBE_RADIUS;
+		return (place.alt ?? 0) + terrainAlt + liftUnits / GLOBE_RADIUS;
+	}
+
+	/** One arc per hop, lifted above displaced 3D mountains so paths never tunnel underground. */
 	let segments = $derived.by(() =>
 		waypoints.slice(0, -1).map((from, i) => {
 			const to = waypoints[i + 1];
-			const points = arcPoints(
-				{ lat: from.place.lat, lng: from.place.lng, alt: from.place.alt },
-				{ lat: to.place.lat, lng: to.place.lng, alt: to.place.alt },
-				GLOBE_RADIUS + 0.06
+			const rawPoints = arcPoints(
+				{ lat: from.place.lat, lng: from.place.lng, alt: totalAltAt(from.place, 0.06) },
+				{ lat: to.place.lat, lng: to.place.lng, alt: totalAltAt(to.place, 0.06) },
+				GLOBE_RADIUS
 			);
 			return {
-				points,
-				geometry: new BufferGeometry().setFromPoints(points),
+				points: rawPoints,
+				geometry: new BufferGeometry().setFromPoints(rawPoints),
 				moves: from.place.id !== to.place.id
 			};
 		})
@@ -126,7 +148,8 @@
 
 		if (frac < 0.001 || index >= segments.length) {
 			const at = waypoints[Math.min(index, waypoints.length - 1)].place;
-			return latLngToVector3(at.lat, at.lng, GLOBE_RADIUS + 0.12, at.alt);
+			const surfR = surfaceRadiusAt(at.lat, at.lng);
+			return latLngToVector3(at.lat, at.lng, surfR + 0.14, at.alt);
 		}
 		const points = segments[index].points;
 		const t = frac * (points.length - 1);
@@ -176,6 +199,14 @@
 	});
 
 	let currentPlaceId = $derived(waypoints[currentIndex]?.place.id ?? null);
+
+	let controlsRef = $state<ThreeOrbitControls | undefined>();
+	// three r185 OrbitControls bỏ sót listener 'keydown' trên document khi dispose sau lúc DOM đã bị tháo
+	// (giữ cả canvas + context WebGL sau khi rời trang) → gỡ thẳng khi scene hủy.
+	$effect(() => {
+		const c = controlsRef;
+		return () => releaseOrbitControlsDocumentListeners(c);
+	});
 </script>
 
 <T.PerspectiveCamera
@@ -187,6 +218,7 @@
 	position={[0, 4.5, 15]}
 >
 	<OrbitControls
+		bind:ref={controlsRef}
 		enableDamping
 		dampingFactor={0.06}
 		enablePan={false}
@@ -195,11 +227,10 @@
 	/>
 </T.PerspectiveCamera>
 
-<T.AmbientLight intensity={0.6} />
-<T.DirectionalLight position={[15, 12, 12]} intensity={1.3} color="#fff8ee" />
-<T.DirectionalLight position={[-15, -8, -12]} intensity={0.55} color="#00f0ff" />
+<T.AmbientLight intensity={0.04} color="#0b1326" />
+<T.DirectionalLight position={[-18, 8, 22]} intensity={1.55} color="#fff6eb" />
 
-<Planet {quality} autoRotate={false} bind:group={globeGroup}>
+<Planet {quality} {planetKey} autoRotate={false} bind:geoBundle bind:group={globeGroup}>
 	{#each segments as segment, i (i)}
 		{#if segment.moves}
 			<T.Line>
@@ -217,6 +248,7 @@
 		<Marker
 			node={place}
 			radius={GLOBE_RADIUS}
+			surfaceRadius={surfaceRadiusAt(place.lat, place.lng)}
 			selected={place.id === currentPlaceId}
 			hovered={false}
 			onselect={() => {
@@ -238,3 +270,4 @@
 		/>
 	{/if}
 </Planet>
+

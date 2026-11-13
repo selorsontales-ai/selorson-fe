@@ -7,8 +7,10 @@
 	 * what it is.
 	 */
 	import { page } from '$app/state';
+	import { currentLocale } from '$lib/i18n-labels';
 	import * as m from '$lib/paraglide/messages';
-		import { fetchJourney } from '$lib/world/api';
+	import { fetchJourney } from '$lib/world/api';
+	import { resolveCanonJourneyDetail } from '$lib/world/cosmos';
 	import { resolveQuality, type QualitySettings } from '$lib/world/quality';
 	import type { Journey } from '$lib/world/types';
 	import JourneyHud from '$lib/world/ui/JourneyHud.svelte';
@@ -34,7 +36,8 @@
 	let lockedCount = $derived(journey?.stops.filter((s) => s.locked).length ?? 0);
 
 	async function loadJourneyData(targetId: number) {
-		if (!Number.isFinite(targetId) || targetId <= 0) {
+		const isCanonDemoId = targetId === -301 || targetId === -302;
+		if (!Number.isFinite(targetId) || (targetId <= 0 && !isCanonDemoId)) {
 			notFound = true;
 			loading = false;
 			return;
@@ -54,6 +57,19 @@
 							.then((module) => module.default)
 							.catch(() => null)
 					: Promise.resolve(null);
+
+		if (isCanonDemoId) {
+			const canonJourney = resolveCanonJourneyDetail(targetId, currentLocale());
+			if (canonJourney) {
+				journey = canonJourney;
+				loadedCharacterId = targetId;
+				if (canonJourney.stops.some((stop) => !stop.locked)) {
+					CanvasComponent = await canvasPromise;
+				}
+				loading = false;
+				return;
+			}
+		}
 
 		try {
 			const [loadedJourney, canvas] = await Promise.all([

@@ -60,7 +60,6 @@
     "vite": "^8.0.7"
   },
   "dependencies": {
-    "@dagrejs/dagre": "^3.1.0",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.2.4",
     "@tauri-apps/api": "^2.11.0",
@@ -68,11 +67,9 @@
     "@tauri-apps/plugin-updater": "^2.10.1",
     "@threlte/core": "^8.5.16",
     "@threlte/extras": "^9.21.0",
-    "@xyflow/svelte": "^1.6.2",
     "cropperjs": "^1.6.2",
     "qrcode": "^1.5.4",
     "tailwindcss": "^4.2.4",
-    "three": "^0.185.1",
-    "vidstack": "^1.12.13"
+    "three": "^0.185.1"
   }
 }

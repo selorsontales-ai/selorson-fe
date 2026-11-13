@@ -1,0 +1,32 @@
+{
+  "version": 2,
+  "generator": "scripts/generate_aaa_planets.py",
+  "seaLevelNormalized": 0.25,
+  "albedoResolution": [
+    4096,
+    2048
+  ],
+  "dataResolution": [
+    2048,
+    1024
+  ],
+  "planets": {
+    "akunalia": {
+      "albedo": "akunalia-albedo-4k.jpg",
+      "elevationSdf": "akunalia-elevation-sdf.png",
+      "normalSpec": "akunalia-normal-spec.png",
+      "night": "akunalia-night.jpg",
+      "clouds": "akunalia-clouds-2k.jpg",
+      "regionsGeojson": "akunalia-regions.geojson"
+    },
+    "earth": {
+      "albedo": "earth-albedo-4k.jpg",
+      "elevationSdf": "earth-elevation-sdf.png",
+      "normalSpec": "earth-normal-spec.png",
+      "night": "earth-night.jpg",
+      "clouds": "earth-clouds-2k.jpg",
+      "continentsGeojson": "earth-continents.geojson",
+      "regionsGeojson": "earth-regions.geojson"
+    }
+  }
+}

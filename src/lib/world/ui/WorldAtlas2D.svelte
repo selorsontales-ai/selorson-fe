@@ -3,14 +3,21 @@
 	 * Interactive 2D Cartographic Atlas (`WorldAtlas2D.svelte`)
 	 *
 	 * Serves both as an on-demand 2D Equirectangular Map mode (`🗺️ Atlas 2D`) for
-	 * readers who prefer a flat continental overview, and as the automatic fallback
-	 * when WebGL is unavailable (`quality.tier === 'none'`).
+	 * Akunalia, Multi-Era Earth, and Eldarin Prism Core, and as the automatic
+	 * fallback when WebGL is unavailable (`quality.tier === 'none'`).
 	 */
 	import { onMount } from 'svelte';
 	import * as m from '$lib/paraglide/messages';
-		import { displayName, fetchRegionGeometry, isPlaced, type RegionFeature } from '../api';
+	import {
+		fetchEarthContinentGeometry,
+		fetchRegionGeometry,
+		isPlaced,
+		type RegionFeature
+	} from '../api';
+	import { CELESTIAL_BODIES, type CelestialBodyId, type WorldTimeline } from '../cosmos';
 	import type { WorldMap, WorldNode } from '../types';
 	import {
+		computeAtlasLabelPlacements,
 		geoJsonGeometryToSvgPath,
 		isExploredState,
 		isUnlockedState,
@@ -20,6 +27,12 @@
 
 	interface Props {
 		world: WorldMap;
+		activePlanet?: CelestialBodyId;
+		akunaliaRegions?: WorldNode[];
+		akunaliaLocations?: WorldNode[];
+		earthNodes?: Array<WorldNode & { lat: number; lng: number }>;
+		timeline?: WorldTimeline;
+		unshieldedTimeline2?: boolean;
 		selected: WorldNode | null;
 		hovered: WorldNode | null;
 		onselect: (node: WorldNode | null) => void;
@@ -27,29 +40,63 @@
 		onenter: (node: WorldNode) => void;
 	}
 
-	let { world, selected, hovered, onselect, onhover, onenter }: Props = $props();
+	let {
+		world,
+		activePlanet = 'akunalia',
+		akunaliaRegions,
+		akunaliaLocations,
+		earthNodes = [],
+		timeline = 1,
+		unshieldedTimeline2 = false,
+		selected,
+		hovered,
+		onselect,
+		onhover,
+		onenter
+	}: Props = $props();
 
 	const MAP_W = 1000;
 	const MAP_H = 500;
 	const LAT_LINES = [-60, -30, 0, 30, 60];
 	const LNG_LINES = [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150];
 
+	let cartoPlanet = $derived<'akunalia' | 'earth'>(
+		CELESTIAL_BODIES[activePlanet]?.sector === 'solar_system' ? 'earth' : 'akunalia'
+	);
+
 	let features = $state<RegionFeature[]>([]);
+	let earthContinents = $state<RegionFeature[]>([]);
 	let zoom = $state(1);
 
 	onMount(async () => {
-		const geo = await fetchRegionGeometry();
+		const [geo, earthGeo] = await Promise.all([
+			fetchRegionGeometry(),
+			fetchEarthContinentGeometry()
+		]);
 		if (geo?.features) {
 			features = geo.features;
 		}
+		if (earthGeo?.features) {
+			earthContinents = earthGeo.features;
+		}
 	});
 
+	let activeRegionList = $derived(akunaliaRegions ?? world.regions);
+	let activeLocationList = $derived(akunaliaLocations ?? world.locations);
+
 	let placedRegions = $derived(
-		world.regions.filter(isPlaced).filter((n) => n.state !== 'hidden')
+		cartoPlanet === 'akunalia'
+			? activeRegionList.filter(isPlaced).filter((n) => n.state !== 'hidden')
+			: earthNodes.filter((n) => n.kind === 'region' && n.state !== 'hidden')
 	);
 	let placedLocations = $derived(
-		world.locations.filter(isPlaced).filter((n) => n.state !== 'hidden')
+		cartoPlanet === 'akunalia'
+			? activeLocationList.filter(isPlaced).filter((n) => n.state !== 'hidden')
+			: earthNodes.filter((n) => n.kind !== 'region' && n.state !== 'hidden')
 	);
+
+	let olympusPt = $derived(latLngToSvgPoint(40.09, 22.36, MAP_W, MAP_H));
+	let meruPt = $derived(latLngToSvgPoint(28.65, 81.2, MAP_W, MAP_H));
 
 	let regionCenterBySlug = $derived.by(() => {
 		const map = new Map<string, { x: number; y: number; node: WorldNode }>();
@@ -93,17 +140,34 @@
 	function pinColor(node: WorldNode, isSel: boolean, isHov: boolean): string {
 		if (isSel || isHov) return '#ffb703';
 		if (isExploredState(node.state)) return '#34d399';
-		if (isUnlockedState(node.state)) return node.palette?.[0] ?? '#00f0ff';
-		return '#64748b';
+		if (isUnlockedState(node.state)) return node.color ?? node.palette?.[0] ?? '#00f0ff';
+		return node.is_singularity ? (node.color ?? '#64748b') : '#64748b';
 	}
 
 	function selectByRegionSlug(slug: string) {
-		const match = world.regions.find((r) => r.slug === slug && r.state !== 'hidden');
+		const match = activeRegionList.find((r) => r.slug === slug && r.state !== 'hidden');
 		if (match) onselect(match);
 	}
+
+	let invZoomScale = $derived(1 / Math.pow(Math.max(1, zoom), 0.55));
+
+	let labelPlacements = $derived.by(() => {
+		const activeIds = new Set<number>();
+		if (selected) activeIds.add(selected.id);
+		if (hovered) activeIds.add(hovered.id);
+		return computeAtlasLabelPlacements({
+			regions: placedRegions,
+			locations: placedLocations,
+			zoom,
+			mapWidth: MAP_W,
+			mapHeight: MAP_H,
+			activeIds,
+			unknownFallback: m.world_unknown_place()
+		});
+	});
 </script>
 
-<div class="atlas-stage">
+<div class="atlas-stage" class:has-selection={Boolean(selected)}>
 	<div class="atlas-canvas-wrap">
 		<div class="atlas-zoom-controls" aria-label={m.watlas_2d_map_zoom_controls()}>
 			<button
@@ -147,6 +211,11 @@
 						<stop offset="60%" stop-color="#071324" />
 						<stop offset="100%" stop-color="#030811" />
 					</radialGradient>
+					<radialGradient id="earthBlueMarbleBg" cx="50%" cy="50%" r="72%">
+						<stop offset="0%" stop-color="#092638" />
+						<stop offset="55%" stop-color="#061726" />
+						<stop offset="100%" stop-color="#020710" />
+					</radialGradient>
 					<filter id="pinGlow" x="-40%" y="-40%" width="180%" height="180%">
 						<feGaussianBlur stdDeviation="3" result="blur" />
 						<feMerge>
@@ -154,10 +223,32 @@
 							<feMergeNode in="SourceGraphic" />
 						</feMerge>
 					</filter>
+					<clipPath id="atlasRoundClip">
+						<rect x="0" y="0" width={MAP_W} height={MAP_H} rx="14" />
+					</clipPath>
 				</defs>
 
-				<!-- Ocean background -->
-				<rect x="0" y="0" width={MAP_W} height={MAP_H} fill="url(#akunaliaOcean)" rx="14" />
+				<!-- Planet-specific background + 4K Cartographic Relief Map -->
+				<rect
+					x="0"
+					y="0"
+					width={MAP_W}
+					height={MAP_H}
+					fill={cartoPlanet === 'earth' ? 'url(#earthBlueMarbleBg)' : 'url(#akunaliaOcean)'}
+					rx="14"
+				/>
+				<image
+					href={cartoPlanet === 'earth'
+						? '/world/data/earth-albedo-4k.jpg'
+						: '/world/data/akunalia-albedo-4k.jpg'}
+					x="0"
+					y="0"
+					width={MAP_W}
+					height={MAP_H}
+					preserveAspectRatio="none"
+					opacity="0.62"
+					clip-path="url(#atlasRoundClip)"
+				/>
 
 				<!-- Cartographic graticule grid -->
 				{#each LAT_LINES as lat (lat)}
@@ -192,114 +283,194 @@
 					</text>
 				{/each}
 
-				<!-- Region GeoJSON Polygons -->
-				{#each features as feat, idx (feat.properties?.region ?? idx)}
-					{@const pathD = geoJsonGeometryToSvgPath(feat.geometry, MAP_W, MAP_H)}
-					{@const regionSlug = feat.properties?.region}
-					{@const isSelRegion = selected?.slug === regionSlug}
-					{#if pathD}
+				{#if cartoPlanet === 'akunalia'}
+					<!-- Region GeoJSON Polygons -->
+					{#each features as feat, idx (feat.properties?.region ?? idx)}
+						{@const pathD = geoJsonGeometryToSvgPath(feat.geometry, MAP_W, MAP_H)}
+						{@const regionSlug = feat.properties?.region}
+						{@const isSelRegion = selected?.slug === regionSlug}
+						{#if pathD}
+							<path
+								d={pathD}
+								fill={feat.properties?.color || '#0ea5e9'}
+								fill-opacity={isSelRegion ? 0.32 : 0.16}
+								stroke={isSelRegion ? '#ffb703' : feat.properties?.color || '#38bdf8'}
+								stroke-width={isSelRegion ? '2' : '1.2'}
+								class="region-poly"
+								onclick={(e) => {
+									e.stopPropagation();
+									if (regionSlug) selectByRegionSlug(regionSlug);
+								}}
+							/>
+						{/if}
+					{/each}
+				{:else}
+					<!-- Earth Continental Outlines -->
+					{#each earthContinents as feat, idx (feat.properties?.region ?? idx)}
+						{@const pathD = geoJsonGeometryToSvgPath(feat.geometry, MAP_W, MAP_H)}
+						{#if pathD}
+							<path
+								d={pathD}
+								fill={timeline === 2 ? 'rgba(52, 211, 153, 0.14)' : 'rgba(56, 189, 248, 0.14)'}
+								stroke={timeline === 2 ? 'rgba(52, 211, 153, 0.52)' : 'rgba(56, 189, 248, 0.52)'}
+								stroke-width="1.05"
+							/>
+						{/if}
+					{/each}
+					{#if timeline === 2 && unshieldedTimeline2}
+						<!-- Cross-spacetime 500-year trajectory: Olympus (~800 BCE) -> Mount Meru (~300 BCE) -->
 						<path
-							d={pathD}
-							fill={feat.properties?.color || '#0ea5e9'}
-							fill-opacity={isSelRegion ? 0.32 : 0.16}
-							stroke={isSelRegion ? '#ffb703' : feat.properties?.color || '#38bdf8'}
-							stroke-width={isSelRegion ? '2' : '1.2'}
-							class="region-poly"
-							onclick={(e) => {
-								e.stopPropagation();
-								if (regionSlug) selectByRegionSlug(regionSlug);
-							}}
+							d="M {olympusPt.x} {olympusPt.y} Q {(olympusPt.x + meruPt.x) * 0.5} {Math.min(olympusPt.y, meruPt.y) - 56} {meruPt.x} {meruPt.y}"
+							fill="none"
+							stroke="#fbbf24"
+							stroke-width="2.4"
+							stroke-dasharray="5 4"
+							filter="url(#pinGlow)"
 						/>
 					{/if}
-				{/each}
+				{/if}
 
-				<!-- Spokes connecting regions to their child places -->
-				{#each regionSpokes as spoke (spoke.id)}
-					<line
-						x1={spoke.x1}
-						y1={spoke.y1}
-						x2={spoke.x2}
-						y2={spoke.y2}
-						stroke={spoke.active ? 'rgba(255, 183, 3, 0.65)' : 'rgba(56, 189, 248, 0.22)'}
-						stroke-width={spoke.active ? '1.5' : '0.9'}
-						stroke-dasharray="3 4"
-					/>
-				{/each}
+					<!-- Spokes connecting regions to their child places -->
+					{#each regionSpokes as spoke (spoke.id)}
+						<line
+							x1={spoke.x1}
+							y1={spoke.y1}
+							x2={spoke.x2}
+							y2={spoke.y2}
+							stroke={spoke.active ? 'rgba(255, 183, 3, 0.65)' : 'rgba(56, 189, 248, 0.22)'}
+							stroke-width={spoke.active ? '1.5' : '0.9'}
+							stroke-dasharray="3 4"
+						/>
+					{/each}
 
-				<!-- Location pins -->
-				{#each placedLocations as loc (loc.id)}
-					{@const pt = latLngToSvgPoint(loc.lat, loc.lng, MAP_W, MAP_H)}
-					{@const isSel = selected?.id === loc.id}
-					{@const isHov = hovered?.id === loc.id}
-					{@const color = pinColor(loc, isSel, isHov)}
-					<g
-						class="map-pin location-pin"
-						transform="translate({pt.x}, {pt.y})"
-						onclick={(e) => {
-							e.stopPropagation();
-							onselect(loc);
-						}}
-						ondblclick={(e) => {
-							e.stopPropagation();
-							if (isUnlockedState(loc.state)) onenter(loc);
-						}}
-						onpointerenter={() => onhover(loc)}
-						onpointerleave={() => onhover(null)}
-					>
-						{#if isSel || isHov}
-							<circle r="13" fill="none" stroke="#ffb703" stroke-width="1.6" opacity="0.85" />
-						{/if}
-						<circle
-							r={isSel ? 6.5 : 5}
-							fill={color}
-							stroke="#040d1a"
-							stroke-width="1.5"
-							filter="url(#pinGlow)"
-						/>
-						{#if isSel || isHov || isUnlockedState(loc.state)}
-							<text y="-10" text-anchor="middle" class="pin-label" class:active={isSel || isHov}>
-								{isExploredState(loc.state) ? '✓ ' : ''}{displayName(loc, m.world_unknown_place())}
-							</text>
-						{/if}
-					</g>
-				{/each}
+					<!-- Location & Singularity pins -->
+					{#each placedLocations as loc (loc.id)}
+						{@const pt = latLngToSvgPoint(loc.lat, loc.lng, MAP_W, MAP_H)}
+						{@const isSel = selected?.id === loc.id}
+						{@const isHov = hovered?.id === loc.id}
+						{@const color = pinColor(loc, isSel, isHov)}
+						{@const lbl = labelPlacements.get(loc.id)}
+						<g
+							class="map-pin location-pin"
+							transform="translate({pt.x}, {pt.y})"
+							onclick={(e) => {
+								e.stopPropagation();
+								onselect(loc);
+							}}
+							ondblclick={(e) => {
+								e.stopPropagation();
+								if (isUnlockedState(loc.state)) onenter(loc);
+							}}
+							onpointerenter={() => onhover(loc)}
+							onpointerleave={() => onhover(null)}
+						>
+							{#if isSel || isHov}
+								<circle
+									r={14 * invZoomScale}
+									fill="none"
+									stroke="#ffb703"
+									stroke-width={1.6 * invZoomScale}
+									opacity="0.85"
+								/>
+							{/if}
+							{#if loc.is_singularity}
+								<polygon
+									points="0,{-7.5 * invZoomScale} {6.5 * invZoomScale},0 0,{7.5 * invZoomScale} {-6.5 * invZoomScale},0"
+									fill={color}
+									stroke="#040d1a"
+									stroke-width={1.4 * invZoomScale}
+									filter="url(#pinGlow)"
+								/>
+							{:else}
+								<circle
+									r={(isSel ? 6.2 : 4.8) * invZoomScale}
+									fill={color}
+									stroke="#040d1a"
+									stroke-width={1.4 * invZoomScale}
+									filter="url(#pinGlow)"
+								/>
+							{/if}
+							{#if lbl}
+								{#if lbl.leader}
+									<line
+										x1="0"
+										y1="0"
+										x2={lbl.dx * 0.72}
+										y2={lbl.dy * 0.72}
+										stroke={isSel || isHov ? 'rgba(255, 183, 3, 0.75)' : 'rgba(148, 163, 184, 0.45)'}
+										stroke-width={0.9 * invZoomScale}
+									/>
+								{/if}
+								<text
+									x={lbl.dx}
+									y={lbl.dy}
+									text-anchor={lbl.anchor}
+									class="pin-label"
+									class:active={isSel || isHov}
+									style="font-size: {(isSel || isHov ? 11.2 : 10.2) * invZoomScale}px;"
+								>
+									{lbl.text}
+								</text>
+							{/if}
+						</g>
+					{/each}
 
-				<!-- Region anchor nodes -->
-				{#each placedRegions as reg (reg.id)}
-					{@const pt = latLngToSvgPoint(reg.lat, reg.lng, MAP_W, MAP_H)}
-					{@const isSel = selected?.id === reg.id}
-					{@const isHov = hovered?.id === reg.id}
-					{@const color = pinColor(reg, isSel, isHov)}
-					<g
-						class="map-pin region-pin"
-						transform="translate({pt.x}, {pt.y})"
-						onclick={(e) => {
-							e.stopPropagation();
-							onselect(reg);
-						}}
-						ondblclick={(e) => {
-							e.stopPropagation();
-							if (isUnlockedState(reg.state)) onenter(reg);
-						}}
-						onpointerenter={() => onhover(reg)}
-						onpointerleave={() => onhover(null)}
-					>
-						<circle
-							r={isSel ? 16 : 13}
-							fill="rgba(4, 13, 26, 0.78)"
-							stroke={color}
-							stroke-width={isSel ? '2.4' : '1.8'}
-						/>
-						<polygon
-							points="0,-7 7,0 0,7 -7,0"
-							fill={color}
-							filter="url(#pinGlow)"
-						/>
-						<text y="26" text-anchor="middle" class="region-label" class:active={isSel || isHov}>
-							{isExploredState(reg.state) ? '✓ ' : ''}{displayName(reg, m.world_unknown_place())}
-						</text>
-					</g>
-				{/each}
+					<!-- Region anchor nodes -->
+					{#each placedRegions as reg (reg.id)}
+						{@const pt = latLngToSvgPoint(reg.lat, reg.lng, MAP_W, MAP_H)}
+						{@const isSel = selected?.id === reg.id}
+						{@const isHov = hovered?.id === reg.id}
+						{@const color = pinColor(reg, isSel, isHov)}
+						{@const lbl = labelPlacements.get(reg.id)}
+						<g
+							class="map-pin region-pin"
+							transform="translate({pt.x}, {pt.y})"
+							onclick={(e) => {
+								e.stopPropagation();
+								onselect(reg);
+							}}
+							ondblclick={(e) => {
+								e.stopPropagation();
+								if (isUnlockedState(reg.state)) onenter(reg);
+							}}
+							onpointerenter={() => onhover(reg)}
+							onpointerleave={() => onhover(null)}
+						>
+							<circle
+								r={(isSel ? 15 : 12) * invZoomScale}
+								fill="rgba(4, 13, 26, 0.78)"
+								stroke={color}
+								stroke-width={(isSel ? 2.3 : 1.7) * invZoomScale}
+							/>
+							<polygon
+								points="0,{-6.5 * invZoomScale} {6.5 * invZoomScale},0 0,{6.5 * invZoomScale} {-6.5 * invZoomScale},0"
+								fill={color}
+								filter="url(#pinGlow)"
+							/>
+							{#if lbl}
+								{#if lbl.leader}
+									<line
+										x1="0"
+										y1="0"
+										x2={lbl.dx * 0.75}
+										y2={lbl.dy * 0.75}
+										stroke={isSel || isHov ? 'rgba(255, 183, 3, 0.78)' : 'rgba(56, 189, 248, 0.45)'}
+										stroke-width={1.0 * invZoomScale}
+									/>
+								{/if}
+								<text
+									x={lbl.dx}
+									y={lbl.dy}
+									text-anchor={lbl.anchor}
+									class="region-label"
+									class:active={isSel || isHov}
+									style="font-size: {11.6 * invZoomScale}px;"
+								>
+									{lbl.text}
+								</text>
+							{/if}
+						</g>
+					{/each}
 			</svg>
 		</div>
 
@@ -318,7 +489,12 @@
 				<span class="dot rumored-dot"></span> {m.watlas_rumored()}
 			</span>
 			{#if selected && isUnlockedState(selected.state)}
-				<a href={resolveWorldNodeTargetUrl(selected)} class="legend-enter-link">
+				<a
+					href={selected.id < 0 && selected.chapters?.length
+						? `/stories/${selected.chapters[0]}`
+						: resolveWorldNodeTargetUrl(selected)}
+					class="legend-enter-link"
+				>
 					🚀 {m.watlas_go_to()} {selected.name} →
 				</a>
 			{/if}
@@ -333,9 +509,13 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: 4.25rem clamp(1rem, 18vw, 21rem) 3.75rem clamp(1rem, 17vw, 19.5rem);
+		padding: 4.25rem 1.25rem 8.5rem 20.25rem;
 		background: radial-gradient(ellipse at center, #081526 0%, #030710 100%);
 		overflow: hidden;
+		transition: padding-right 0.2s ease;
+	}
+	.atlas-stage.has-selection {
+		padding-right: 22.6rem;
 	}
 
 	.atlas-canvas-wrap {
@@ -500,7 +680,8 @@
 	}
 
 	@media (max-width: 1024px) {
-		.atlas-stage {
+		.atlas-stage,
+		.atlas-stage.has-selection {
 			padding: 3.75rem 0.75rem 4.25rem 0.75rem;
 		}
 		.atlas-legend {

@@ -38,3 +38,8 @@ android/app/src/*/assets/
 src-tauri/updater.release.conf.json
 src-tauri/*.key
 src-tauri/*.key.pub
+
+# Python offline world pipeline caches
+__pycache__/
+*.py[cod]
+

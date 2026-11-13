@@ -347,7 +347,7 @@
 					<label class="showcase-toggle">
 						<input type="checkbox" bind:checked={syncShowcase} />
 						<div>
-							<strong>3. Đồng bộ thêm Trang chủ (Slides: {preview.showcase_summary?.beta_hero_slides || 0} · Cột mốc: {preview.showcase_summary?.beta_milestones || 0} · Dự án: {preview.showcase_summary?.beta_future_projects || 0})</strong>
+							<strong>3. Đồng bộ thêm Trang chủ & Phim (Slides: {preview.showcase_summary?.beta_hero_slides || 0} · Cột mốc: {preview.showcase_summary?.beta_milestones || 0} · Dự án: {preview.showcase_summary?.beta_future_projects || 0} · Video/Intro: {preview.showcase_summary?.beta_videos || 0})</strong>
 							<span>Mặc định tắt để giữ nguyên giao diện trang chủ Alpha trừ khi anh vừa thiết kế Slide/Milestone mới trên Beta.</span>
 						</div>
 					</label>

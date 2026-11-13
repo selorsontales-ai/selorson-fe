@@ -7,15 +7,14 @@
  */
 
 import { SRGBColorSpace, Texture, TextureLoader, type ColorSpace } from 'three';
+import { DisposablePromiseCache } from './disposable-cache';
 
 const loader = new TextureLoader();
-const cache = new Map<string, Promise<Texture | null>>();
+// Kế hoạch VRAM v2 · C1: cache module sống qua nhiều lần vào/ra /world → phải purge được (xem WorldCanvas)
+const cache = new DisposablePromiseCache<string, Texture>((texture) => texture.dispose());
 
 function load(url: string, colorSpace?: ColorSpace): Promise<Texture | null> {
-	const cached = cache.get(url);
-	if (cached) return cached;
-
-	const promise = new Promise<Texture | null>((resolve) => {
+	return cache.getOrCreate(url, () => new Promise<Texture | null>((resolve) => {
 		loader.load(
 			url,
 			(texture) => {
@@ -25,9 +24,15 @@ function load(url: string, colorSpace?: ColorSpace): Promise<Texture | null> {
 			undefined,
 			() => resolve(null)
 		);
-	});
-	cache.set(url, promise);
-	return promise;
+	}));
+}
+
+/**
+ * Giải phóng VRAM mọi texture của thế giới. Gọi TRƯỚC `renderer.dispose()` (khi rời /world);
+ * lần vào sau nạp lại từ HTTP cache.
+ */
+export function purgeWorldTextureCache(): void {
+	cache.purge();
 }
 
 /**

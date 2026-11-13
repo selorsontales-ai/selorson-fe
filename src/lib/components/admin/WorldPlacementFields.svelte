@@ -7,13 +7,27 @@
 	 * is preserved on save. That is what lets new art fields (a sprite sheet, a
 	 * model variant) be added from here without waiting for a code change.
 	 */
-	import {
-		NODE_KINDS,
-		SCENE_KINDS,
-		SCENE_LABELS,
-		TERRAIN_KINDS,
-		TERRAIN_LABELS
-	} from '$lib/world/terrains';
+	const NODE_KINDS = ['region', 'landmark', 'poi', 'legend', 'character'] as const;
+	const TERRAIN_KINDS = [
+		'castle',
+		'forest',
+		'dead_forest',
+		'ruins',
+		'volcano',
+		'ice_peak',
+		'floating_isle',
+		'harbor'
+	] as const;
+	const TERRAIN_LABELS: Record<(typeof TERRAIN_KINDS)[number], string> = {
+		castle: 'Lâu đài / thành trì',
+		forest: 'Rừng xanh',
+		dead_forest: 'Rừng chết / vùng nguyền rủa',
+		ruins: 'Phế tích',
+		volcano: 'Núi lửa',
+		ice_peak: 'Đỉnh băng',
+		floating_isle: 'Đảo bay',
+		harbor: 'Bến cảng'
+	};
 
 	interface Props {
 		/** Full `extra_data` for the item, bound back out on every edit. */
@@ -37,6 +51,7 @@
 	const KNOWN = [
 		'kind',
 		'slug',
+		'planet',
 		'region',
 		'lat',
 		'lng',
@@ -45,7 +60,9 @@
 		'scene',
 		'unlock_chapter',
 		'palette',
-		'model',
+		'intro_video_url',
+		'desktop_pack_url',
+		'vn_episode_url',
 		'color'
 	];
 
@@ -203,19 +220,6 @@
 					{/each}
 				</select>
 			</label>
-
-			<label>
-				Cảnh khi vào
-				<select
-					value={(world.scene as string) ?? ''}
-					onchange={(e) => setText('scene', e.currentTarget.value)}
-				>
-					<option value="">— xoay ngắm —</option>
-					{#each SCENE_KINDS as scene}
-						<option value={scene}>{SCENE_LABELS[scene]}</option>
-					{/each}
-				</select>
-			</label>
 		{/if}
 
 		<label>
@@ -230,6 +234,18 @@
 		</label>
 
 		<label>
+			Hành tinh
+			<select
+				value={(world.planet as string) ?? ''}
+				onchange={(e) => setText('planet', e.currentTarget.value)}
+			>
+				<option value="">— tự nhận diện —</option>
+				<option value="akunalia">🪐 Akunalia (Saga II)</option>
+				<option value="earth">🌍 Trái Đất Đa Kỷ Nguyên (Saga I)</option>
+			</select>
+		</label>
+
+		<label>
 			Bảng màu
 			<input
 				value={paletteText}
@@ -238,15 +254,35 @@
 			/>
 		</label>
 
-		<label>
-			Mô hình 3D (.glb)
-			<input
-				value={(world.model as string) ?? ''}
-				placeholder="world/models/sindark.glb"
-				oninput={(e) => setText('model', e.currentTarget.value)}
-			/>
-			<small>Có mô hình thì dùng mô hình, không có thì tự dựng từ địa hình</small>
-		</label>
+		{#if !isCharacter}
+			<label>
+				Video Intro / Phim ngắn (URL)
+				<input
+					value={(world.intro_video_url as string) ?? ''}
+					placeholder="https://.../intro.mp4 hoặc YouTube"
+					oninput={(e) => setText('intro_video_url', e.currentTarget.value)}
+				/>
+				<small>Nhận từ Cổng World Studio (kiểu Intro Game of Thrones)</small>
+			</label>
+
+			<label>
+				Gói Thế Giới 3D Desktop (URL)
+				<input
+					value={(world.desktop_pack_url as string) ?? ''}
+					placeholder="https://.../location-pack.zip"
+					oninput={(e) => setText('desktop_pack_url', e.currentTarget.value)}
+				/>
+			</label>
+
+			<label>
+				Tập Visual Novel (URL)
+				<input
+					value={(world.vn_episode_url as string) ?? ''}
+					placeholder="https://.../vn-episode.json"
+					oninput={(e) => setText('vn_episode_url', e.currentTarget.value)}
+				/>
+			</label>
+		{/if}
 
 		{#if isCharacter}
 			<label>

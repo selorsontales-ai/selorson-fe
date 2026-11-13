@@ -1809,11 +1809,6 @@
 		font-size: 0.72rem;
 		color: var(--color-text-muted);
 	}
-	.autoread-hint code {
-		padding: 0.1rem 0.35rem;
-		border-radius: 0.25rem;
-		background: rgba(255, 255, 255, 0.08);
-	}
 
 	/* Extended Settings */
 	.reader-settings {

@@ -10,27 +10,9 @@
 export type RevealState = 'hidden' | 'rumored' | 'revealed' | 'explored';
 
 /** Which scene a location opens into when the reader arrives. */
-export type SceneKind = 'orbit' | 'assembly' | 'fps';
+export type SceneKind = 'orbit' | 'showcase';
 
-/** An asset the server has already resolved to a loadable file. */
-export interface ResolvedAsset {
-	url: string;
-	format: string | null;
-	/**
-	 * Correction baked in at import: scale for models authored in centimetres,
-	 * rotation for Z-up exports, offset for origins that are not at the feet.
-	 * Applying it here means the author fixes it once, not at every use.
-	 */
-	transform: {
-		scale?: number;
-		rotation?: [number, number, number];
-		offset?: [number, number, number];
-	} | null;
-	/** Asset `updated_at` — re-exporting a model beats the CDN cache. */
-	v: number;
-}
-
-/** One removable piece of a landmark in an exploded view. */
+/** One architectural stratum of a landmark on the showcase stage. */
 export interface WorldPart {
 	id: string;
 	label: string;
@@ -74,26 +56,106 @@ export interface WorldNode {
 	/** Published chapter numbers this node appears in. */
 	chapters?: number[];
 
-	/**
-	 * Production assets bound to this node, resolved server-side from slugs into
-	 * URLs. A character's `head` stands on the map where a whole figure would be
-	 * an unreadable speck; `body` walks their journey. The client never sees a
-	 * slug — a binding to a retired asset simply does not arrive, and the
-	 * renderer falls back a tier.
-	 */
-	assets?: Record<string, ResolvedAsset>;
-
-	// ── Presentation, all optional; the engine picks the highest tier present ──
+	// ── Presentation, all optional ──
 	model?: string | null;
-	model_scale?: number;
 	sprite_sheet?: string | null;
 	sprite_dirs?: number;
-	anim?: Record<string, string>;
 	palette?: string[];
 	color?: string;
 	home?: string;
 	scale?: number;
 	parts?: WorldPart[];
+
+	// ── Multi-planet & Temporal fields (Tầng 0 & Tầng 1) ──
+	planet?: 'akunalia' | 'earth' | (string & {});
+	era?: string | null;
+	era_year?: number | null;
+	timeline?: 1 | 2 | 'both' | null;
+	wavelength_nm?: number | null;
+	is_singularity?: boolean;
+
+	// ── Ecosystem Studio Sync Gateway fields (`Open Sync Gateway`) ──
+	intro_video_url?: string | null;
+	preview_gallery?: string[];
+	clockwork_pack_url?: string | null;
+	clockwork_pack_version?: string | null;
+	clockwork_pack_size?: number | null;
+	desktop_pack_url?: string | null;
+	desktop_pack_version?: string | null;
+	desktop_pack_size?: number | null;
+	vn_episode_url?: string | null;
+	vn_episode_title?: string | null;
+	studio_source_key?: string | null;
+	studio_synced_at?: string | null;
+}
+
+export interface WorldChunkPlacement {
+	id: string;
+	slug?: string;
+	title?: string;
+	glb_url?: string | null;
+	x: number;
+	y: number;
+	z: number;
+	rot_y_deg?: number;
+	scale?: number;
+}
+
+export interface WorldChunkAudioZone {
+	id: string;
+	label?: string;
+	audio_url?: string | null;
+	x: number;
+	z: number;
+	radius: number;
+	volume?: number;
+}
+
+export interface WorldChunkVnTrigger {
+	id: string;
+	label?: string;
+	title?: string;
+	episode_slug?: string;
+	episode_url?: string | null;
+	x?: number;
+	y?: number;
+	z?: number;
+	radius?: number;
+}
+
+/** One seamless Open-World terrain chunk (`⚔️ Thế Giới Mở`) streamed into Selorson Desktop. */
+export interface WorldChunkNode {
+	id: number;
+	slug: string;
+	name: string | null;
+	planet: 'akunalia' | 'earth' | (string & {});
+	region: string | null;
+	biome: string | null;
+	chunk_x: number;
+	chunk_z: number;
+	world_size: number;
+	unlock_chapter: number | null;
+	state: RevealState;
+	v: number;
+	description?: string | null;
+	image_url?: string | null;
+	preview_gallery?: string[];
+	chunk_pack_url?: string | null;
+	chunk_pack_version?: string | null;
+	chunk_pack_size?: number | null;
+	splat_url?: string | null;
+	water_level?: number | null;
+	foliage_density?: number | null;
+	heightmap_grid?: {
+		resolution: number;
+		values: number[];
+	} | null;
+	placements?: WorldChunkPlacement[];
+	audio_zones?: WorldChunkAudioZone[];
+	spawn_points?: Array<{ id: string; label?: string; x: number; y: number; z: number }>;
+	vn_triggers?: WorldChunkVnTrigger[];
+	studio_source_key?: string | null;
+	studio_synced_at?: string | null;
 }
 
 export interface WorldProgress {

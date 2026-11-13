@@ -1,16 +1,29 @@
 <script lang="ts">
 	/**
-	 * Overlay for the globe & 2D Atlas: searchable/filterable region, location &
-	 * character directory on the left, rich detail & deep-links on the right,
-	 * exploration progress along the bottom, and 3D/2D mode switcher at the top.
+	 * Overlay for the Multi-Planet Cosmic Space (Tầng 0), Living 3D Globe (Tầng 1)
+	 * & 2D Atlas: celestial/temporal controls, searchable region/location/character
+	 * directory on the left, rich detail & deep-links on the right, and exploration
+	 * progress along the bottom.
 	 */
+	import { currentLocale } from '$lib/i18n-labels';
 	import * as m from '$lib/paraglide/messages';
-		import type { WorldNode, WorldProgress } from '../types';
+	import { isDesktop } from '$lib/platform';
+	import {
+		AKUNALIA_CANON_NODES,
+		CELESTIAL_BODIES,
+		pickText,
+		type CelestialBodyId,
+		type CosmicSectorId,
+		type WorldTier,
+		type WorldTimeline
+	} from '../cosmos';
+	import type { WorldNode, WorldProgress } from '../types';
 	import {
 		filterWorldNodes,
 		isExploredState,
 		isUnlockedState
 	} from '../world-utils';
+	import CosmicTimelineHud from './CosmicTimelineHud.svelte';
 
 	interface Props {
 		regions: WorldNode[];
@@ -19,11 +32,27 @@
 		characters: WorldNode[];
 		progress: WorldProgress;
 		selected: WorldNode | null;
+		spaceMode?: 'clockwork' | 'open';
 		viewMode?: '3d' | '2d';
 		webglAvailable?: boolean;
+		tier?: WorldTier;
+		activePlanet?: CelestialBodyId;
+		eraId?: string;
+		timeline?: WorldTimeline;
+		effectiveReadUpTo?: number | null;
+		daylightMode?: boolean;
+		prismMomentActive?: boolean;
 		onselect: (node: WorldNode | null) => void;
 		onenter: (node: WorldNode) => void;
+		onspacetoggle?: (mode: 'clockwork' | 'open') => void;
 		ontogglemode?: (mode: '3d' | '2d') => void;
+		onsettier?: (tier: WorldTier) => void;
+		onselectplanet?: (planet: CelestialBodyId) => void;
+		onselectsector?: (sector: CosmicSectorId) => void;
+		onselectera?: (eraId: string, focus?: { lat: number; lng: number }) => void;
+		onsettimeline?: (timeline: WorldTimeline) => void;
+		ontoggledaylight?: (enabled: boolean) => void;
+		ontoggleprism?: (enabled: boolean) => void;
 	}
 
 	let {
@@ -32,16 +61,37 @@
 		characters,
 		progress,
 		selected,
+		spaceMode = 'clockwork',
 		viewMode = '3d',
 		webglAvailable = true,
+		tier = 1,
+		activePlanet = 'akunalia',
+		eraId = 'all',
+		timeline = 1,
+		effectiveReadUpTo = null,
+		daylightMode = false,
+		prismMomentActive = false,
 		onselect,
 		onenter,
-		ontogglemode
+		onspacetoggle,
+		ontogglemode,
+		onsettier,
+		onselectplanet,
+		onselectsector,
+		onselectera,
+		onsettimeline,
+		ontoggledaylight,
+		ontoggleprism
 	}: Props = $props();
 
 	let searchQuery = $state('');
 	let kindFilter = $state<'all' | 'region' | 'location' | 'character'>('all');
 	let mobileListOpen = $state(false);
+	let locale = $derived(currentLocale());
+	let isEn = $derived(locale.toLowerCase().startsWith('en'));
+	let hasNarrativeMap = $derived(Boolean(CELESTIAL_BODIES[activePlanet]?.hasNarrativeMap));
+	let isCosmicOverview = $derived(tier === 0 && webglAvailable && viewMode === '3d');
+	let hideSurfaceSidebar = $derived(isCosmicOverview || !hasNarrativeMap);
 
 	function selectNode(node: WorldNode | null) {
 		onselect(node);
@@ -83,6 +133,66 @@
 		return node.name ?? m.world_unknown_place();
 	}
 
+	const KIND_LABELS: Record<string, { vi: string; en: string }> = {
+		region: { vi: 'Vùng địa lý', en: 'Region' },
+		landmark: { vi: 'Thắng cảnh', en: 'Landmark' },
+		poi: { vi: 'Địa điểm', en: 'Location' },
+		location: { vi: 'Địa điểm', en: 'Location' },
+		character: { vi: 'Nhân vật', en: 'Character' },
+		legend: { vi: 'Huyền tích', en: 'Legend' }
+	};
+
+	const TERRAIN_LABELS: Record<string, { vi: string; en: string }> = {
+		'alpine-obsidian': { vi: 'Tuyết sơn hắc diện thạch', en: 'Obsidian Glacier' },
+		alpine: { vi: 'Tuyết sơn cao nguyên', en: 'Alpine Peaks' },
+		'river-plain': { vi: 'Đồng bằng đại giang', en: 'Alluvial Plains' },
+		sanctuary: { vi: 'Thánh địa hoàng triều', en: 'Imperial Sanctuary' },
+		'abyssal-sea': { vi: 'Nội hải kết giới', en: 'Ward Lagoon' },
+		'highland-forest': { vi: 'Rừng cao nguyên thần năng', en: 'Luminous Highlands' },
+		village: { vi: 'Thánh thôn thung lũng', en: 'Valley Village' },
+		archipelago: { vi: 'Quần đảo rạn ngọc', en: 'Jade Archipelago' },
+		forest: { vi: 'Rừng đại ngàn', en: 'Ancient Forest' },
+		ruins: { vi: 'Di tích cổ đại', en: 'Ancient Ruins' },
+		shrine: { vi: 'Đền cổ', en: 'Sacred Shrine' },
+		cliffs: { vi: 'Vách đá sương mù', en: 'Sea Cliffs' },
+		megalith: { vi: 'Vòng cự thạch', en: 'Megalithic Ring' },
+		bastion: { vi: 'Thành lũy tầng đệm', en: 'Bastion' },
+		desert: { vi: 'Sa mạc cát vàng', en: 'Desert' },
+		mountain: { vi: 'Dãy núi cao', en: 'Mountain Range' },
+		plains: { vi: 'Đồng bằng', en: 'Plains' },
+		ocean: { vi: 'Đại dương', en: 'Ocean' },
+		city: { vi: 'Kinh thành', en: 'Citadel' }
+	};
+
+	function prettifySlug(raw: string): string {
+		return raw
+			.replace(/[-_]+/g, ' ')
+			.replace(/\b\w/g, (ch) => ch.toUpperCase());
+	}
+
+	function regionLabel(regionSlug: string | null | undefined): string {
+		if (!regionSlug) return '';
+		const match = regions.find((r) => r.slug === regionSlug && r.name);
+		if (match?.name) return match.name;
+		const canon = AKUNALIA_CANON_NODES.find((d) => d.slug === regionSlug);
+		if (canon) return pickText(canon.name, locale);
+		return prettifySlug(regionSlug);
+	}
+
+	function kindLabel(kind: string | null | undefined): string {
+		if (!kind) return '';
+		const entry = KIND_LABELS[kind.toLowerCase()];
+		if (entry) return isEn ? entry.en : entry.vi;
+		return prettifySlug(kind);
+	}
+
+	function terrainLabel(terrain: string | null | undefined): string {
+		if (!terrain) return '';
+		const entry = TERRAIN_LABELS[terrain.toLowerCase()];
+		if (entry) return isEn ? entry.en : entry.vi;
+		return prettifySlug(terrain);
+	}
+
 	function stateLabel(node: WorldNode): string | null {
 		if (isExploredState(node.state)) return m.rhud_explored();
 		if (node.state === 'rumored') return m.world_state_rumored();
@@ -91,44 +201,116 @@
 	}
 </script>
 
-<div class="hud">
+<div class="hud" class:cosmic-mode={hideSurfaceSidebar}>
 	<div class="top-controls">
-		<button
-			type="button"
-			class="mobile-list-toggle"
-			class:active={mobileListOpen}
-			onclick={() => (mobileListOpen = !mobileListOpen)}
-		>
-			📋 {m.world_regions()} / {m.world_places()}
-		</button>
-		{#if webglAvailable && ontogglemode}
-			<div class="mode-switch" role="group" aria-label={m.whud_map_display_mode()}>
+		<CosmicTimelineHud
+			part="top"
+			tier={viewMode === '3d' ? tier : 1}
+			{activePlanet}
+			{eraId}
+			{timeline}
+			{effectiveReadUpTo}
+			webglAvailable={webglAvailable && viewMode === '3d'}
+			onsettier={(nextTier) => onsettier?.(nextTier)}
+			onselectplanet={(planet) => onselectplanet?.(planet)}
+			onselectsector={(sec) => onselectsector?.(sec)}
+			onselectera={(nextEra, focus) => onselectera?.(nextEra, focus)}
+			onsettimeline={(nextTl) => onsettimeline?.(nextTl)}
+		/>
+
+		<div class="top-right-actions">
+			{#if isDesktop && onspacetoggle}
+				<div
+					class="mode-switch space-switch"
+					role="group"
+					aria-label={isEn ? '3D World Mode' : 'Chế độ Bản đồ 3D'}
+				>
+					<button
+						type="button"
+						class="mode-btn"
+						class:active={spaceMode === 'clockwork'}
+						onclick={() => onspacetoggle('clockwork')}
+					>
+						{isEn ? 'Clockwork' : 'Sa bàn'}
+					</button>
+					<button
+						type="button"
+						class="mode-btn"
+						class:active={spaceMode === 'open'}
+						onclick={() => onspacetoggle('open')}
+					>
+						{isEn ? 'Open World' : 'Thế giới mở'}
+					</button>
+				</div>
+			{/if}
+			{#if !hideSurfaceSidebar}
 				<button
 					type="button"
-					class="mode-btn"
-					class:active={viewMode === '3d'}
-					onclick={() => ontogglemode('3d')}
+					class="mobile-list-toggle"
+					class:active={mobileListOpen}
+					onclick={() => (mobileListOpen = !mobileListOpen)}
 				>
-					🌐 3D Globe
+					📋 {m.world_regions()} / {m.world_places()}
 				</button>
-				<button
-					type="button"
-					class="mode-btn"
-					class:active={viewMode === '2d'}
-					onclick={() => ontogglemode('2d')}
-				>
-					🗺️ Atlas 2D
+			{/if}
+			{#if webglAvailable && viewMode === '3d'}
+				{#if ontoggledaylight}
+					<button
+						type="button"
+						class="cosmic-fx-btn daylight-btn"
+						class:active={daylightMode}
+						aria-pressed={daylightMode}
+						data-testid="toggle-daylight-mode"
+						title={m.world_lighting_tooltip()}
+						onclick={() => ontoggledaylight(!daylightMode)}
+					>
+						{daylightMode ? m.world_lighting_daylight() : m.world_lighting_cinematic()}
+					</button>
+				{/if}
+				{#if ontoggleprism}
+					<button
+						type="button"
+						class="cosmic-fx-btn prism-btn"
+						class:active={prismMomentActive}
+						aria-pressed={prismMomentActive}
+						data-testid="toggle-prism-moment"
+						title={m.world_prism_moment_tooltip()}
+						onclick={() => ontoggleprism(!prismMomentActive)}
+					>
+						{m.world_prism_moment_btn()}
+					</button>
+				{/if}
+			{/if}
+			{#if webglAvailable && ontogglemode && hasNarrativeMap}
+				<div class="mode-switch" role="group" aria-label={m.whud_map_display_mode()}>
+					<button
+						type="button"
+						class="mode-btn"
+						class:active={viewMode === '3d'}
+						onclick={() => ontogglemode('3d')}
+					>
+						🌐 3D Globe
+					</button>
+					<button
+						type="button"
+						class="mode-btn"
+						class:active={viewMode === '2d'}
+						onclick={() => ontogglemode('2d')}
+					>
+						🗺️ Atlas 2D
+					</button>
+				</div>
+			{/if}
+			{#if selected}
+				<button type="button" class="reset-cam-btn" onclick={() => onselect(null)}>
+					{m.whud_planet_overview()}
 				</button>
-			</div>
-		{/if}
-		{#if selected}
-			<button type="button" class="reset-cam-btn" onclick={() => onselect(null)}>
-				{m.whud_planet_overview()}
-			</button>
-		{/if}
-		<a class="library-shortcut" href="/library">{m.whud_encyclopedia()}</a>
+			{/if}
+			<a class="library-shortcut" href="/library">{m.whud_encyclopedia()}</a>
+		</div>
 	</div>
 
+	{#if !hideSurfaceSidebar}
 	<aside class="panel list-panel" class:mobile-open={mobileListOpen}>
 		<div class="search-box">
 			<input
@@ -215,10 +397,12 @@
 						>
 							<span class="node-name">{label(loc)}</span>
 							<div class="node-sub-row">
-								{#if loc.region}
-									<span class="node-region-tag">{loc.region}</span>
+								{#if typeof loc.wavelength_nm === 'number'}
+									<span class="node-region-tag">λ {loc.wavelength_nm} nm</span>
+								{:else if loc.region}
+									<span class="node-region-tag">{regionLabel(loc.region)}</span>
 								{:else if loc.terrain}
-									<span class="node-region-tag">{loc.terrain}</span>
+									<span class="node-region-tag">{terrainLabel(loc.terrain)}</span>
 								{/if}
 								{#if stateLabel(loc)}
 									<span class="node-state" class:explored-text={isExploredState(loc.state)}>
@@ -255,14 +439,23 @@
 			<p class="empty-filter">{m.whud_no_coordinates_match_the_search()}</p>
 		{/if}
 	</aside>
+	{/if}
 
 	{#if selected}
 		<section class="panel detail-panel">
 			<button class="close" onclick={() => onselect(null)} aria-label="close">×</button>
 			<div class="detail-badges">
-				<span class="detail-kind">{selected.kind}</span>
-				{#if selected.terrain}
-					<span class="detail-terrain">⛰️ {selected.terrain}</span>
+				{#if selected.is_singularity}
+					<span class="singularity-badge">💠 {m.world_singularity_badge()}</span>
+				{:else}
+					<span class="detail-kind">{kindLabel(selected.kind)}</span>
+				{/if}
+				{#if typeof selected.wavelength_nm === 'number'}
+					<span class="wavelength-badge">
+						λ {m.world_wavelength_badge({ nm: String(selected.wavelength_nm) })}
+					</span>
+				{:else if selected.terrain}
+					<span class="detail-terrain">⛰️ {terrainLabel(selected.terrain)}</span>
 				{/if}
 				{#if isExploredState(selected.state)}
 					<span class="explored-badge">{m.whud_visited()}</span>
@@ -275,7 +468,7 @@
 					<img class="detail-img" src={selected.image_url} alt={label(selected)} />
 				{/if}
 				{#if selected.description}
-					<p class="detail-desc">{selected.description}</p>
+					<p class="detail-desc" style="white-space: pre-line;">{selected.description}</p>
 				{/if}
 				{#if selected.chapters?.length}
 					<div class="detail-chapters-block">
@@ -322,9 +515,15 @@
 							🏔️ {m.world_enter_place()}
 						{/if}
 					</button>
-					<a class="dossier-btn" href="/library?id={selected.id}">
-						{m.rhud_encyclopedia_dossier()}
-					</a>
+					{#if selected.id > 0}
+						<a class="dossier-btn" href="/library?id={selected.id}">
+							{m.rhud_encyclopedia_dossier()}
+						</a>
+					{:else if selected.chapters?.length}
+						<a class="dossier-btn" href="/stories/{selected.chapters[0]}">
+							{m.world_open_singularity_chapter({ chapter: String(selected.chapters[0]) })}
+						</a>
+					{/if}
 					{#if selected.story_link}
 						<a class="chapter-link" href={selected.story_link}>{m.world_read_chapter()}</a>
 					{/if}
@@ -338,24 +537,41 @@
 		</section>
 	{/if}
 
-	<footer class="panel progress-panel">
-		<span class="progress-label">
-			{m.world_progress()}
-			<strong>{progress.percent}%</strong>
-			<span class="progress-count">({progress.revealed}/{progress.placed})</span>
-		</span>
-		{#if typeof progress.explored === 'number' && progress.explored > 0}
-			<span class="explored-summary">
-				✓ {m.whud_explored()} <strong>{progress.explored}/{progress.placed}</strong>
+	<div class="bottom-stack">
+		<CosmicTimelineHud
+			part="dock"
+			tier={viewMode === '3d' ? tier : 1}
+			{activePlanet}
+			{eraId}
+			{timeline}
+			{effectiveReadUpTo}
+			webglAvailable={webglAvailable && viewMode === '3d'}
+			onsettier={(nextTier) => onsettier?.(nextTier)}
+			onselectplanet={(planet) => onselectplanet?.(planet)}
+			onselectsector={(sec) => onselectsector?.(sec)}
+			onselectera={(nextEra, focus) => onselectera?.(nextEra, focus)}
+			onsettimeline={(nextTl) => onsettimeline?.(nextTl)}
+		/>
+
+		<footer class="panel progress-panel">
+			<span class="progress-label">
+				{m.world_progress()}
+				<strong>{progress.percent}%</strong>
+				<span class="progress-count">({progress.revealed}/{progress.placed})</span>
 			</span>
-		{/if}
-		<div class="progress-track">
-			<div class="progress-fill" style="width:{progress.percent}%"></div>
-		</div>
-		{#if progress.is_guest}
-			<span class="progress-hint">{m.world_guest_hint()}</span>
-		{/if}
-	</footer>
+			{#if typeof progress.explored === 'number' && progress.explored > 0}
+				<span class="explored-summary">
+					✓ {m.whud_explored()} <strong>{progress.explored}/{progress.placed}</strong>
+				</span>
+			{/if}
+			<div class="progress-track">
+				<div class="progress-fill" style="width:{progress.percent}%"></div>
+			</div>
+			{#if progress.is_guest}
+				<span class="progress-hint">{m.world_guest_hint()}</span>
+			{/if}
+		</footer>
+	</div>
 </div>
 
 <style>
@@ -365,10 +581,14 @@
 		z-index: 5;
 		pointer-events: none;
 		display: grid;
-		grid-template-columns: minmax(0, 19rem) 1fr minmax(0, 22rem);
+		grid-template-columns: minmax(0, 18.5rem) 1fr minmax(0, 21.5rem);
 		grid-template-rows: auto 1fr auto;
-		gap: 0.85rem;
-		padding: 0.85rem 1rem;
+		gap: 0.7rem;
+		padding: 0.75rem 0.95rem;
+		--color-text-primary: #f1f5f9;
+		--color-text-secondary: #cbd5e1;
+		--color-text-muted: #94a3b8;
+		color: #f1f5f9;
 	}
 
 	.top-controls {
@@ -376,17 +596,74 @@
 		grid-row: 1;
 		display: flex;
 		align-items: center;
-		justify-content: flex-end;
+		justify-content: space-between;
 		gap: 0.6rem;
 		flex-wrap: wrap;
 		pointer-events: none;
 	}
 
+	.hud.cosmic-mode .top-controls {
+		grid-column: 1 / -1;
+	}
+
+	.top-right-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		margin-left: auto;
+		pointer-events: none;
+	}
+
 	.mode-switch,
+	.cosmic-fx-btn,
 	.reset-cam-btn,
 	.library-shortcut,
 	.mobile-list-toggle {
 		pointer-events: auto;
+	}
+
+	.cosmic-fx-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.32rem;
+		background: rgba(8, 14, 24, 0.84);
+		backdrop-filter: blur(14px);
+		border: 1px solid rgba(148, 163, 184, 0.24);
+		color: #e2e8f0;
+		font-size: 0.74rem;
+		font-weight: 600;
+		padding: 0.38rem 0.72rem;
+		border-radius: 999px;
+		cursor: pointer;
+		transition:
+			background 0.2s ease,
+			border-color 0.2s ease,
+			color 0.2s ease,
+			box-shadow 0.2s ease;
+		white-space: nowrap;
+	}
+	.cosmic-fx-btn:hover {
+		background: rgba(15, 23, 42, 0.92);
+		border-color: rgba(248, 250, 252, 0.36);
+		color: #fff;
+	}
+	.daylight-btn.active {
+		background: linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(250, 204, 21, 0.18));
+		border-color: rgba(251, 191, 36, 0.72);
+		color: #fef3c7;
+		box-shadow: 0 0 14px rgba(251, 191, 36, 0.24);
+	}
+	.prism-btn.active {
+		background: linear-gradient(
+			135deg,
+			rgba(244, 63, 94, 0.22),
+			rgba(56, 189, 248, 0.24),
+			rgba(168, 85, 247, 0.26)
+		);
+		border-color: rgba(192, 132, 252, 0.72);
+		color: #f8fafc;
+		box-shadow: 0 0 16px rgba(168, 85, 247, 0.28);
 	}
 
 	.mobile-list-toggle {
@@ -460,7 +737,7 @@
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		border-radius: var(--radius-lg, 12px);
 		padding: 0.9rem;
-		color: var(--color-text-primary, #e2e8f0);
+		color: #f1f5f9;
 	}
 
 	.list-panel {
@@ -478,14 +755,20 @@
 		max-height: 100%;
 		position: relative;
 	}
-	.progress-panel {
+	.bottom-stack {
 		grid-column: 1 / -1;
 		grid-row: 3;
+		display: flex;
+		flex-direction: column;
+		gap: 0.48rem;
+		pointer-events: none;
+	}
+	.progress-panel {
 		display: flex;
 		align-items: center;
 		gap: 1rem;
 		flex-wrap: wrap;
-		padding: 0.65rem 1rem;
+		padding: 0.55rem 0.95rem;
 	}
 
 	.search-box {
@@ -558,7 +841,7 @@
 		border-left: 3px solid var(--color-brand-500, #0c713d);
 		border-radius: 6px;
 		padding: 0.48rem 0.65rem;
-		color: inherit;
+		color: #f1f5f9;
 		font: inherit;
 		font-size: 0.84rem;
 		cursor: pointer;
@@ -693,6 +976,24 @@
 		padding: 0.15rem 0.45rem;
 		border-radius: 999px;
 	}
+	.singularity-badge {
+		font-size: 0.68rem;
+		font-weight: 700;
+		color: #f0abfc;
+		background: rgba(168, 85, 247, 0.18);
+		border: 1px solid rgba(192, 132, 252, 0.4);
+		padding: 0.15rem 0.5rem;
+		border-radius: 999px;
+	}
+	.wavelength-badge {
+		font-size: 0.68rem;
+		font-weight: 600;
+		color: #bae6fd;
+		background: rgba(14, 165, 233, 0.16);
+		border: 1px solid rgba(56, 189, 248, 0.35);
+		padding: 0.15rem 0.48rem;
+		border-radius: 999px;
+	}
 	.explored-badge {
 		font-size: 0.68rem;
 		color: #34d399;
@@ -785,6 +1086,7 @@
 	}
 
 	.enter-btn {
+		display: block;
 		width: 100%;
 		padding: 0.6rem;
 		border: none;
@@ -794,6 +1096,8 @@
 		font: inherit;
 		font-size: 0.85rem;
 		font-weight: 600;
+		text-align: center;
+		text-decoration: none;
 		cursor: pointer;
 	}
 	.enter-btn:hover {
@@ -861,8 +1165,8 @@
 		.hud {
 			grid-template-columns: 1fr;
 			grid-template-rows: auto auto 1fr auto;
-			padding: 0.6rem;
-			gap: 0.55rem;
+			padding: 0.55rem;
+			gap: 0.5rem;
 		}
 		.mobile-list-toggle {
 			display: inline-flex;
@@ -874,10 +1178,13 @@
 			grid-row: 1;
 			justify-content: flex-start;
 		}
+		.top-right-actions {
+			margin-left: 0;
+		}
 		.list-panel {
 			grid-column: 1;
 			grid-row: 2;
-			max-height: 42dvh;
+			max-height: 40dvh;
 			display: none;
 		}
 		.list-panel.mobile-open {
@@ -887,13 +1194,16 @@
 			grid-column: 1;
 			grid-row: 3;
 			align-self: end;
-			max-height: 44dvh;
+			max-height: 40dvh;
 		}
-		.progress-panel {
+		.bottom-stack {
 			grid-column: 1;
 			grid-row: 4;
-			padding: 0.5rem 0.75rem;
-			gap: 0.5rem 0.85rem;
+			gap: 0.4rem;
+		}
+		.progress-panel {
+			padding: 0.45rem 0.75rem;
+			gap: 0.45rem 0.8rem;
 		}
 	}
 </style>

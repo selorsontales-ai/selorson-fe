@@ -72,9 +72,11 @@
 			<span class="who-label">{m.world_journey_of()}</span>
 			{label(character)}
 		</h1>
-		<a class="dossier-chip" href="/library?id={character.id}">
-			{m.jhud_character_dossier()}
-		</a>
+		{#if character.id > 0}
+			<a class="dossier-chip" href="/library?id={character.id}">
+				{m.jhud_character_dossier()}
+			</a>
+		{/if}
 	</header>
 
 	{#if current}
@@ -213,6 +215,10 @@
 		grid-template-rows: auto 1fr auto;
 		gap: 1rem;
 		padding: 1rem;
+		--color-text-primary: #f1f5f9;
+		--color-text-secondary: #cbd5e1;
+		--color-text-muted: #94a3b8;
+		color: #f1f5f9;
 	}
 	.panel {
 		pointer-events: auto;
@@ -221,7 +227,7 @@
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		border-radius: var(--radius-lg, 12px);
 		padding: 1rem;
-		color: var(--color-text-primary, #e2e8f0);
+		color: #f1f5f9;
 	}
 
 	.top-bar {

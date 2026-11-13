@@ -43,6 +43,8 @@ export const supportsAdminPanel =
 	appFlavor === "desktop-admin" ||
 	appFlavor === "android-admin";
 
+export const IS_ADMIN_FLAVOR = supportsAdminPanel;
+
 export const supportsDesktopUpdater = appFlavor === "desktop-admin";
 
 /**

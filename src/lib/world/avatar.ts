@@ -1,25 +1,13 @@
 /**
- * How a character is drawn on the map.
+ * Lightweight character representation on the web map (`/world` & `/world/journey/[id]`).
  *
- * Character art is placeholder-grade today and expected to be upgraded several
- * times — flat portraits first, then directional sprites, eventually rigged
- * models. Rather than rewriting the renderer at each step, the engine reads the
- * highest tier the database happens to supply and falls back cleanly when a
- * field is absent. Upgrading art is a data edit in admin, not a code change.
+ * Supports directional sprite sheets, portrait billboards, or glowing coloured pins.
  */
 
 import { assetUrl } from './config';
 import type { WorldNode } from './types';
 
-export type AvatarTier =
-	/** Nothing but a name — a coloured pin. Always available. */
-	| 'dot'
-	/** A single portrait, billboarded to face the camera. */
-	| 'billboard'
-	/** A directional sprite sheet; frame chosen by heading. */
-	| 'sprite'
-	/** A glTF model with optional walk/idle clips. */
-	| 'model';
+export type AvatarTier = 'dot' | 'billboard' | 'sprite';
 
 export interface AvatarSpec {
 	tier: AvatarTier;
@@ -30,62 +18,22 @@ export interface AvatarSpec {
 	/** Sprite sheet columns, when `tier === 'sprite'`. */
 	directions: number;
 	scale: number;
-	/** Animation clip names for `tier === 'model'`. */
-	anim: Record<string, string>;
 }
 
 /** Fallback pin colours, cycled by id so two characters are never the same. */
 const PALETTE = ['#2fe36b', '#00f0ff', '#ffb703', '#ff75c3', '#a855f7', '#ff5c39', '#5cc8ff'];
 
-/**
- * Which production asset should stand in for a character in a given context.
- *
- * `head` on the map, where a whole figure is an unreadable speck; `body` on a
- * journey, where the reader is watching them travel. Falls through to the other
- * slot rather than to nothing, because one good asset is better than a pin.
- */
-export function avatarAsset(node: WorldNode, slot: 'head' | 'body') {
-	const assets = node.assets;
-	if (!assets) return null;
-	const other = slot === 'head' ? 'body' : 'head';
-	return assets[slot] ?? assets[other] ?? null;
-}
-
-/** Sprite sheet or icon bound as an asset, preferred over the library portrait. */
-export function avatarFlat(node: WorldNode) {
-	return node.assets?.sprite ?? node.assets?.icon ?? null;
-}
-
-/**
- * Pick the richest representation the data supports.
- *
- * Order matters: a character with both a model and a portrait should render as
- * the model, but must not break if the model file 404s — callers fall back by
- * calling `degrade()`.
- */
 export function resolveAvatar(node: WorldNode): AvatarSpec {
 	const color = node.color ?? PALETTE[Math.abs(node.id) % PALETTE.length];
-	const scale = node.model_scale ?? node.scale ?? 1;
-	const anim = node.anim ?? {};
+	const scale = node.scale ?? 1;
 
-	if (node.model) {
-		return {
-			tier: 'model',
-			color,
-			url: assetUrl(node.model, node.v),
-			directions: 1,
-			scale,
-			anim
-		};
-	}
 	if (node.sprite_sheet) {
 		return {
 			tier: 'sprite',
 			color,
 			url: assetUrl(node.sprite_sheet, node.v),
 			directions: node.sprite_dirs ?? 8,
-			scale,
-			anim
+			scale
 		};
 	}
 	if (node.image_url) {
@@ -94,11 +42,10 @@ export function resolveAvatar(node: WorldNode): AvatarSpec {
 			color,
 			url: assetUrl(node.image_url, node.v),
 			directions: 1,
-			scale,
-			anim
+			scale
 		};
 	}
-	return { tier: 'dot', color, url: null, directions: 1, scale, anim };
+	return { tier: 'dot', color, url: null, directions: 1, scale };
 }
 
 /** Which sprite column faces `heading` radians, for `tier === 'sprite'`. */

@@ -97,17 +97,17 @@ test('buildCommentThreads groups nested replies under root threads and sorts by 
 	assert.equal(top[0].root.id, 2);
 });
 
-test('World Studio Phase 2, Journey Auto-Play, CommentsSection, and NotificationBell are wired', () => {
-	const studioTs = fs.readFileSync(
-		path.resolve('src/lib/world-studio/studio.svelte.ts'),
+test('Admin World Review & Open Sync Gateway, Journey Auto-Play, CommentsSection, and NotificationBell are wired', () => {
+	const adminWorldPage = fs.readFileSync(
+		path.resolve('src/routes/(app)/admin/world/+page.svelte'),
 		'utf8'
 	);
-	const studioShell = fs.readFileSync(
-		path.resolve('src/lib/world-studio/StudioShell.svelte'),
+	const adminLayout = fs.readFileSync(
+		path.resolve('src/routes/(app)/admin/+layout.svelte'),
 		'utf8'
 	);
-	const inspector = fs.readFileSync(
-		path.resolve('src/lib/world-studio/Inspector.svelte'),
+	const placementFields = fs.readFileSync(
+		path.resolve('src/lib/components/admin/WorldPlacementFields.svelte'),
 		'utf8'
 	);
 	const journeyPage = fs.readFileSync(
@@ -127,10 +127,13 @@ test('World Studio Phase 2, Journey Auto-Play, CommentsSection, and Notification
 		'utf8'
 	);
 
-	assert.ok(studioTs.includes('autoPlaceUnplacedLocations'));
-	assert.ok(studioTs.includes('regionSlugOf'));
-	assert.ok(studioShell.includes('showDraftItems'));
-	assert.ok(inspector.includes("partsMode = $state<'visual' | 'json'>('visual')"));
+	assert.ok(!fs.existsSync(path.resolve('src/lib/world-studio')));
+	assert.ok(!fs.existsSync(path.resolve('src/routes/(app)/admin/world-studio')));
+	assert.ok(adminLayout.includes('href: "/admin/world"'));
+	assert.ok(adminWorldPage.includes('/admin/world/overview'));
+	assert.ok(adminWorldPage.includes('/admin/sync/world-studio'));
+	assert.ok(placementFields.includes('intro_video_url'));
+	assert.ok(placementFields.includes('desktop_pack_url'));
 	assert.ok(journeyPage.includes('handlePlayToggle'));
 	assert.ok(commentsSection.includes('parseCommentSegments'));
 	assert.ok(commentsSection.includes('buildCommentThreads'));

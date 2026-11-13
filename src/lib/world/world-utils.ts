@@ -228,3 +228,210 @@ export function getLocalHighestReadChapter(): number {
 	}
 	return maxCh;
 }
+
+export interface AtlasRectBox {
+	x0: number;
+	y0: number;
+	x1: number;
+	y1: number;
+	ownerId?: number;
+}
+
+export interface AtlasLabelPlacement {
+	dx: number;
+	dy: number;
+	anchor: 'middle' | 'start' | 'end';
+	text: string;
+	leader: boolean;
+	box: AtlasRectBox;
+}
+
+/**
+ * Deterministic greedy cartographic label placement for `WorldAtlas2D.svelte`:
+ * guarantees zero overlapping SVG labels at 100% zoom (`zoom = 1`) by reserving pin discs
+ * and testing 10–12 radial candidate positions around each node.
+ */
+export function computeAtlasLabelPlacements(params: {
+	regions: Array<WorldNode & { lat: number; lng: number }>;
+	locations: Array<WorldNode & { lat: number; lng: number }>;
+	zoom?: number;
+	mapWidth?: number;
+	mapHeight?: number;
+	activeIds?: Set<number>;
+	unknownFallback?: string;
+}): Map<number, AtlasLabelPlacement> {
+	const {
+		regions,
+		locations,
+		zoom = 1,
+		mapWidth = 1000,
+		mapHeight = 500,
+		activeIds = new Set<number>(),
+		unknownFallback = 'Unknown'
+	} = params;
+
+	const scale = 1 / Math.pow(Math.max(1, zoom), 0.55);
+	const occupied: AtlasRectBox[] = [];
+	const result = new Map<number, AtlasLabelPlacement>();
+
+	for (const reg of regions) {
+		const pt = latLngToSvgPoint(reg.lat, reg.lng, mapWidth, mapHeight);
+		const r = 13 * scale;
+		occupied.push({ x0: pt.x - r, y0: pt.y - r, x1: pt.x + r, y1: pt.y + r, ownerId: reg.id });
+	}
+	for (const loc of locations) {
+		const pt = latLngToSvgPoint(loc.lat, loc.lng, mapWidth, mapHeight);
+		const r = 7 * scale;
+		occupied.push({ x0: pt.x - r, y0: pt.y - r, x1: pt.x + r, y1: pt.y + r, ownerId: loc.id });
+	}
+
+	type CandidateItem = {
+		node: WorldNode & { lat: number; lng: number };
+		isRegion: boolean;
+		isActive: boolean;
+		priority: number;
+	};
+
+	const items: CandidateItem[] = [];
+	for (const reg of regions) {
+		const isActive = activeIds.has(reg.id);
+		items.push({
+			node: reg,
+			isRegion: true,
+			isActive,
+			priority: isActive ? 0 : 1
+		});
+	}
+	for (const loc of locations) {
+		const isActive = activeIds.has(loc.id);
+		if (!isActive && !isUnlockedState(loc.state)) continue;
+		items.push({
+			node: loc,
+			isRegion: false,
+			isActive,
+			priority: isActive ? 0 : loc.is_singularity ? 2 : 3
+		});
+	}
+
+	items.sort((a, b) => {
+		if (a.priority !== b.priority) return a.priority - b.priority;
+		if (b.node.lat !== a.node.lat) return b.node.lat - a.node.lat;
+		return a.node.lng - b.node.lng;
+	});
+
+	const regionCandidates: Array<[number, number, 'middle' | 'start' | 'end']> = [
+		[0, 25, 'middle'],
+		[0, -18, 'middle'],
+		[18, 4, 'start'],
+		[-18, 4, 'end'],
+		[16, 21, 'start'],
+		[-16, 21, 'end'],
+		[16, -15, 'start'],
+		[-16, -15, 'end'],
+		[0, 39, 'middle'],
+		[0, -32, 'middle'],
+		[28, 15, 'start'],
+		[-28, 15, 'end']
+	];
+
+	const locCandidates: Array<[number, number, 'middle' | 'start' | 'end']> = [
+		[0, -12, 'middle'],
+		[0, 19, 'middle'],
+		[11, 4, 'start'],
+		[-11, 4, 'end'],
+		[10, -10, 'start'],
+		[-10, -10, 'end'],
+		[10, 16, 'start'],
+		[-10, 16, 'end'],
+		[0, -25, 'middle'],
+		[0, 31, 'middle']
+	];
+
+	function computeTextBox(
+		px: number,
+		py: number,
+		dx: number,
+		dy: number,
+		anchor: 'middle' | 'start' | 'end',
+		w: number,
+		h: number
+	): AtlasRectBox {
+		const tx = px + dx;
+		const ty = py + dy;
+		const x0 = anchor === 'middle' ? tx - w * 0.5 : anchor === 'start' ? tx : tx - w;
+		return {
+			x0: x0 - 4 * scale,
+			y0: ty - h * 0.82 - 2 * scale,
+			x1: x0 + w + 4 * scale,
+			y1: ty + h * 0.24 + 2 * scale
+		};
+	}
+
+	function overlapArea(a: AtlasRectBox, b: AtlasRectBox): number {
+		const ox = Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0));
+		const oy = Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
+		return ox * oy;
+	}
+
+	for (const item of items) {
+		const { node, isRegion, isActive } = item;
+		const pt = latLngToSvgPoint(node.lat, node.lng, mapWidth, mapHeight);
+		const labelName = isUnlockedState(node.state) ? (node.name ?? unknownFallback) : unknownFallback;
+		const text = `${isExploredState(node.state) ? '✓ ' : ''}${labelName}`;
+		const charW = (isRegion ? 6.8 : isActive ? 6.5 : 5.9) * scale;
+		const estW = Math.max(24 * scale, text.length * charW);
+		const estH = (isRegion ? 14.5 : 13.0) * scale;
+		const candidates = isRegion ? regionCandidates : locCandidates;
+
+		let chosen: { dx: number; dy: number; anchor: 'middle' | 'start' | 'end'; box: AtlasRectBox } | null =
+			null;
+		let bestFallback: {
+			dx: number;
+			dy: number;
+			anchor: 'middle' | 'start' | 'end';
+			box: AtlasRectBox;
+			penalty: number;
+		} | null = null;
+
+		for (const [rawDx, rawDy, anchor] of candidates) {
+			const dx = rawDx * scale;
+			const dy = rawDy * scale;
+			const box = computeTextBox(pt.x, pt.y, dx, dy, anchor, estW, estH);
+			const outOfBounds =
+				box.x0 < 8 || box.y0 < 8 || box.x1 > mapWidth - 8 || box.y1 > mapHeight - 14;
+
+			let penalty = outOfBounds ? 5000 : 0;
+			for (const occ of occupied) {
+				if (occ.ownerId === node.id) continue;
+				penalty += overlapArea(box, occ);
+			}
+
+			if (penalty === 0) {
+				chosen = { dx, dy, anchor, box };
+				break;
+			}
+			if (!bestFallback || penalty < bestFallback.penalty) {
+				bestFallback = { dx, dy, anchor, box, penalty };
+			}
+		}
+
+		if (!chosen && isActive && bestFallback) {
+			chosen = bestFallback;
+		}
+
+		if (chosen) {
+			occupied.push(chosen.box);
+			result.set(node.id, {
+				dx: chosen.dx,
+				dy: chosen.dy,
+				anchor: chosen.anchor,
+				text,
+				leader: Math.hypot(chosen.dx, chosen.dy) > 27 * scale,
+				box: chosen.box
+			});
+		}
+	}
+
+	return result;
+}
+

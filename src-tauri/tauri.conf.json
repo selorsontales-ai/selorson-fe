@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' customprotocol: asset:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* http://localhost:* https: ws: wss:; img-src 'self' asset: http://asset.localhost http://127.0.0.1:* http://localhost:* data: blob: https:; media-src 'self' asset: http://asset.localhost http://127.0.0.1:* http://localhost:* blob: https:; script-src 'self' 'wasm-unsafe-eval' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+      "csp": "default-src 'self' customprotocol: asset:; connect-src 'self' ipc: http://ipc.localhost asset: http://asset.localhost http://127.0.0.1:* http://localhost:* blob: data: https: ws: wss:; img-src 'self' asset: http://asset.localhost http://127.0.0.1:* http://localhost:* data: blob: https:; media-src 'self' asset: http://asset.localhost http://127.0.0.1:* http://localhost:* blob: https:; script-src 'self' 'wasm-unsafe-eval' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     }
   },
   "bundle": {

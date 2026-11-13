@@ -631,7 +631,6 @@
 	.tool-panel{background:var(--color-surface-100);border-radius:1rem;padding:1.5rem;border:1px solid rgba(255,255,255,.04);min-height:400px}
 	.tool-panel h2{font-size:1.1rem;font-weight:700;margin:0 0 .5rem}
 	.tool-desc{font-size:.8rem;color:var(--color-text-muted);margin:0 0 1.25rem}
-	.tool-desc strong{color:var(--color-brand-400)}
 	.tool-empty{text-align:center;color:var(--color-text-muted);font-size:.85rem;padding:2rem}
 	.sub-title{font-size:.9rem;font-weight:700;margin:1.5rem 0 .75rem}
 

@@ -2,7 +2,11 @@
 	/** Dynamic-import boundary for the journey scene — see `WorldCanvas.svelte`. */
 	import { Canvas } from '@threlte/core';
 	import { ACESFilmicToneMapping, WebGLRenderer } from 'three';
-	import type { QualitySettings } from '../quality';
+	import {
+		acquireSafeWebGLContext,
+		preferredPowerPreference,
+		type QualitySettings
+	} from '../quality';
 	import type { JourneyStop, WorldNode } from '../types';
 	import JourneyScene from './JourneyScene.svelte';
 
@@ -18,15 +22,23 @@
 </script>
 
 <Canvas
-	createRenderer={(canvas) =>
-		new WebGLRenderer({
-			canvas,
-			powerPreference: 'high-performance',
+	createRenderer={(canvas) => {
+		const powerPreference = preferredPowerPreference();
+		const acquired = acquireSafeWebGLContext(canvas, {
+			powerPreference,
 			antialias: quality.antialias,
 			alpha: true
-		})}
+		});
+		return new WebGLRenderer({
+			canvas,
+			context: acquired.context,
+			powerPreference: preferredPowerPreference(),
+			antialias: acquired.antialias,
+			alpha: true
+		});
+	}}
 	toneMapping={ACESFilmicToneMapping}
-	dpr={Math.min(typeof window === 'undefined' ? 1 : window.devicePixelRatio, quality.pixelRatio)}
+	dpr={[1, quality.pixelRatio]}
 >
 	<JourneyScene {character} {stops} {quality} {position} {onstop} />
 </Canvas>

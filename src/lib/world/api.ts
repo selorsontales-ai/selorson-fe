@@ -3,10 +3,16 @@
  * inherits token refresh and error shapes from the rest of the app.
  */
 
-import { PUBLIC_API_BASE } from '$env/static/public';
 import { api } from '$lib/api';
-import { REGION_GEOMETRY_URL } from './config';
-import type { Journey, LocationDetail, RegionDetail, WorldMap, WorldNode } from './types';
+import { PROCEDURAL_WORLD_DATA, REGION_GEOMETRY_URL } from './config';
+import type {
+	Journey,
+	LocationDetail,
+	RegionDetail,
+	WorldChunkNode,
+	WorldMap,
+	WorldNode
+} from './types';
 import { getLocalHighestReadChapter } from './world-utils';
 
 function withProgressQuery(path: string): string {
@@ -41,6 +47,28 @@ export async function fetchLocation(key: string | number): Promise<LocationDetai
 
 export async function fetchJourney(characterId: number): Promise<Journey> {
 	const res = await api<Journey>(withProgressQuery(`/world/journey/${characterId}`));
+	return res.data;
+}
+
+export interface WorldPacksCatalog {
+	packs: WorldNode[];
+	read_up_to: number | null;
+}
+
+/** Spoiler-safe catalog of locations carrying Desktop 3D Packs, VN episodes, or Intro Videos. */
+export async function fetchWorldPacks(): Promise<WorldPacksCatalog> {
+	const res = await api<WorldPacksCatalog>(withProgressQuery('/world/packs'));
+	return res.data;
+}
+
+export interface WorldChunksCatalog {
+	chunks: WorldChunkNode[];
+	read_up_to: number | null;
+}
+
+/** Spoiler-safe manifest of seamless Open-World terrain chunks (`⚔️ Thế Giới Mở`) for Selorson Desktop. */
+export async function fetchWorldChunks(): Promise<WorldChunksCatalog> {
+	const res = await api<WorldChunksCatalog>(withProgressQuery('/world/chunks'));
 	return res.data;
 }
 
@@ -103,20 +131,6 @@ export interface RegionGeometry {
 let geometryCache: Promise<RegionGeometry | null> | null = null;
 
 async function loadGeometry(): Promise<RegionGeometry | null> {
-	// Outlines drawn in World Studio come from the published revision, so
-	// redrawing a coastline is a publish rather than a deploy.
-	try {
-		const res = await fetch(`${PUBLIC_API_BASE}/world/borders.geojson`);
-		if (res.ok) {
-			const collection = (await res.json()) as RegionGeometry;
-			if (collection?.features?.length) return collection;
-		}
-	} catch {
-		// Fall through to the bundled file.
-	}
-
-	// Static fallback: lets the world render from a hand-placed file before
-	// anything has been drawn in the studio.
 	try {
 		const res = await fetch(REGION_GEOMETRY_URL);
 		return res.ok ? ((await res.json()) as RegionGeometry) : null;
@@ -132,9 +146,25 @@ async function loadGeometry(): Promise<RegionGeometry | null> {
  * globe and as a marker field in a region. That keeps the map usable while the
  * outlines are still being drawn.
  */
+let earthContinentCache: Promise<RegionGeometry | null> | null = null;
+
+async function loadEarthContinents(): Promise<RegionGeometry | null> {
+	try {
+		const res = await fetch(PROCEDURAL_WORLD_DATA.earth.continentsGeojson);
+		return res.ok ? ((await res.json()) as RegionGeometry) : null;
+	} catch {
+		return null;
+	}
+}
+
 export function fetchRegionGeometry(): Promise<RegionGeometry | null> {
 	geometryCache ??= loadGeometry();
 	return geometryCache;
+}
+
+export function fetchEarthContinentGeometry(): Promise<RegionGeometry | null> {
+	earthContinentCache ??= loadEarthContinents();
+	return earthContinentCache;
 }
 
 /** All rings of a feature, normalised to `[lng, lat][]` lists. */

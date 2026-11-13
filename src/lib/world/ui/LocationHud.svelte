@@ -1,13 +1,16 @@
 <script lang="ts">
 	/**
-	 * Overlay for a place: the disassembly slider, the part list, the lore
-	 * each part carries, connected characters & artifacts, and an integrated
-	 * reader discussion drawer.
+	 * Overlay for a place: architectural strata lore (`parts`), synced Intro Video
+	 * & Gallery switcher, Ecosystem Desktop 3D Pack / VN Episode gateway links,
+	 * connected characters & artifacts, and an integrated reader discussion drawer.
 	 */
 	import CommentsSection from '$lib/components/ui/CommentsSection.svelte';
+	import { currentLocale } from '$lib/i18n-labels';
 	import * as m from '$lib/paraglide/messages';
-		import type { ScenePart, PlaceChapterRef, WorldNode } from '../types';
+	import { resolveNodePlanet } from '../cosmos';
+	import type { ScenePart, PlaceChapterRef, WorldNode } from '../types';
 	import { resolveWorldNodeTargetUrl } from '../world-utils';
+	import VNScenePlayer from './VNScenePlayer.svelte';
 
 	interface LinkedItemRef {
 		id: number;
@@ -25,14 +28,13 @@
 		visitors?: WorldNode[];
 		linkedItems?: LinkedItemRef[];
 		parts: ScenePart[];
-		explode: number;
-		detached: string[];
 		selectedPart: string | null;
-		xray: boolean;
-		onexplode: (value: number) => void;
-		ontoggledetach: (id: string) => void;
+		activeMediaTab?: 'gallery' | 'video' | 'clockwork';
+		/** Akunarch P0: có gói sa bàn cơ khí .glb và đang ở app desktop. */
+		hasClockwork?: boolean;
+		hasGallery?: boolean;
 		onselectpart: (id: string | null) => void;
-		onxray: (value: boolean) => void;
+		onmediatab?: (tab: 'gallery' | 'video' | 'clockwork') => void;
 	}
 
 	let {
@@ -43,26 +45,55 @@
 		visitors = [],
 		linkedItems = [],
 		parts,
-		explode,
-		detached,
 		selectedPart,
-		xray,
-		onexplode,
-		ontoggledetach,
+		activeMediaTab = 'gallery',
+		hasGallery = false,
+		hasClockwork = false,
 		onselectpart,
-		onxray
+		onmediatab
 	}: Props = $props();
 
 	let current = $derived(parts.find((p) => p.id === selectedPart) ?? null);
-	let backHref = $derived(
-		region ? `/world/${region.slug}` : `/world?focus=${encodeURIComponent(place.slug)}`
+	let hasSidebarContent = $derived(
+		parts.length > 0 || visitors.length > 0 || linkedItems.length > 0 || neighbours.length > 0
 	);
-	let installed = $derived(parts.length - detached.length);
+	let backHref = $derived(
+		region
+			? `/world/${region.slug}`
+			: resolveNodePlanet(place) === 'earth'
+				? `/world?body=earth&focus=${encodeURIComponent(place.slug)}`
+				: `/world?focus=${encodeURIComponent(place.slug)}`
+	);
 	let showComments = $state(false);
+	let showVnPlayer = $state(false);
 	let mobileListOpen = $state(false);
+	let mobileInfoOpen = $state(false);
 
 	function label(node: WorldNode): string {
 		return node.name ?? m.world_unknown_place();
+	}
+
+	function formatPackSize(bytes: number | null | undefined): string {
+		if (!bytes || bytes <= 0) return '';
+		const mb = bytes / (1024 * 1024);
+		return mb >= 1024 ? ` · ${(mb / 1024).toFixed(2)} GB` : ` · ${mb.toFixed(1)} MB`;
+	}
+
+	function chapterSuffix(c: PlaceChapterRef): string {
+		const raw = c.title?.trim();
+		if (!raw) return '';
+		const cleaned = raw.replace(/^(?:chương|chapter)\s+\d+\s*[:\-–—]\s*/i, '').trim();
+		if (!cleaned) return '';
+		const norm = cleaned.toLowerCase();
+		const localizedPrefix = `${m.world_chapter()} ${c.chapter_number}`.trim().toLowerCase();
+		if (
+			norm === localizedPrefix ||
+			norm === `chương ${c.chapter_number}` ||
+			norm === `chapter ${c.chapter_number}`
+		) {
+			return '';
+		}
+		return ` — ${cleaned}`;
 	}
 
 	/** Chapter the reader can actually open — locked ones are not linkable. */
@@ -80,114 +111,161 @@
 			← {region ? label(region) : m.world_back_to_globe()}
 		</a>
 		<h1 class="place-name">{label(place)}</h1>
-		<button
-			type="button"
-			class="chip mobile-parts-toggle"
-			class:on={mobileListOpen}
-			onclick={() => (mobileListOpen = !mobileListOpen)}
-		>
-			📋 {m.world_parts()} ({installed}/{parts.length})
-		</button>
-		<a class="chip link-chip" href="/library?id={place.id}">
-			{m.lhud_encyclopedia_dossier()}
-		</a>
-		<button
-			class="chip"
-			class:on={showComments}
-			onclick={() => (showComments = !showComments)}
-		>
-			{m.lhud_discussion_2()}
-		</button>
-		<button
-			class="chip"
-			class:on={xray}
-			onclick={() => onxray(!xray)}
-			aria-pressed={xray}
-		>
-			{m.world_xray()}
-		</button>
+		{#if parts.length > 0}
+			<button
+				type="button"
+				class="chip mobile-parts-toggle"
+				class:on={mobileListOpen}
+				onclick={() => {
+					mobileListOpen = !mobileListOpen;
+					if (mobileListOpen) mobileInfoOpen = false;
+				}}
+			>
+				📋 {m.world_parts()} ({parts.length})
+			</button>
+		{/if}
+		{#if place.description || chapters.length}
+			<button
+				type="button"
+				class="chip mobile-info-toggle"
+				class:on={mobileInfoOpen && !current && !showComments}
+				onclick={() => {
+					if (current) onselectpart(null);
+					if (showComments) showComments = false;
+					mobileInfoOpen = !mobileInfoOpen;
+					if (mobileInfoOpen) mobileListOpen = false;
+				}}
+			>
+				📜 {currentLocale() === 'en' ? 'Lore' : 'Thuyết minh'}
+			</button>
+		{/if}
+		{#if hasGallery && place.intro_video_url}
+			<button
+				type="button"
+				class="chip"
+				class:on={activeMediaTab === 'gallery'}
+				onclick={() => onmediatab?.('gallery')}
+			>
+				🖼️ {currentLocale() === 'en' ? 'Concept Art' : 'Ảnh kiến trúc'}
+			</button>
+		{/if}
+		{#if place.intro_video_url}
+			<button
+				type="button"
+				class="chip"
+				class:on={activeMediaTab === 'video'}
+				onclick={() => onmediatab?.('video')}
+			>
+				🎬 {currentLocale() === 'en' ? 'Intro Film' : 'Phim Intro'}
+			</button>
+		{/if}
+		{#if hasClockwork}
+			<button
+				type="button"
+				class="chip"
+				class:on={activeMediaTab === 'clockwork'}
+				data-testid="clockwork-tab"
+				onclick={() => onmediatab?.('clockwork')}
+			>
+				⚙ {currentLocale() === 'en' ? 'Clockwork Tabletop' : 'Sa bàn cơ khí'}
+			</button>
+		{/if}
+		{#if place.id > 0}
+			<a class="chip link-chip" href="/library?id={place.id}">
+				{m.lhud_encyclopedia_dossier()}
+			</a>
+			<button
+				class="chip"
+				class:on={showComments}
+				onclick={() => (showComments = !showComments)}
+			>
+				{m.lhud_discussion_2()}
+			</button>
+		{/if}
 	</header>
 
-	<aside class="panel list-panel" class:mobile-open={mobileListOpen}>
-		<h2 class="panel-head">
-			{m.world_parts()}
-			<span class="count">{installed}/{parts.length}</span>
-		</h2>
+	{#if hasSidebarContent}
+		<aside class="panel list-panel" class:mobile-open={mobileListOpen}>
+			{#if parts.length > 0}
+				<h2 class="panel-head">
+					{m.world_parts()}
+					<span class="count">{parts.length}</span>
+				</h2>
 
-		{#if parts.length === 0}
-			<p class="muted">{m.world_parts_empty()}</p>
-		{:else}
-			<ul class="part-list">
-				{#each parts as part (part.id)}
-					{@const off = detached.includes(part.id)}
-					<li>
-						<button
-							class="part-btn"
-							class:active={selectedPart === part.id}
-							class:off
-							onclick={() => {
-								const next = selectedPart === part.id ? null : part.id;
-								onselectpart(next);
-								if (next) mobileListOpen = false;
-							}}
-						>
-							<span class="part-name">{part.label}</span>
-							{#if part.lore}<span class="part-dot" title={m.world_has_lore()}>✦</span>{/if}
-						</button>
-						<button
-							class="detach-btn"
-							class:off
-							onclick={() => ontoggledetach(part.id)}
-							aria-label={off ? m.world_reattach() : m.world_detach()}
-						>
-							{off ? '↓' : '↑'}
-						</button>
-					</li>
-				{/each}
-			</ul>
-		{/if}
+				<ul class="part-list">
+					{#each parts as part (part.id)}
+						<li>
+							<button
+								class="part-btn"
+								class:active={selectedPart === part.id}
+								onclick={() => {
+									const next = selectedPart === part.id ? null : part.id;
+									onselectpart(next);
+									if (next) mobileListOpen = false;
+								}}
+							>
+								<span class="part-name">{part.label}</span>
+								{#if part.lore}<span class="part-dot" title={m.world_has_lore()}>✦</span>{/if}
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 
-		{#if visitors.length}
-			<h2 class="panel-head neighbours-head">🧭 {m.lhud_related_characters()} ({visitors.length})</h2>
-			<ul class="neighbour-list">
-				{#each visitors as person (person.id)}
-					<li>
-						<a class="neighbour" href="/world/journey/{person.id}">
-							🧭 {label(person)}
-						</a>
-					</li>
-				{/each}
-			</ul>
-		{/if}
+			{#if visitors.length}
+				<h2 class="panel-head" class:neighbours-head={parts.length > 0}>
+					🧭 {m.lhud_related_characters()} ({visitors.length})
+				</h2>
+				<ul class="neighbour-list">
+					{#each visitors as person (person.id)}
+						<li>
+							<a class="neighbour" href="/world/journey/{person.id}">
+								🧭 {label(person)}
+							</a>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 
-		{#if linkedItems.length}
-			<h2 class="panel-head neighbours-head">🔗 {m.lhud_linked_entities()} ({linkedItems.length})</h2>
-			<ul class="neighbour-list">
-				{#each linkedItems as item (item.id)}
-					<li>
-						<a class="neighbour" href="/library?id={item.id}">
-							✦ {item.name}
-						</a>
-					</li>
-				{/each}
-			</ul>
-		{/if}
+			{#if linkedItems.length}
+				<h2
+					class="panel-head"
+					class:neighbours-head={parts.length > 0 || visitors.length > 0}
+				>
+					🔗 {m.lhud_linked_entities()} ({linkedItems.length})
+				</h2>
+				<ul class="neighbour-list">
+					{#each linkedItems as item (item.id)}
+						<li>
+							<a class="neighbour" href="/library?id={item.id}">
+								✦ {item.name}
+							</a>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 
-		{#if neighbours.length}
-			<h2 class="panel-head neighbours-head">{m.world_nearby()}</h2>
-			<ul class="neighbour-list">
-				{#each neighbours as n (n.id)}
-					<li>
-						{#if n.state === 'hidden'}
-							<span class="neighbour dim">{label(n)}</span>
-						{:else}
-							<a class="neighbour" href={resolveWorldNodeTargetUrl(n)}>{label(n)}</a>
-						{/if}
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	</aside>
+			{#if neighbours.length}
+				<h2
+					class="panel-head"
+					class:neighbours-head={parts.length > 0 || visitors.length > 0 || linkedItems.length > 0}
+				>
+					{m.world_nearby()}
+				</h2>
+				<ul class="neighbour-list">
+					{#each neighbours as n (n.id)}
+						<li>
+							{#if n.state === 'hidden'}
+								<span class="neighbour dim">{label(n)}</span>
+							{:else}
+								<a class="neighbour" href={resolveWorldNodeTargetUrl(n)}>{label(n)}</a>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</aside>
+	{/if}
 
 	{#if showComments}
 		<section class="panel detail-panel comments-drawer">
@@ -209,12 +287,17 @@
 					{m.world_read_chapter()} {current.chapter}
 				</a>
 			{/if}
-			<button class="detach-wide" onclick={() => ontoggledetach(current.id)}>
-				{detached.includes(current.id) ? m.world_reattach() : m.world_detach()}
-			</button>
 		</section>
 	{:else if place.description || chapters.length}
-		<section class="panel detail-panel">
+		<section class="panel detail-panel overview-panel" class:mobile-open={mobileInfoOpen}>
+			<button
+				type="button"
+				class="close mobile-close"
+				onclick={() => (mobileInfoOpen = false)}
+				aria-label="close"
+			>
+				×
+			</button>
 			<h2 class="detail-title">{label(place)}</h2>
 			{#if place.image_url}
 				<img class="detail-img" src={place.image_url} alt={label(place)} />
@@ -230,7 +313,7 @@
 								<span class="chapter dim">{m.world_chapter()} {c.chapter_number}</span>
 							{:else}
 								<a class="chapter" href="/stories/{c.chapter_number}">
-									📖 {m.world_chapter()} {c.chapter_number}{c.title ? ` — ${c.title}` : ''}
+									📖 {m.world_chapter()} {c.chapter_number}{chapterSuffix(c)}
 								</a>
 							{/if}
 						</li>
@@ -240,25 +323,53 @@
 		</section>
 	{/if}
 
-	<footer class="panel explode-bar">
-		<label class="explode-label" for="explode-range">
-			{m.world_disassemble()}
-			<strong>{Math.round(explode * 100)}%</strong>
-		</label>
-		<input
-			id="explode-range"
-			class="explode-range"
-			type="range"
-			min="0"
-			max="100"
-			value={Math.round(explode * 100)}
-			oninput={(e) => onexplode(Number(e.currentTarget.value) / 100)}
-		/>
+	<footer class="panel explode-bar gateway-bar">
+		<span class="gateway-meta">
+			{#if place.lat !== null && place.lng !== null}
+				📍 {place.lat.toFixed(2)}°, {place.lng.toFixed(2)}°
+			{/if}
+			{#if parts.length > 0}
+				· 🏛️ {parts.length} {currentLocale() === 'en' ? 'architectural strata' : 'tầng cấu trúc'}
+			{/if}
+		</span>
 		<div class="explode-actions">
-			<button class="chip" onclick={() => onexplode(0)}>{m.world_assemble_all()}</button>
-			<button class="chip" onclick={() => onexplode(1)}>{m.world_disassemble_all()}</button>
+			{#if place.desktop_pack_url}
+				<a
+					class="chip gateway-cta"
+					href={place.desktop_pack_url}
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					🎮 {currentLocale() === 'en' ? '3D World Pack' : 'Gói Thế Giới 3D Desktop'}
+					{#if place.desktop_pack_version}v{place.desktop_pack_version}{/if}{formatPackSize(
+						place.desktop_pack_size
+					)}
+				</a>
+			{/if}
+			{#if place.vn_episode_url}
+				<button
+					type="button"
+					class="chip gateway-cta"
+					onclick={() => (showVnPlayer = true)}
+				>
+					🎭 {place.vn_episode_title ||
+						(currentLocale() === 'en' ? 'Play Visual Novel' : 'Chơi Tập Visual Novel')}
+				</button>
+			{/if}
+			<a class="chip" href={backHref}>
+				🌐 {m.world_back_to_globe()}
+			</a>
 		</div>
 	</footer>
+
+	{#if showVnPlayer && place.vn_episode_url}
+		<VNScenePlayer
+			episodeUrl={place.vn_episode_url}
+			fallbackBackdropUrl={place.image_url}
+			fallbackTitle={place.vn_episode_title || label(place)}
+			onclose={() => (showVnPlayer = false)}
+		/>
+	{/if}
 </div>
 
 <style>
@@ -272,6 +383,10 @@
 		grid-template-rows: auto 1fr auto;
 		gap: 1rem;
 		padding: 1rem;
+		--color-text-primary: #f1f5f9;
+		--color-text-secondary: #cbd5e1;
+		--color-text-muted: #94a3b8;
+		color: #f1f5f9;
 	}
 	.panel {
 		pointer-events: auto;
@@ -280,7 +395,7 @@
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		border-radius: var(--radius-lg, 12px);
 		padding: 1rem;
-		color: var(--color-text-primary, #e2e8f0);
+		color: #f1f5f9;
 	}
 
 	.top-bar {
@@ -391,31 +506,9 @@
 		background: rgba(255, 183, 3, 0.16);
 		border-left-color: #ffb703;
 	}
-	.part-btn.off {
-		opacity: 0.6;
-		border-left-style: dashed;
-	}
 	.part-dot {
 		color: #ffb703;
 		font-size: 0.7rem;
-	}
-
-	.detach-btn {
-		width: 2rem;
-		border: 1px solid rgba(255, 255, 255, 0.14);
-		border-radius: 6px;
-		background: transparent;
-		color: var(--color-text-muted, #94a3b8);
-		font: inherit;
-		cursor: pointer;
-	}
-	.detach-btn:hover {
-		border-color: #ffb703;
-		color: #ffb703;
-	}
-	.detach-btn.off {
-		border-color: #ffb703;
-		color: #ffb703;
 	}
 
 	.neighbour {
@@ -478,39 +571,22 @@
 		flex-direction: column;
 		gap: 0.3rem;
 	}
-	.detach-wide {
-		width: 100%;
-		margin-top: 0.9rem;
-		padding: 0.55rem;
-		border: 1px solid rgba(255, 183, 3, 0.5);
-		border-radius: 6px;
-		background: rgba(255, 183, 3, 0.12);
-		color: #ffb703;
-		font: inherit;
-		font-size: 0.82rem;
-		cursor: pointer;
-	}
-	.detach-wide:hover {
-		background: rgba(255, 183, 3, 0.22);
-	}
-
-	.explode-label {
-		font-size: 0.8rem;
-		color: var(--color-text-muted, #94a3b8);
-		white-space: nowrap;
-	}
-	.explode-label strong {
-		color: #ffb703;
-		margin-left: 0.3rem;
-	}
-	.explode-range {
-		flex: 1;
-		min-width: 10rem;
-		accent-color: #ffb703;
-	}
 	.explode-actions {
 		display: flex;
-		gap: 0.4rem;
+		gap: 0.45rem;
+		flex-wrap: wrap;
+	}
+	.gateway-bar {
+		justify-content: space-between;
+	}
+	.gateway-meta {
+		font-size: 0.78rem;
+		color: var(--color-text-muted, #94a3b8);
+	}
+	.gateway-cta {
+		border-color: rgba(255, 183, 3, 0.55);
+		background: rgba(255, 183, 3, 0.14);
+		color: #fbbf24;
 	}
 
 	.chip {
@@ -542,7 +618,9 @@
 		border-color: #38bdf8;
 		color: #e0f2fe;
 	}
-	.mobile-parts-toggle {
+	.mobile-parts-toggle,
+	.mobile-info-toggle,
+	.mobile-close {
 		display: none;
 	}
 
@@ -553,14 +631,20 @@
 			padding: 0.6rem;
 			gap: 0.6rem;
 		}
-		.mobile-parts-toggle {
+		.mobile-parts-toggle,
+		.mobile-info-toggle {
 			display: inline-flex;
 			align-items: center;
 			gap: 0.25rem;
 		}
+		.mobile-close {
+			display: block;
+		}
 		.top-bar {
 			grid-column: 1;
 			grid-row: 1;
+			padding: 0.55rem 0.8rem;
+			gap: 0.45rem 0.55rem;
 		}
 		.list-panel {
 			grid-column: 1;
@@ -575,7 +659,13 @@
 			grid-column: 1;
 			grid-row: 3;
 			align-self: end;
-			max-height: 42dvh;
+			max-height: 36dvh;
+		}
+		.overview-panel {
+			display: none;
+		}
+		.overview-panel.mobile-open {
+			display: block;
 		}
 		.explode-bar {
 			grid-column: 1;
@@ -583,8 +673,18 @@
 			padding: 0.55rem 0.75rem;
 			gap: 0.5rem 0.75rem;
 		}
-		.explode-range {
-			min-width: 7rem;
+	}
+
+	@media (max-width: 768px) {
+		.place-name {
+			flex: 1 1 100%;
+			order: 2;
+			font-size: 0.92rem;
+			line-height: 1.28;
+		}
+		.chip {
+			padding: 0.28rem 0.62rem;
+			font-size: 0.72rem;
 		}
 	}
 </style>

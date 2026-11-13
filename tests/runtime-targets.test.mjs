@@ -89,3 +89,36 @@ test('runtime target is derived consistently by the root layout', async () => {
 	assert.match(layout, /VITE_BUILD_TARGET/);
 	assert.match(layout, /import\.meta\.env\.MODE/);
 });
+
+test('Tauri CSP permits blob: and data: in connect-src for glTF ImageBitmapLoader & Draco WASM without wildcard loosening', async () => {
+	const config = JSON.parse(
+		await readFile(join(root, 'src-tauri', 'tauri.conf.json'), 'utf8')
+	);
+	const rawCsp = config?.app?.security?.csp;
+	assert.equal(typeof rawCsp, 'string', 'tauri.conf.json must define an explicit CSP string');
+
+	const directives = new Map(
+		rawCsp
+			.split(';')
+			.map((d) => d.trim())
+			.filter(Boolean)
+			.map((d) => {
+				const [name, ...tokens] = d.split(/\s+/);
+				return [name, new Set(tokens)];
+			})
+	);
+
+	const connectSrc = directives.get('connect-src');
+	const imgSrc = directives.get('img-src');
+	const workerSrc = directives.get('worker-src');
+	const scriptSrc = directives.get('script-src');
+
+	assert.ok(connectSrc?.has('blob:'), 'connect-src must allow blob: so GLTFLoader ImageBitmapLoader can fetch embedded .glb textures');
+	assert.ok(connectSrc?.has('data:'), 'connect-src must allow data: for embedded glTF buffer/image URIs');
+	assert.ok(imgSrc?.has('blob:') && imgSrc?.has('data:'), 'img-src must allow blob: and data:');
+	assert.ok(workerSrc?.has('blob:') && workerSrc?.has("'self'"), 'worker-src must allow self and blob: for Draco WASM workers');
+	assert.ok(scriptSrc?.has("'wasm-unsafe-eval'"), 'script-src must allow wasm-unsafe-eval for Draco decoder');
+	assert.equal(connectSrc?.has('*'), false, 'connect-src must never fall back to wildcard *');
+	assert.ok(directives.get('object-src')?.has("'none'"), 'object-src must stay none');
+	assert.ok(directives.get('frame-ancestors')?.has("'none'"), 'frame-ancestors must stay none');
+});

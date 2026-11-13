@@ -95,8 +95,7 @@
 			title: "Thư Viện",
 			items: [
 				{ href: "/admin/library", icon: "📚", label: "Library" },
-				{ href: "/admin/world-studio", icon: "🌍", label: "World Studio" },
-				{ href: "/admin/world-assets", icon: "🧰", label: "Asset 3D" },
+				{ href: "/admin/world", icon: "🌍", label: "Thế Giới & Cổng 3D" },
 			],
 		},
 		{
