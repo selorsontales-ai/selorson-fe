@@ -18,8 +18,22 @@ export interface VideoProgressEntry {
 	updated_at?: string | null;
 }
 
+function isSafeHttpOrLocalMediaUrl(raw: string): boolean {
+	const trimmed = raw.trim();
+	if (!trimmed || /[\u0000-\u001F\u007F]/.test(trimmed)) return false;
+	if (trimmed.startsWith('/api/v1/local-media/') && !trimmed.startsWith('//')) {
+		return true;
+	}
+	try {
+		const parsed = new URL(trimmed);
+		return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+	} catch {
+		return false;
+	}
+}
+
 export function isDirectVideoSource(path: string): boolean {
-	if (!path) return false;
+	if (!path || !isSafeHttpOrLocalMediaUrl(path)) return false;
 	const clean = path.trim().split('?')[0].toLowerCase();
 	if (
 		clean.endsWith('.mp4') ||
@@ -39,6 +53,7 @@ export function isDirectVideoSource(path: string): boolean {
 export function buildSafeEmbedUrl(path: string, autoplay = true): string {
 	if (!path) return '';
 	const trimmed = path.trim();
+	if (!isSafeHttpOrLocalMediaUrl(trimmed)) return '';
 	if (isDirectVideoSource(trimmed)) return trimmed;
 
 	let baseUrl = trimmed;
@@ -58,6 +73,7 @@ export function buildSafeEmbedUrl(path: string, autoplay = true): string {
 		}
 	}
 
+	if (!isSafeHttpOrLocalMediaUrl(baseUrl)) return '';
 	if (!autoplay) return baseUrl;
 	const separator = baseUrl.includes('?') ? '&' : '?';
 	return `${baseUrl}${separator}autoplay=1&rel=0`;

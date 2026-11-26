@@ -8,6 +8,9 @@
 	 */
 	import { onDestroy, onMount } from 'svelte';
 	import { currentLocale } from '$lib/i18n-labels';
+	import { pauseForExternalMedia } from '$lib/stores/audio.svelte';
+
+	const MAX_UNZIP_BYTES = 128 * 1024 * 1024; // 128 MB decompression safety ceiling (`B2-05`)
 
 	interface VnCharacterCast {
 		id: string;
@@ -123,6 +126,9 @@
 	let voiceAudio: HTMLAudioElement | null = null;
 	let bgmAudio: HTMLAudioElement | null = null;
 	let activeBgmSrc = '';
+	let disposed = false;
+	let loadAbort: AbortController | null = null;
+	let voiceTimer: ReturnType<typeof setTimeout> | null = null;
 
 	let currentNode = $derived.by<VnDialogueNode | null>(() => {
 		if (!episode || !episode.nodes?.length) return null;
@@ -162,7 +168,7 @@
 		return 'application/octet-stream';
 	}
 
-	async function inflateRawBytes(compressed: Uint8Array): Promise<Uint8Array> {
+	async function inflateRawBytes(compressed: Uint8Array, maxBytes: number): Promise<Uint8Array> {
 		const ds = new DecompressionStream('deflate-raw');
 		const writer = ds.writable.getWriter();
 		const copy = new Uint8Array(compressed.byteLength);
@@ -176,8 +182,12 @@
 			const { done, value } = await reader.read();
 			if (done) break;
 			if (value) {
-				chunks.push(value);
 				total += value.byteLength;
+				if (total > maxBytes) {
+					await reader.cancel();
+					throw new Error('VN archive exceeds 128 MB decompression safety limit.');
+				}
+				chunks.push(value);
 			}
 		}
 		const out = new Uint8Array(total);
@@ -212,8 +222,12 @@
 
 		let ptr = cdOffset;
 		let parsedEpisode: VnEpisodeDocument | null = null;
+		let unpackedTotalBytes = 0;
 
 		for (let idx = 0; idx < totalEntries; idx++) {
+			if (disposed) {
+				throw new Error('VN player closed.');
+			}
 			if (ptr + 46 > bytes.length || view.getUint32(ptr, true) !== 0x02014b50) {
 				break;
 			}
@@ -239,13 +253,26 @@
 			const dataStart = localHeaderOffset + 30 + localNameLen + localExtraLen;
 			const rawSlice = bytes.subarray(dataStart, dataStart + compSize);
 
+			const remainingBudget = MAX_UNZIP_BYTES - unpackedTotalBytes;
+			if (remainingBudget <= 0) {
+				throw new Error('VN archive exceeds 128 MB decompression safety limit.');
+			}
+
 			let fileBytes: Uint8Array;
 			if (method === 0) {
+				if (rawSlice.byteLength > remainingBudget) {
+					throw new Error('VN archive exceeds 128 MB decompression safety limit.');
+				}
 				fileBytes = rawSlice;
 			} else if (method === 8) {
-				fileBytes = await inflateRawBytes(rawSlice);
+				fileBytes = await inflateRawBytes(rawSlice, remainingBudget);
 			} else {
 				continue;
+			}
+			unpackedTotalBytes += fileBytes.byteLength;
+
+			if (disposed) {
+				throw new Error('VN player closed.');
 			}
 
 			if (entryName === 'episode.json' || entryName.endsWith('/episode.json')) {
@@ -449,13 +476,27 @@
 	async function loadEpisodeBundle() {
 		loading = true;
 		loadError = null;
+		loadAbort?.abort();
+		const abortCtrl = new AbortController();
+		loadAbort = abortCtrl;
 		try {
-			const resp = await fetch(episodeUrl);
+			const resp = await fetch(episodeUrl, { signal: abortCtrl.signal });
+			if (disposed) {
+				cleanupMedia();
+				return;
+			}
 			if (!resp.ok) {
 				throw new Error(`HTTP ${resp.status}`);
 			}
 			const buf = await resp.arrayBuffer();
+			if (disposed) {
+				cleanupMedia();
+				return;
+			}
 			const bytes = new Uint8Array(buf);
+			if (bytes.byteLength > MAX_UNZIP_BYTES) {
+				throw new Error('VN archive exceeds 128 MB safety limit.');
+			}
 			const isZip =
 				bytes.length >= 4 &&
 				bytes[0] === 0x50 &&
@@ -467,6 +508,11 @@
 				? await unpackZipBundle(buf)
 				: (JSON.parse(new TextDecoder('utf-8').decode(bytes)) as VnEpisodeDocument);
 
+			if (disposed) {
+				cleanupMedia();
+				return;
+			}
+
 			episode = doc;
 			const firstId = doc.entry_node_id || doc.nodes?.[0]?.id || '';
 			currentNodeId = firstId;
@@ -474,19 +520,37 @@
 			unlockNodeDiscoveries(startNode);
 			syncBgmForNode(startNode);
 			if (autoVoice && startNode) {
-				setTimeout(() => playCurrentVoice(), 120);
+				if (voiceTimer) clearTimeout(voiceTimer);
+				voiceTimer = setTimeout(() => {
+					voiceTimer = null;
+					if (!disposed) playCurrentVoice();
+				}, 120);
 			}
 		} catch (err) {
+			if (disposed || (err instanceof DOMException && err.name === 'AbortError')) {
+				cleanupMedia();
+				return;
+			}
+			cleanupMedia();
 			loadError = err instanceof Error ? err.message : String(err);
 		} finally {
-			loading = false;
+			if (!disposed) loading = false;
 		}
 	}
 
 	function cleanupMedia() {
+		if (loadAbort) {
+			loadAbort.abort();
+			loadAbort = null;
+		}
+		if (voiceTimer) {
+			clearTimeout(voiceTimer);
+			voiceTimer = null;
+		}
 		if (voiceAudio) {
 			voiceAudio.pause();
 			voiceAudio = null;
+			voicePlaying = false;
 		}
 		if (bgmAudio) {
 			bgmAudio.pause();
@@ -500,6 +564,8 @@
 	}
 
 	onMount(() => {
+		disposed = false;
+		pauseForExternalMedia();
 		void loadEpisodeBundle();
 		const onKey = (ev: KeyboardEvent) => {
 			if (ev.key === 'Escape') {
@@ -516,6 +582,7 @@
 	});
 
 	onDestroy(() => {
+		disposed = true;
 		cleanupMedia();
 	});
 </script>

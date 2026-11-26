@@ -116,7 +116,7 @@ async function performTokenRefresh(staleToken?: string): Promise<string> {
 	return newToken;
 }
 
-async function acquireRefreshedToken(
+export async function acquireRefreshedToken(
 	staleToken?: string,
 	logoutOnFailure = true
 ): Promise<string> {
@@ -156,11 +156,17 @@ export async function restoreSession(): Promise<boolean> {
 	}
 }
 
-/** Clear local state and redirect to home. */
+/** Clear local state, close active SSE streams, and redirect to home. */
 function forceLogout() {
 	if (typeof localStorage !== 'undefined') {
 		localStorage.removeItem(tokenStorageKey());
 	}
+	void import('./stores/chat.svelte')
+		.then(({ resetChatStore }) => resetChatStore())
+		.catch(() => {});
+	void import('./stores/support.svelte')
+		.then(({ resetSupportStore }) => resetSupportStore())
+		.catch(() => {});
 	if (typeof window !== 'undefined') {
 		window.location.href = '/';
 	}
@@ -246,7 +252,7 @@ export async function api<T = unknown>(
 export async function apiUpload<T = unknown>(
 	endpoint: string,
 	formData: FormData,
-	options: { _isRetry?: boolean } = {}
+	options: { token?: string; _isRetry?: boolean } = {}
 ): Promise<ApiResponse<T>> {
 	const url = `${PUBLIC_API_BASE}${endpoint}`;
 
@@ -254,7 +260,9 @@ export async function apiUpload<T = unknown>(
 		Accept: 'application/json',
 	};
 
-	if (typeof window !== 'undefined') {
+	if (options.token) {
+		reqHeaders['Authorization'] = `Bearer ${options.token}`;
+	} else if (typeof window !== 'undefined') {
 		const stored = localStorage.getItem(tokenStorageKey());
 		if (stored) reqHeaders['Authorization'] = `Bearer ${stored}`;
 	}
@@ -270,8 +278,11 @@ export async function apiUpload<T = unknown>(
 	if (res.status === 401 && !options._isRetry && typeof window !== 'undefined') {
 		try {
 			const newToken = await acquireRefreshedToken(reqHeaders.Authorization?.slice(7));
-			reqHeaders['Authorization'] = `Bearer ${newToken}`;
-			return apiUpload<T>(endpoint, formData, { _isRetry: true });
+			return apiUpload<T>(endpoint, formData, {
+				...options,
+				token: newToken,
+				_isRetry: true
+			});
 		} catch {
 			throw { status: 401, success: false, message: 'Session expired' } as ApiError & {
 				status: number;

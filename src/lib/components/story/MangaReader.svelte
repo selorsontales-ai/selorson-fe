@@ -70,6 +70,30 @@
 	);
 	let totalPages = $derived(pages.length);
 
+	// B2-13: Preload next 2 pages in paged mode and cancel in-flight Image requests when edition/chapter changes
+	$effect(() => {
+		if (typeof Image === 'undefined' || mode !== 'paged' || pages.length <= 1) return;
+		const activeList = pages;
+		const startIdx = currentPage;
+		const preloaded: HTMLImageElement[] = [];
+		for (let offset = 1; offset <= 2; offset++) {
+			const candidate = activeList[startIdx + offset];
+			const url = candidate?.cloudinary_url;
+			if (!url) continue;
+			const img = new Image();
+			img.decoding = 'async';
+			img.src = url;
+			preloaded.push(img);
+		}
+		return () => {
+			for (const img of preloaded) {
+				img.onload = null;
+				img.onerror = null;
+				img.src = '';
+			}
+		};
+	});
+
 	$effect(() => {
 		const cfgId = manga?.id ?? '';
 		if (

@@ -6,6 +6,10 @@ const SOURCE_ROUTES = path.join(ROOT, "src", "routes");
 const GENERATED_ROOT = path.join(ROOT, ".flavor-routes");
 
 const USER_FLAVORS = new Set(["web-user", "desktop-user", "android-user"]);
+const USER_EXCLUDED_ROUTES = [
+  "(app)/admin",
+  "(app)/support-workspace",
+];
 const DESKTOP_ADMIN_ONLY_ROUTES = [
   "(app)/admin/desktop-update",
 ];
@@ -20,10 +24,21 @@ function isWithin(relativePath, routePrefix) {
   );
 }
 
+function hasPrivateTestSegment(normalizedPath) {
+  return normalizedPath
+    .split("/")
+    .some((segment) => segment.startsWith("__"));
+}
+
 function includesRoute(flavor, relativePath) {
   const normalized = normalize(relativePath);
-  if (USER_FLAVORS.has(flavor) && isWithin(normalized, "(app)/admin")) {
-    return false;
+  if (USER_FLAVORS.has(flavor)) {
+    if (USER_EXCLUDED_ROUTES.some((route) => isWithin(normalized, route))) {
+      return false;
+    }
+    if (hasPrivateTestSegment(normalized)) {
+      return false;
+    }
   }
   if (
     flavor !== "desktop-admin" &&

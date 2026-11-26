@@ -1,22 +1,4 @@
-import { PUBLIC_API_BASE } from '$env/static/public';
-import { getToken } from './auth.svelte';
-
-/** Helper: authenticated fetch */
-export async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-	const headers: Record<string, string> = {
-		'Content-Type': 'application/json',
-		Accept: 'application/json',
-		...(options.headers as Record<string, string> || {}),
-	};
-
-	const token = getToken();
-	if (token) headers['Authorization'] = `Bearer ${token}`;
-
-	const res = await fetch(`${PUBLIC_API_BASE}${endpoint}`, { ...options, headers, credentials: 'include' });
-	const json = await res.json();
-	if (!res.ok || !json.success) throw { status: res.status, ...json };
-	return json;
-}
+import { api } from '$lib/api';
 
 let supportTickets = $state<any[]>([]);
 let activeTicket = $state<any>(null);
@@ -27,6 +9,30 @@ let supportLoading = $state(false);
 let supportSending = $state(false);
 let chatWidgetHidden = $state(false);
 let staffOnline = $state(false);
+
+const resetListeners = new Set<() => void>();
+
+export function onSupportReset(fn: () => void): () => void {
+	resetListeners.add(fn);
+	return () => {
+		resetListeners.delete(fn);
+	};
+}
+
+export function resetSupportStore() {
+	supportTickets = [];
+	activeTicket = null;
+	activeConversation = null;
+	supportMessages = [];
+	supportUnread = 0;
+	supportLoading = false;
+	supportSending = false;
+	for (const fn of resetListeners) {
+		try {
+			fn();
+		} catch {}
+	}
+}
 
 export function getSupportTickets() { return supportTickets; }
 export function getActiveTicket() { return activeTicket; }
@@ -53,42 +59,49 @@ export function initSupportUI() {
 
 export async function fetchTickets() {
 	supportLoading = true;
-	try { const r: any = await apiFetch('/support'); supportTickets = r.data; } catch {} finally { supportLoading = false; }
+	try {
+		const r = await api<any>('/support');
+		supportTickets = r.data || [];
+	} catch {} finally {
+		supportLoading = false;
+	}
 }
 
 export async function createTicket(message: string, priority = 'normal') {
-	const r: any = await apiFetch('/support', { method: 'POST', body: JSON.stringify({ message, priority }) });
+	const r = await api<any>('/support', { method: 'POST', body: { message, priority } });
 	await fetchTickets();
 	return r;
 }
 
 export async function fetchMessages(ticketId: number) {
-	const r: any = await apiFetch(`/support/${ticketId}/messages`);
-	supportMessages = r.data;
+	const r = await api<any>(`/support/${ticketId}/messages`);
+	supportMessages = r.data || [];
 	activeTicket = supportTickets.find((t: any) => t.id === ticketId) || null;
 }
 
 export async function sendSupportMessage(ticketId: number, message: string) {
 	supportSending = true;
 	try {
-		await apiFetch(`/support/${ticketId}/reply`, { method: 'POST', body: JSON.stringify({ message }) });
+		await api(`/support/${ticketId}/reply`, { method: 'POST', body: { message } });
 		await fetchMessages(ticketId);
-	} finally { supportSending = false; }
+	} finally {
+		supportSending = false;
+	}
 }
 
 export async function rateTicket(ticketId: number, rating: number, comment?: string) {
-	await apiFetch(`/support/${ticketId}/rate`, { method: 'POST', body: JSON.stringify({ rating, comment }) });
+	await api(`/support/${ticketId}/rate`, { method: 'POST', body: { rating, comment } });
 	if (activeConversation) activeConversation = { ...activeConversation, status: 'closed', rating };
 }
 
 export async function closeTicket(ticketId: number) {
-	await apiFetch(`/support/${ticketId}/close`, { method: 'POST' });
+	await api(`/support/${ticketId}/close`, { method: 'POST' });
 	if (activeConversation) activeConversation = { ...activeConversation, status: 'closed' };
 }
 
 export async function fetchUnread() {
 	try {
-		const r: any = await apiFetch('/support/unread');
+		const r = await api<any>('/support/unread');
 		supportUnread = r.data?.count ?? 0;
 		if (typeof r.data?.staff_online === 'boolean') {
 			staffOnline = r.data.staff_online;
@@ -101,7 +114,7 @@ export const fetchUnreadCount = fetchUnread;
 
 export async function fetchActiveConversation() {
 	try {
-		const r: any = await apiFetch('/support/active');
+		const r: any = await api<any>('/support/active');
 		if (typeof r.staff_online === 'boolean') {
 			staffOnline = r.staff_online;
 		}
@@ -119,7 +132,6 @@ export async function fetchActiveConversation() {
 }
 
 export async function markSupportRead(ticketId: number) {
-	await apiFetch(`/support/${ticketId}/mark-read`, { method: 'POST' });
+	await api(`/support/${ticketId}/mark-read`, { method: 'POST' });
 	supportUnread = Math.max(0, supportUnread - 1);
 }
-

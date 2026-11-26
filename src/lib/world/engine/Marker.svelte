@@ -77,6 +77,13 @@
 		return new BufferGeometry().setFromPoints([ground, air]);
 	});
 
+	$effect(() => {
+		const geo = tether;
+		return () => {
+			geo?.dispose();
+		};
+	});
+
 	const OUTWARD_AXIS = new Vector3(0, 0, -1);
 	let orientation = $derived.by(() => {
 		const q = new Quaternion().setFromUnitVectors(OUTWARD_AXIS, surfaceNormal(node.lat, node.lng));

@@ -4,6 +4,8 @@
  */
 
 import { api } from '$lib/api';
+import { IS_ADMIN_FLAVOR } from '$lib/app-flavor';
+import { isAdmin } from '$lib/stores/auth.svelte';
 import { PROCEDURAL_WORLD_DATA, REGION_GEOMETRY_URL } from './config';
 import type {
 	Journey,
@@ -16,10 +18,10 @@ import type {
 import { getLocalHighestReadChapter } from './world-utils';
 
 function withProgressQuery(path: string): string {
-	const localMax = getLocalHighestReadChapter();
-	if (localMax > 0) {
+	const effectiveMax = IS_ADMIN_FLAVOR && isAdmin() ? 9999 : getLocalHighestReadChapter();
+	if (effectiveMax > 0) {
 		const sep = path.includes('?') ? '&' : '?';
-		return `${path}${sep}read_up_to=${localMax}`;
+		return `${path}${sep}read_up_to=${effectiveMax}`;
 	}
 	return path;
 }

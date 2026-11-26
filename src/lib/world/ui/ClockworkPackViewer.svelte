@@ -1,10 +1,8 @@
 <script lang="ts">
 	/**
-	 * Akunarch P0 — Trình xem SA BÀN CƠ KHÍ (chỉ app desktop): nạp .glb bản cơ khí, phát clip `assemble` 1 lần
-	 * rồi lặp `idle`. Renderer riêng của component; khi rời trang dọn sâu theo bài học VRAM 2026-11-13
-	 * (disposeObject3DDeep, gỡ listener OrbitControls trên document, thu canvas 1×1, dừng rAF).
+	 * Akunarch P0 — Trình xem SA BÀN CƠ KHÍ (chỉ app desktop): nạp .glb bản cơ khí (hỗ trợ KTX2, Draco & Meshopt local),
+	 * phát clip `assemble` 1 lần rồi lặp `idle`. Renderer riêng của component; khi đổi `url` hoặc rời trang dọn sâu VRAM.
 	 */
-	import { onMount } from 'svelte';
 	import { currentLocale } from '$lib/i18n-labels';
 	import { pickClockworkClips } from '../engine/clockwork-pack';
 	import { disposeObject3DDeep } from '../engine/webgl-dispose';
@@ -22,23 +20,38 @@
 	let errorMsg = $state('');
 	let playing = $state(true);
 	let replay: (() => void) | null = null;
-	const isEn = currentLocale() === 'en';
+	let isEn = $derived(currentLocale() === 'en');
 
-	onMount(() => {
+	$effect(() => {
+		const targetUrl = url;
+		const mountEl = host;
+		if (!targetUrl || !mountEl) return;
+
 		let disposed = false;
 		let raf = 0;
 		let cleanup: () => void = () => {};
+
+		status = 'loading';
+		errorMsg = '';
+		playing = true;
+		replay = null;
 
 		(async () => {
 			const THREE = await import('three');
 			const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
 			const { DRACOLoader } = await import('three/examples/jsm/loaders/DRACOLoader.js');
+			const { KTX2Loader } = await import('three/examples/jsm/loaders/KTX2Loader.js');
+			const { MeshoptDecoder } = await import(
+				'three/examples/jsm/libs/meshopt_decoder.module.js'
+			);
 			const { OrbitControls } = await import('three/examples/jsm/controls/OrbitControls.js');
-			const { RoomEnvironment } = await import('three/examples/jsm/environments/RoomEnvironment.js');
-			if (disposed || !host) return;
+			const { RoomEnvironment } = await import(
+				'three/examples/jsm/environments/RoomEnvironment.js'
+			);
+			if (disposed || !mountEl.isConnected) return;
 
 			const canvas = document.createElement('canvas');
-			host.appendChild(canvas);
+			mountEl.appendChild(canvas);
 			const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
 			renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
 			renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -60,26 +73,36 @@
 			const camera = new THREE.PerspectiveCamera(38, 1, 0.005, 400);
 			const controls = new OrbitControls(camera, renderer.domElement);
 			controls.enableDamping = true;
+
 			const draco = new DRACOLoader();
-			draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+			draco.setDecoderPath('/decoders/draco/');
+			const ktx2 = new KTX2Loader();
+			ktx2.setTranscoderPath('/decoders/basis/');
+			ktx2.detectSupport(renderer);
+
 			const loader = new GLTFLoader();
 			loader.setDRACOLoader(draco);
+			loader.setKTX2Loader(ktx2);
+			loader.setMeshoptDecoder(MeshoptDecoder);
 			let mixer: InstanceType<typeof THREE.AnimationMixer> | null = null;
 
 			const resize = () => {
-				if (!host) return;
-				const w = Math.max(host.clientWidth, 320);
-				const h = Math.max(host.clientHeight, 240);
+				if (disposed || !mountEl.isConnected) return;
+				const w = Math.max(mountEl.clientWidth, 320);
+				const h = Math.max(mountEl.clientHeight, 240);
 				camera.aspect = w / h;
 				camera.updateProjectionMatrix();
 				renderer.setSize(w, h, false);
 			};
 			const ro = new ResizeObserver(resize);
-			ro.observe(host);
+			ro.observe(mountEl);
 			resize();
 
 			cleanup = () => {
-				cancelAnimationFrame(raf);
+				if (raf) {
+					cancelAnimationFrame(raf);
+					raf = 0;
+				}
 				ro.disconnect();
 				if (mixer) {
 					mixer.stopAllAction();
@@ -92,6 +115,7 @@
 				envRT.dispose();
 				pmrem.dispose();
 				draco.dispose();
+				ktx2.dispose();
 				renderer.setRenderTarget(null);
 				renderer.setSize(1, 1, false);
 				renderer.renderLists.dispose();
@@ -101,7 +125,7 @@
 			};
 
 			try {
-				const gltf = await loader.loadAsync(url);
+				const gltf = await loader.loadAsync(targetUrl);
 				if (disposed) {
 					disposeObject3DDeep(gltf.scene);
 					return;
@@ -112,7 +136,9 @@
 				const center = box.getCenter(new THREE.Vector3());
 				const span = Math.max(size.x, size.y, size.z, 1e-3);
 				controls.target.copy(center);
-				camera.position.copy(center).add(new THREE.Vector3(0.56, 0.42, 0.76).normalize().multiplyScalar(span * 1.9));
+				camera.position
+					.copy(center)
+					.add(new THREE.Vector3(0.56, 0.42, 0.76).normalize().multiplyScalar(span * 1.9));
 				camera.near = span / 500;
 				camera.far = span * 60;
 				camera.updateProjectionMatrix();
@@ -121,7 +147,8 @@
 				if (clips.intro || clips.loop) {
 					const m = new THREE.AnimationMixer(gltf.scene);
 					mixer = m;
-					const find = (n: string | null) => (n ? THREE.AnimationClip.findByName(gltf.animations, n) : null);
+					const find = (n: string | null) =>
+						n ? THREE.AnimationClip.findByName(gltf.animations, n) : null;
 					const introClip = find(clips.intro);
 					const idleClip = find(clips.loop);
 					const introAct = introClip ? m.clipAction(introClip) : null;
@@ -145,12 +172,17 @@
 				}
 				status = 'ready';
 			} catch (e) {
+				if (disposed) return;
 				status = 'error';
 				errorMsg = String((e as Error)?.message ?? e);
+				return;
 			}
+
+			if (disposed || status !== 'ready') return;
 
 			const clock = new THREE.Clock();
 			const tick = () => {
+				if (disposed) return;
 				raf = requestAnimationFrame(tick);
 				const dt = Math.min(clock.getDelta(), 0.1);
 				if (mixer && playing) mixer.update(dt);

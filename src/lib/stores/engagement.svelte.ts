@@ -1,4 +1,4 @@
-import { PUBLIC_API_BASE } from '$env/static/public';
+import { api } from '$lib/api';
 import { getToken } from './auth.svelte';
 
 export interface NotificationFeedItem {
@@ -26,18 +26,6 @@ export interface NotificationFeedItem {
 	created_at: string;
 }
 
-async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-	const headers: Record<string, string> = {
-		'Content-Type': 'application/json',
-		Accept: 'application/json',
-		...((options.headers as Record<string, string>) || {})
-	};
-	const token = getToken();
-	if (token) headers['Authorization'] = `Bearer ${token}`;
-	const res = await fetch(`${PUBLIC_API_BASE}${endpoint}`, { ...options, headers });
-	return res.json();
-}
-
 // ── Notification State (HeroSlider & System Notifications) ──
 let notifications = $state<any[]>([]);
 let notifLoading = $state(false);
@@ -52,7 +40,7 @@ export function isNotifLoading() {
 export async function fetchNotifications(page = 1) {
 	notifLoading = true;
 	try {
-		const r = await apiFetch(`/notifications?page=${page}`);
+		const r = await api<any>(`/notifications?page=${page}`);
 		if (r.success) notifications = r.data;
 	} catch {
 	} finally {
@@ -107,9 +95,9 @@ export async function fetchNotificationFeed(limit = 35) {
 	}
 	feedLoading = true;
 	try {
-		const r = await apiFetch(`/notifications/feed?limit=${limit}`);
+		const r = await api<NotificationFeedItem[]>(`/notifications/feed?limit=${limit}`);
 		if (r.success && Array.isArray(r.data)) {
-			feedItems = r.data as NotificationFeedItem[];
+			feedItems = r.data;
 			recomputeUnreadCounts(feedItems);
 		}
 	} catch {
@@ -131,22 +119,26 @@ export async function markNotificationsRead(keys: string[] = [], markAll = false
 	recomputeUnreadCounts(feedItems);
 
 	try {
-		await apiFetch('/notifications/read', {
+		await api('/notifications/read', {
 			method: 'POST',
-			body: JSON.stringify({ keys, mark_all: markAll })
+			body: { keys, mark_all: markAll }
 		});
 	} catch {}
 }
 
 export async function voteOnNotification(notificationId: number, optionId: number) {
-	const r = await apiFetch('/notifications/vote', {
-		method: 'POST',
-		body: JSON.stringify({ notification_id: notificationId, option_id: optionId })
-	});
-	if (r.success) {
-		void fetchNotificationFeed();
+	try {
+		const r = await api<any>('/notifications/vote', {
+			method: 'POST',
+			body: { notification_id: notificationId, option_id: optionId }
+		});
+		if (r.success) {
+			void fetchNotificationFeed();
+		}
+		return r;
+	} catch (err: any) {
+		return { success: false, message: err?.message || 'Vote failed' };
 	}
-	return r;
 }
 
 // ── Voting State ──
@@ -163,15 +155,21 @@ export function getUserVote() {
 export async function fetchVoteStats() {
 	const token = getToken();
 	const endpoint = token ? '/votes/stats' : '/public/votes/stats';
-	const r = await apiFetch(endpoint);
-	if (r.success) {
-		voteStats = r.data;
-		userVote = r.data.user_vote || null;
-	}
+	try {
+		const r = await api<any>(endpoint);
+		if (r.success) {
+			voteStats = r.data;
+			userVote = r.data.user_vote || null;
+		}
+	} catch {}
 }
 
 export async function castVote(choice: number) {
-	const r = await apiFetch('/votes', { method: 'POST', body: JSON.stringify({ choice }) });
-	if (r.success) await fetchVoteStats();
-	return r;
+	try {
+		const r = await api<any>('/votes', { method: 'POST', body: { choice } });
+		if (r.success) await fetchVoteStats();
+		return r;
+	} catch (err: any) {
+		return { success: false, message: err?.message || 'Vote failed' };
+	}
 }

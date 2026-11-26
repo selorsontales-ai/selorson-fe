@@ -79,8 +79,17 @@ export async function login2FA(tempToken: string, code: string): Promise<any> {
 			body: JSON.stringify({ temp_token: tempToken, code }),
 			credentials: 'include',
 		});
-		const json = await res.json();
-		return json;
+		const rawText = await res.text();
+		try {
+			return rawText ? JSON.parse(rawText) : { success: false, message: `HTTP ${res.status}` };
+		} catch {
+			return {
+				success: false,
+				message: rawText
+					? `Máy chủ từ chối yêu cầu (HTTP ${res.status}): ${rawText.slice(0, 180)}`
+					: `Lỗi máy chủ (HTTP ${res.status})`
+			};
+		}
 	} finally { isLoading2FA = false; }
 }
 

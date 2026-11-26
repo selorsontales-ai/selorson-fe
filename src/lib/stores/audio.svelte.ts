@@ -147,8 +147,25 @@ let catalogLoaded = $state(false);
 let sleepTimerRemainingSec = $state<number | null>(null);
 
 let audioEl: HTMLAudioElement | null = null;
+let audioCtx: AudioContext | null = null;
 let sleepIntervalId: ReturnType<typeof setInterval> | null = null;
 let initialized = false;
+
+export function registerAudioContext(ctx: AudioContext | null) {
+	audioCtx = ctx;
+}
+
+function suspendAudioContextIfIdle() {
+	if (audioCtx && audioCtx.state === 'running') {
+		void audioCtx.suspend().catch(() => {});
+	}
+}
+
+function resumeAudioContextIfNeeded() {
+	if (audioCtx && audioCtx.state === 'suspended') {
+		void audioCtx.resume().catch(() => {});
+	}
+}
 
 function persistAudioState() {
 	if (typeof localStorage === 'undefined') return;
@@ -318,11 +335,14 @@ export function playTrack(
 		audioEl.muted = isMuted;
 		if (autoStart) {
 			isPlaying = true;
+			resumeAudioContextIfNeeded();
 			audioEl.play().catch(() => {
 				isPlaying = false;
+				suspendAudioContextIfIdle();
 			});
 		} else {
 			isPlaying = false;
+			suspendAudioContextIfIdle();
 		}
 	} else {
 		isPlaying = autoStart;
@@ -347,14 +367,17 @@ export function togglePlay() {
 		audioEl.src = currentTrack.file_path;
 	}
 	if (audioEl.paused) {
+		resumeAudioContextIfNeeded();
 		audioEl.play().then(() => {
 			isPlaying = true;
 		}).catch(() => {
 			isPlaying = false;
+			suspendAudioContextIfIdle();
 		});
 	} else {
 		audioEl.pause();
 		isPlaying = false;
+		suspendAudioContextIfIdle();
 	}
 }
 
@@ -363,14 +386,17 @@ export function pauseForExternalMedia() {
 		audioEl.pause();
 	}
 	isPlaying = false;
+	suspendAudioContextIfIdle();
 }
 
 export function playNext(fromEnded = false) {
 	if (!currentTrack || queue.length === 0) return;
 	if (fromEnded && repeatMode === 'one' && audioEl) {
 		audioEl.currentTime = 0;
+		resumeAudioContextIfNeeded();
 		audioEl.play().catch(() => {
 			isPlaying = false;
+			suspendAudioContextIfIdle();
 		});
 		return;
 	}
@@ -386,12 +412,17 @@ export function playNext(fromEnded = false) {
 		const nextTrack = queue[nextIdx];
 		if (nextTrack.id === currentTrack.id && audioEl) {
 			audioEl.currentTime = 0;
-			audioEl.play().catch(() => {});
+			resumeAudioContextIfNeeded();
+			audioEl.play().catch(() => {
+				isPlaying = false;
+				suspendAudioContextIfIdle();
+			});
 		} else {
 			playTrack(nextTrack, queue, true);
 		}
 	} else {
 		isPlaying = false;
+		suspendAudioContextIfIdle();
 	}
 }
 
@@ -478,6 +509,7 @@ export function closeAudioPlayer() {
 		} catch {}
 	}
 	isPlaying = false;
+	suspendAudioContextIfIdle();
 	currentTrack = null;
 	showQueueDrawer = false;
 	setSleepTimer(null);

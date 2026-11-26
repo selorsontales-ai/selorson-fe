@@ -29,9 +29,19 @@
 	let enViewMode = $state<"edit" | "preview" | "split">("split");
 	let savingEn = $state(false);
 	let deletingEn = $state(false);
+	let importingRepoEn = $state(false);
 	let hasSavedEn = $state(false);
 	let enSavedBlocks = $state<any[] | null>(null);
 	let enDirtyMarkdown = $state(false);
+
+	function escapeHtml(str: string): string {
+		return str
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;")
+			.replace(/'/g, "&#39;");
+	}
 
 	function decodeHtmlEntities(str: string): string {
 		return str
@@ -52,7 +62,15 @@
 				if (rec.type !== "paragraph") continue;
 				let html = String(rec.content ?? "").trim();
 				if (!html) continue;
-				// Convert simple inline HTML back to clean Markdown for editing
+				// B2-09: Recognize canonical scene-break paragraph (`<b>* * *</b>`) BEFORE heading conversion
+				if (
+					/^<(?:b|strong)>\s*\*\s*\*\s*\*+\s*<\/(?:b|strong)>$/i.test(html) ||
+					/^(?:\*\s*\*\s*\*+|-\s*-\s*-+|_\s*_\s*_+)$/.test(html)
+				) {
+					lines.push("* * *");
+					continue;
+				}
+				// Convert simple inline HTML headings back to Markdown `### ...`
 				if (/^<(?:b|strong)>([^<]+)<\/(?:b|strong)>$/i.test(html)) {
 					const m = html.match(/^<(?:b|strong)>([^<]+)<\/(?:b|strong)>$/i);
 					if (m) {
@@ -61,8 +79,10 @@
 					}
 				}
 				html = html
+					.replace(/<code>([\s\S]*?)<\/code>/gi, "`$1`")
 					.replace(/<(?:b|strong)>([\s\S]*?)<\/(?:b|strong)>/gi, "**$1**")
 					.replace(/<(?:i|em)>([\s\S]*?)<\/(?:i|em)>/gi, "*$1*")
+					.replace(/<(?:s|del)>([\s\S]*?)<\/(?:s|del)>/gi, "~~$1~~")
 					.replace(/<br\s*\/?>/gi, "\n")
 					.replace(/<[^>]+>/g, "");
 				lines.push(decodeHtmlEntities(html).trim());
@@ -117,12 +137,15 @@
 			.split(/\n{2,}/)
 			.map((p) => p.trim())
 			.filter(Boolean)
-			.filter(
-				(p) =>
-					!/^#\s+/.test(p) &&
-					!/^(?:\*\s*\*\s*\*+|-\s*-\s*-+|_\s*_\s*_+)$/.test(p),
-			);
+			.filter((p) => !/^#\s+/.test(p));
 		return paras.map((raw, idx) => {
+			if (/^(?:\*\s*\*\s*\*+|-\s*-\s*-+|_\s*_\s*_+)$/.test(raw)) {
+				return {
+					id: `preview-en-${idx + 1}`,
+					type: "paragraph",
+					content: "<b>* * *</b>",
+				};
+			}
 			if (/^#{2,6}\s+(.+)$/.test(raw)) {
 				const h = raw
 					.replace(/^#{2,6}\s+/, "")
@@ -132,15 +155,17 @@
 				return {
 					id: `preview-en-${idx + 1}`,
 					type: "paragraph",
-					content: `<b>${h}</b>`,
+					content: `<b>${escapeHtml(h)}</b>`,
 				};
 			}
-			let html = raw
+			// B2-08: Escape HTML entities BEFORE applying safe Markdown inline conversions
+			let html = escapeHtml(raw)
 				.replace(/^(?:[-*•])\s+\*\*((?:[^*\n]|\*[^*\n])+?)\*\*/gm, "• <b>$1</b>")
-				.replace(/`([^`\n]+?)`/g, "<i>$1</i>")
+				.replace(/`([^`\n]+?)`/g, "<code>$1</code>")
 				.replace(/\*\*\*([^*]+?)\*\*\*/g, "<i>$1</i>")
 				.replace(/\*\*([^*]+?)\*\*/g, "$1")
-				.replace(/\*([^*\n]+?)\*/g, "<i>$1</i>");
+				.replace(/\*([^*\n]+?)\*/g, "<i>$1</i>")
+				.replace(/~~([^~\n]+?)~~/g, "<s>$1</s>");
 			return {
 				id: `preview-en-${idx + 1}`,
 				type: "paragraph",
@@ -263,26 +288,91 @@
 		URL.revokeObjectURL(url);
 	}
 
+	function applyParsedEnMarkdownText(rawText: string) {
+		// B2-09: Strip UTF-8 BOM, always update `enTitle` from `# ...`, and split trailing Notes appendix
+		const clean = rawText.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
+		const lines = clean.split("\n");
+		let firstIdx = 0;
+		while (firstIdx < lines.length && !lines[firstIdx].trim()) {
+			firstIdx++;
+		}
+
+		let bodyText = clean.trim();
+		if (lines[firstIdx]?.trimStart().startsWith("# ")) {
+			const heading = lines[firstIdx]
+				.trimStart()
+				.replace(/^#\s*(?:Chapter\s+\d+\s*[:—.\-]\s*)?/i, "")
+				.trim();
+			if (heading) {
+				enTitle = heading;
+			}
+			bodyText = lines.slice(firstIdx + 1).join("\n").trim();
+		}
+
+		const appendixRe =
+			/\n[ \t]*---+[ \t]*\n+\s*(###\s*(?:Historical\s*(?:&|and)\s*Philosophical\s+Notes?|Author'?s?\s+Notes?|Translator'?s?\s+Notes?|Lore\s+Notes?|Appendix|Notes)\b[\s\S]*)$/im;
+		const appMatch = bodyText.match(appendixRe);
+		if (appMatch && appMatch.index != null) {
+			enMarkdown = bodyText.slice(0, appMatch.index).trim();
+			const rawNote = appMatch[1]
+				.replace(/^###\s*Author'?s?\s+Notes?[ \t]*\n+/i, "")
+				.trim();
+			if (rawNote) {
+				enAuthorNote = rawNote;
+			}
+		} else {
+			enMarkdown = bodyText;
+		}
+		enDirtyMarkdown = true;
+	}
+
 	async function handleImportEnMdFile(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const file = input.files?.[0];
 		if (!file) return;
 		const raw = await file.text();
-		const lines = raw.split(/\r?\n/);
-		if (lines[0]?.startsWith("# ")) {
-			const heading = lines[0]
-				.replace(/^#\s*(?:Chapter\s+\d+\s*[:—.-]\s*)?/i, "")
-				.trim();
-			if (heading && !enTitle.trim()) {
-				enTitle = heading;
-			}
-			enMarkdown = lines.slice(1).join("\n").trim();
-		} else {
-			enMarkdown = raw.trim();
-		}
-		enDirtyMarkdown = true;
+		applyParsedEnMarkdownText(raw);
 		input.value = "";
-		toast_success(`Đã nạp nội dung từ ${file.name}! Nhấn Lưu để ghi vào Beta DB.`);
+		toast_success(`Đã nạp nội dung từ ${file.name}! Nhấn Lưu Nháp để ghi vào Beta DB.`);
+	}
+
+	async function importEnFromLocalRepo() {
+		if (!isEdit || importingRepoEn) return;
+		importingRepoEn = true;
+		try {
+			const res = await adminPost<any>(
+				`/admin/chapters/${chapterId}/translations/en/import-repo`,
+				{},
+			);
+			if (res.success && res.data?.translation) {
+				const tr = res.data.translation;
+				hasSavedEn = true;
+				enTitle = tr.title || "";
+				enStatus = "draft";
+				enAuthorNote = res.data.raw_author_note ?? tr.author_note ?? "";
+				enSavedBlocks = Array.isArray(tr.content_blocks) ? tr.content_blocks : null;
+				enMarkdown =
+					typeof res.data.markdown_prose === "string" && res.data.markdown_prose.trim()
+						? res.data.markdown_prose.trim()
+						: blocksToEditableMarkdown(tr.content_blocks, tr.content);
+				enDirtyMarkdown = false;
+				if (chapterData) {
+					chapterData.translations = {
+						...(chapterData.translations || {}),
+						en: tr,
+					};
+				}
+				toast_success(
+					res.message || "Đã nạp từ kho _translations/en ở chế độ Nháp!",
+				);
+			} else {
+				toast_error(res.message || "Không nạp được bản dịch từ kho _translations/en");
+			}
+		} catch (err: any) {
+			toast_error(err?.message || "Lỗi kết nối khi đọc kho _translations/en");
+		} finally {
+			importingRepoEn = false;
+		}
 	}
 
 	async function saveChapter(payload: any) {
@@ -537,7 +627,16 @@
 				</div>
 
 				<div class="en-head-actions">
-					<label class="btn-md-tool" title="Nạp từ file Markdown (.md) trong _translations/en/chapters">
+					<button
+						type="button"
+						class="btn-md-tool"
+						disabled={importingRepoEn}
+						onclick={importEnFromLocalRepo}
+						title="Đọc chỉ-đọc từ E:\Selorson\_translations\en\chapters và lưu ở chế độ Nháp"
+					>
+						{importingRepoEn ? "⏳ Đang đọc kho..." : "⚡ Nạp từ _translations/en (Nháp)"}
+					</button>
+					<label class="btn-md-tool" title="Nạp từ file Markdown (.md) bất kỳ">
 						📂 Nạp file .md
 						<input
 							type="file"

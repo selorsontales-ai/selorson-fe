@@ -61,6 +61,12 @@ function verifyFlavorBundle(flavor, outputRoot) {
   const adminSources = sources.filter((source) =>
     source.includes("/(app)/admin/")
   );
+  const supportWorkspaceSources = sources.filter((source) =>
+    source.includes("/(app)/support-workspace/")
+  );
+  const privateTestSources = sources.filter((source) =>
+    source.split("/").some((seg) => seg.startsWith("__"))
+  );
   const desktopOnlySources = adminSources.filter((source) =>
     DESKTOP_ADMIN_ONLY_ROUTES.some((route) => source.includes(`/${route}/`))
   );
@@ -68,6 +74,20 @@ function verifyFlavorBundle(flavor, outputRoot) {
   if (USER_FLAVORS.has(flavor) && adminSources.length > 0) {
     throw new Error(
       `${flavor} contains admin routes: ${adminSources.slice(0, 5).join(", ")}`
+    );
+  }
+  if (USER_FLAVORS.has(flavor) && supportWorkspaceSources.length > 0) {
+    throw new Error(
+      `${flavor} contains support-workspace routes: ${supportWorkspaceSources
+        .slice(0, 5)
+        .join(", ")}`
+    );
+  }
+  if (USER_FLAVORS.has(flavor) && privateTestSources.length > 0) {
+    throw new Error(
+      `${flavor} contains private test routes: ${privateTestSources
+        .slice(0, 5)
+        .join(", ")}`
     );
   }
   if (!USER_FLAVORS.has(flavor) && adminSources.length === 0) {

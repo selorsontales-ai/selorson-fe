@@ -240,12 +240,22 @@
 		}
 	}
 
+	function escapeHtml(str: string): string {
+		return str
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#39;');
+	}
+
 	let fallbackParagraphs = $derived.by(() => {
 		if (rendered.length > 0 || contentHtml || !content) return [];
 		return content
 			.split('\n')
 			.map((p: string) => p.trim())
-			.filter(Boolean);
+			.filter(Boolean)
+			.map((p: string) => escapeHtml(p));
 	});
 </script>
 

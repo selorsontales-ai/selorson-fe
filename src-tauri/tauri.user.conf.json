@@ -13,6 +13,10 @@
     ]
   },
   "bundle": {
+    "createUpdaterArtifacts": false,
     "resources": []
+  },
+  "plugins": {
+    "updater": null
   }
 }

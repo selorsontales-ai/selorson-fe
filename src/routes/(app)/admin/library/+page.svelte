@@ -81,6 +81,7 @@
 		{ value: 'all', label: 'Tất cả', icon: '🌐' },
 		{ value: 'character', label: 'Nhân vật', icon: '👤' },
 		{ value: 'location', label: 'Địa điểm', icon: '🗺️' },
+		{ value: 'world_chunk', label: 'Ô Thế Giới Mở', icon: '🧭' },
 		{ value: 'item', label: 'Vật phẩm', icon: '⚔️' },
 		{ value: 'faction', label: 'Thế lực', icon: '🏛️' },
 		{ value: 'creature', label: 'Sinh vật', icon: '🐉' },
@@ -754,6 +755,7 @@
 					<select bind:value={form.category}>
 						<option value="character">👤 Nhân vật (Character)</option>
 						<option value="location">🗺️ Địa điểm (Location)</option>
+						<option value="world_chunk">🧭 Ô Thế Giới Mở (World Chunk)</option>
 						<option value="item">⚔️ Vật phẩm (Item)</option>
 						<option value="faction">🏛️ Thế lực / Tổ chức (Faction)</option>
 						<option value="creature">🐉 Sinh vật (Creature)</option>

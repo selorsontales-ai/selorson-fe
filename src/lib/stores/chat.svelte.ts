@@ -1,5 +1,5 @@
-import { api } from '$lib/api';
-import { getToken } from '$lib/stores/auth.svelte';
+import { api, acquireRefreshedToken } from '$lib/api';
+import { getToken, isAuthenticated } from '$lib/stores/auth.svelte';
 import { PUBLIC_API_BASE } from '$env/static/public';
 import { countUnread, markConversationRead, normalizeConversations } from '$lib/chat-model.js';
 import * as m from '$lib/paraglide/messages';
@@ -86,13 +86,37 @@ export async function fetchConversations() {
 }
 
 let sseRetryCount = 0;
+let sseReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_SSE_RETRIES = 15;
 
+export function resetChatStore() {
+	if (sseReconnectTimer) {
+		clearTimeout(sseReconnectTimer);
+		sseReconnectTimer = null;
+	}
+	if (chatSSE) {
+		chatSSE.close();
+		chatSSE = null;
+	}
+	sseRetryCount = 0;
+	conversations = [];
+	openWindows = [];
+	bubbles = [];
+	totalUnread = 0;
+	drawerOpen = false;
+	showOverflow = false;
+	conversationsError = '';
+}
+
 function initChatSSE() {
-	if (chatSSE) return;
+	if (chatSSE || !isAuthenticated()) return;
+	if (sseReconnectTimer) {
+		clearTimeout(sseReconnectTimer);
+		sseReconnectTimer = null;
+	}
 	const token = getToken();
 	if (!token) return;
-	chatSSE = new EventSource(`${PUBLIC_API_BASE}/chat/stream?token=${token}`);
+	chatSSE = new EventSource(`${PUBLIC_API_BASE}/chat/stream?token=${encodeURIComponent(token)}`);
 	chatSSE.onopen = () => {
 		sseRetryCount = 0; // Reset retry count on successful connection
 	};
@@ -124,10 +148,17 @@ function initChatSSE() {
 	chatSSE.onerror = () => {
 		chatSSE?.close();
 		chatSSE = null;
+		if (!isAuthenticated()) return;
 		if (sseRetryCount < MAX_SSE_RETRIES) {
 			sseRetryCount++;
 			const delay = Math.min(1000 * Math.pow(2, sseRetryCount), 30000);
-			setTimeout(() => initChatSSE(), delay);
+			if (sseReconnectTimer) clearTimeout(sseReconnectTimer);
+			sseReconnectTimer = setTimeout(async () => {
+				sseReconnectTimer = null;
+				if (!isAuthenticated()) return;
+				await acquireRefreshedToken(undefined, false).catch(() => {});
+				initChatSSE();
+			}, delay);
 		}
 	};
 }

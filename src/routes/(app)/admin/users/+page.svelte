@@ -40,7 +40,7 @@
 						{/each}
 						<td class="td-actions" data-label="Thao tác">
 							<button class="act-btn" onclick={() => openEdit(user)}>✏️</button>
-							{#if user.status !== 'blacklisted'}
+							{#if user.status !== 'blacklisted' && user.status !== 'suspended'}
 								<button class="act-btn ban" onclick={() => openBan(user)}>🚫</button>
 							{:else}
 								<button class="act-btn unban" onclick={() => unbanUser(user)}>✅</button>

@@ -145,10 +145,11 @@
 			try {
 				await api(`/videos/${videoId}/progress`, {
 					method: 'POST',
-					body: JSON.stringify({
-						completed: completed,
+					body: {
+						completed,
+						position: lastPosition,
 						last_position: lastPosition
-					})
+					}
 				});
 			} catch {}
 		}

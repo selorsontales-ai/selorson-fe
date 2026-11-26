@@ -62,6 +62,7 @@
 		'palette',
 		'intro_video_url',
 		'desktop_pack_url',
+		'clockwork_pack_url',
 		'vn_episode_url',
 		'color'
 	];
@@ -266,11 +267,20 @@
 			</label>
 
 			<label>
-				Gói Thế Giới 3D Desktop (URL)
+				Gói Thế Giới 3D Desktop — Bản Thật (URL)
 				<input
 					value={(world.desktop_pack_url as string) ?? ''}
-					placeholder="https://.../location-pack.zip"
+					placeholder="https://.../location-pack.glb"
 					oninput={(e) => setText('desktop_pack_url', e.currentTarget.value)}
+				/>
+			</label>
+
+			<label>
+				Gói Sa Bàn Cơ Khí 3D — Clockwork (URL)
+				<input
+					value={(world.clockwork_pack_url as string) ?? ''}
+					placeholder="https://.../clockwork-pack.glb"
+					oninput={(e) => setText('clockwork_pack_url', e.currentTarget.value)}
 				/>
 			</label>
 

@@ -12,6 +12,8 @@
 	import * as THREE from 'three';
 	import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 	import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+	import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
+	import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 	import { currentLocale } from '$lib/i18n-labels';
 	import { fetchWorldChunks } from '$lib/world/api';
 	import type { WorldChunkNode, WorldChunkVnTrigger } from '$lib/world/types';
@@ -114,9 +116,22 @@
 	// Kế hoạch VRAM v2 · C1: mỗi lần vào/ra Thế giới mở là một phiên; loader về muộn (khác phiên) thì dọn ngay
 	let sessionToken = 0;
 	let runtimeDraco: DRACOLoader | null = null;
+	let runtimeKtx2: KTX2Loader | null = null;
+	let runtimeGltfLoader: GLTFLoader | null = null;
 	let runtimeTick: FrameRequestCallback | null = null;
 	let waterUniforms: Array<{ uTime: { value: number } }> = [];
 	let wayfarerBeacon: THREE.Points | null = null;
+
+	const CHUNK_ACTIVE_RADIUS = 2;
+	interface MountedChunkHandle {
+		key: string;
+		chunk: WorldChunkNode;
+		group: THREE.Group;
+		waterUniform: { uTime: { value: number } };
+		monumentsLoaded: number;
+	}
+	let mountedChunks = new Map<string, MountedChunkHandle>();
+	let lastStreamedChunkCoord = '';
 
 	const pressedKeys = new Set<string>();
 	let yaw = 0;
@@ -260,14 +275,17 @@
 		return mesh;
 	}
 
-	function createRippledWaterMesh(chunk: WorldChunkNode): THREE.Mesh {
+	function createRippledWaterMesh(
+		chunk: WorldChunkNode
+	): { mesh: THREE.Mesh; uniform: { uTime: { value: number } } } {
 		const size = chunk.world_size || 256;
 		const waterLvl = chunk.water_level ?? 1.6;
 		const geom = new THREE.PlaneGeometry(size, size, 48, 48);
 		geom.rotateX(-Math.PI / 2);
 
 		const uTime = { value: 0 };
-		waterUniforms.push({ uTime });
+		const uniform = { uTime };
+		waterUniforms.push(uniform);
 
 		const mat = new THREE.ShaderMaterial({
 			transparent: true,
@@ -302,7 +320,7 @@
 
 		const mesh = new THREE.Mesh(geom, mat);
 		mesh.position.set(chunk.chunk_x * size, waterLvl, chunk.chunk_z * size);
-		return mesh;
+		return { mesh, uniform };
 	}
 
 	function createInstancedGrassTufts(chunk: WorldChunkNode): THREE.InstancedMesh | null {
@@ -485,73 +503,35 @@
 		yaw = 0;
 		pitch = -0.04;
 
-		// Setup Draco + GLTF loader (zero static/draco bundle bloat in web-user Cloudflare build)
+		// B2-01: Local Draco + KTX2 + Meshopt decoders (100% offline & Tauri CSP-compliant)
 		const draco = new DRACOLoader();
-		draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+		draco.setDecoderPath('/decoders/draco/');
+		const ktx2 = new KTX2Loader();
+		ktx2.setTranscoderPath('/decoders/basis/');
+		ktx2.detectSupport(renderer);
 		const gltfLoader = new GLTFLoader();
 		gltfLoader.setDRACOLoader(draco);
+		gltfLoader.setKTX2Loader(ktx2);
+		gltfLoader.setMeshoptDecoder(MeshoptDecoder);
 		runtimeDraco = draco;
+		runtimeKtx2 = ktx2;
+		runtimeGltfLoader = gltfLoader;
 
 		runtimeAudioZones = [];
 		runtimeTriggers = [];
+		mountedChunks.clear();
+		lastStreamedChunkCoord = '';
 
+		// Register lightweight metadata (Ambient Audio Zones & VN Triggers) across unlocked chunks
 		for (const chunk of unlockedChunks) {
 			const cSize = chunk.world_size || 256;
 			const ox = chunk.chunk_x * cSize;
 			const oz = chunk.chunk_z * cSize;
 
-			scene.add(createTriplanarTerrainMesh(chunk));
-			scene.add(createRippledWaterMesh(chunk));
-			const grass = createInstancedGrassTufts(chunk);
-			if (grass) scene.add(grass);
-
-			// Placed 3D Monuments (.glb)
-			for (const pl of chunk.placements ?? []) {
-				if (!pl.glb_url) continue;
-				gltfLoader.load(
-					pl.glb_url,
-					(gltf) => {
-						if (token !== sessionToken || !scene) {
-							disposeObject3DDeep(gltf.scene);
-							return;
-						}
-						const root = gltf.scene;
-						const wx = ox + (pl.x ?? 0);
-						const wz = oz + (pl.z ?? 0);
-						const groundH = sampleChunkHeight(chunk, pl.x ?? 0, pl.z ?? 0);
-						root.position.set(wx, groundH + (pl.y ?? 0), wz);
-						root.rotation.y = THREE.MathUtils.degToRad(pl.rot_y_deg ?? 0);
-						root.scale.setScalar(pl.scale ?? 1);
-						root.traverse((obj) => {
-							if ((obj as THREE.Mesh).isMesh) {
-								obj.castShadow = true;
-								obj.receiveShadow = true;
-							}
-						});
-						scene.add(root);
-						loadedMonumentCount += 1;
-					},
-					undefined,
-					() => {}
-				);
-			}
-
-			// Optional 3DGS .ply cloud
-			if (chunk.splat_url) {
-				void loadPlySplatCloud(chunk.splat_url, ox, oz).then((pts) => {
-					if (!pts) return;
-					if (token !== sessionToken || !scene) {
-						disposeObject3DDeep(pts);
-						return;
-					}
-					scene.add(pts);
-				});
-			}
-
-			// Ambient Audio Zones
 			for (const az of chunk.audio_zones ?? []) {
 				if (!az.audio_url) continue;
 				const audio = new Audio(az.audio_url);
+				audio.preload = 'none';
 				audio.loop = true;
 				audio.volume = 0;
 				runtimeAudioZones.push({
@@ -566,7 +546,6 @@
 				});
 			}
 
-			// VN Triggers
 			for (const tr of chunk.vn_triggers ?? []) {
 				if (!tr.episode_url) continue;
 				const tx = ox + (tr.x ?? 0);
@@ -582,6 +561,8 @@
 				});
 			}
 		}
+
+		syncNearbyChunksInVram(entryChunk.chunk_x, entryChunk.chunk_z, token);
 
 		let prevTime = performance.now();
 		let hudTick = 0;
@@ -670,8 +651,13 @@
 				hudTick += dt;
 				if (hudTick >= 0.1) {
 					hudTick = 0;
-					const cx = Math.round(playerPos.x / 256);
-					const cz = Math.round(playerPos.z / 256);
+					const cx = Math.round(playerPos.x / entrySize);
+					const cz = Math.round(playerPos.z / entrySize);
+					const coordKey = `${cx}:${cz}`;
+					if (coordKey !== lastStreamedChunkCoord) {
+						lastStreamedChunkCoord = coordKey;
+						syncNearbyChunksInVram(cx, cz, token);
+					}
 					playerCoords = {
 						x: Math.round(playerPos.x * 10) / 10,
 						y: Math.round(playerPos.y * 10) / 10,
@@ -736,9 +722,109 @@
 		if (!modalOpen && exploring3D && runtimeTick && !rafId) rafId = requestAnimationFrame(runtimeTick);
 	});
 
+	function syncNearbyChunksInVram(centerCx: number, centerCz: number, token: number) {
+		if (!scene || !runtimeGltfLoader) return;
+		const gltfLoader = runtimeGltfLoader;
+
+		// 1. Evict distant chunks outside proximity radius to keep VRAM bounded (`B2-06`)
+		for (const [key, handle] of mountedChunks.entries()) {
+			const dist = Math.max(
+				Math.abs(handle.chunk.chunk_x - centerCx),
+				Math.abs(handle.chunk.chunk_z - centerCz)
+			);
+			if (dist > CHUNK_ACTIVE_RADIUS) {
+				scene.remove(handle.group);
+				disposeObject3DDeep(handle.group);
+				waterUniforms = waterUniforms.filter((u) => u !== handle.waterUniform);
+				loadedMonumentCount = Math.max(0, loadedMonumentCount - handle.monumentsLoaded);
+				mountedChunks.delete(key);
+			}
+		}
+
+		// 2. Mount unlocked chunks within proximity radius
+		for (const chunk of unlockedChunks) {
+			const dist = Math.max(
+				Math.abs(chunk.chunk_x - centerCx),
+				Math.abs(chunk.chunk_z - centerCz)
+			);
+			if (dist > CHUNK_ACTIVE_RADIUS) continue;
+			const key = `${chunk.chunk_x}:${chunk.chunk_z}`;
+			if (mountedChunks.has(key)) continue;
+
+			const group = new THREE.Group();
+			const cSize = chunk.world_size || 256;
+			const ox = chunk.chunk_x * cSize;
+			const oz = chunk.chunk_z * cSize;
+
+			group.add(createTriplanarTerrainMesh(chunk));
+			const { mesh: waterMesh, uniform: waterUniform } = createRippledWaterMesh(chunk);
+			group.add(waterMesh);
+			const grass = createInstancedGrassTufts(chunk);
+			if (grass) group.add(grass);
+
+			const handle: MountedChunkHandle = {
+				key,
+				chunk,
+				group,
+				waterUniform,
+				monumentsLoaded: 0
+			};
+			mountedChunks.set(key, handle);
+			scene.add(group);
+
+			for (const pl of chunk.placements ?? []) {
+				if (!pl.glb_url) continue;
+				gltfLoader.load(
+					pl.glb_url,
+					(gltf) => {
+						if (token !== sessionToken || mountedChunks.get(key) !== handle || !scene) {
+							disposeObject3DDeep(gltf.scene);
+							return;
+						}
+						const root = gltf.scene;
+						const wx = ox + (pl.x ?? 0);
+						const wz = oz + (pl.z ?? 0);
+						const groundH = sampleChunkHeight(chunk, pl.x ?? 0, pl.z ?? 0);
+						root.position.set(wx, groundH + (pl.y ?? 0), wz);
+						root.rotation.y = THREE.MathUtils.degToRad(pl.rot_y_deg ?? 0);
+						root.scale.setScalar(pl.scale ?? 1);
+						root.traverse((obj) => {
+							if ((obj as THREE.Mesh).isMesh) {
+								obj.castShadow = true;
+								obj.receiveShadow = true;
+							}
+						});
+						handle.group.add(root);
+						handle.monumentsLoaded += 1;
+						loadedMonumentCount += 1;
+					},
+					undefined,
+					() => {}
+				);
+			}
+
+			if (chunk.splat_url) {
+				void loadPlySplatCloud(chunk.splat_url, ox, oz).then((pts) => {
+					if (!pts) return;
+					if (token !== sessionToken || mountedChunks.get(key) !== handle || !scene) {
+						disposeObject3DDeep(pts);
+						return;
+					}
+					handle.group.add(pts);
+				});
+			}
+		}
+	}
+
 	function openTriggerVn(tr: WorldChunkVnTrigger, backdrop?: string | null) {
 		if (!tr.episode_url) return;
 		pressedKeys.clear();
+		for (const az of runtimeAudioZones) {
+			if (!az.audio.paused) az.audio.pause();
+			az.currentVol = 0;
+			az.audio.volume = 0;
+		}
+		activeAudioZoneLabel = null;
 		activeVnModal = {
 			url: tr.episode_url,
 			title: tr.title || tr.label || null,
@@ -762,13 +848,19 @@
 		runtimeAudioZones = [];
 		runtimeTriggers = [];
 		waterUniforms = [];
+		mountedChunks.clear();
+		lastStreamedChunkCoord = '';
 		pressedKeys.clear();
+		isPointerDragging = false;
 		// Kế hoạch VRAM v2 · C1: dọn geometry/material/texture/shadow map (sun 2048²) TRONG KHI renderer còn sống —
 		// renderer.dispose() không xóa tài nguyên đã upload. Không bao giờ forceContextLoss.
 		if (scene) disposeObject3DDeep(scene);
 		wayfarerBeacon = null;
 		runtimeDraco?.dispose();
 		runtimeDraco = null;
+		runtimeKtx2?.dispose();
+		runtimeKtx2 = null;
+		runtimeGltfLoader = null;
 		if (renderer) {
 			renderer.setSize(1, 1, false);
 			renderer.renderLists.dispose();
@@ -808,8 +900,18 @@
 	}
 
 	onMount(() => {
+		const isEditableTarget = (tgt: EventTarget | null) => {
+			if (!(tgt instanceof HTMLElement)) return false;
+			const tag = tgt.tagName;
+			return (
+				tag === 'INPUT' ||
+				tag === 'TEXTAREA' ||
+				tag === 'SELECT' ||
+				tgt.isContentEditable
+			);
+		};
 		const onKeyDown = (e: KeyboardEvent) => {
-			if (!exploring3D || activeVnModal) return;
+			if (!exploring3D || activeVnModal || isEditableTarget(e.target)) return;
 			pressedKeys.add(e.code);
 			if (e.code === 'Digit1') camMode = 'first';
 			if (e.code === 'Digit2') camMode = 'third';
@@ -822,6 +924,10 @@
 		const onKeyUp = (e: KeyboardEvent) => {
 			pressedKeys.delete(e.code);
 		};
+		const onWindowBlur = () => {
+			pressedKeys.clear();
+			isPointerDragging = false;
+		};
 		const onResize = () => {
 			if (!exploring3D || !viewportEl || !renderer || !camera) return;
 			const w = viewportEl.clientWidth || 1280;
@@ -832,10 +938,12 @@
 		};
 		window.addEventListener('keydown', onKeyDown);
 		window.addEventListener('keyup', onKeyUp);
+		window.addEventListener('blur', onWindowBlur);
 		window.addEventListener('resize', onResize);
 		return () => {
 			window.removeEventListener('keydown', onKeyDown);
 			window.removeEventListener('keyup', onKeyUp);
+			window.removeEventListener('blur', onWindowBlur);
 			window.removeEventListener('resize', onResize);
 		};
 	});

@@ -35,6 +35,7 @@
 		video_type: 'main' as 'main' | 'side' | 'filler',
 		episode_number: null as number | null,
 		is_featured: false,
+		is_active: false,
 		display_order: 0
 	});
 	let enFields = $state<Record<string, string>>({ video_name: '', description: '' });
@@ -58,6 +59,7 @@
 		{ key: 'en_badge', label: 'Bản EN' },
 		{ key: 'video_type', label: 'Loại' },
 		{ key: 'episode_number', label: 'Tập' },
+		{ key: 'is_active', label: 'Xuất bản', type: 'boolean' as const },
 		{ key: 'is_featured', label: 'Nổi bật', type: 'boolean' as const },
 		{ key: 'display_order', label: 'Thứ tự' }
 	];
@@ -86,6 +88,7 @@
 			video_type: 'main',
 			episode_number: null,
 			is_featured: false,
+			is_active: false,
 			display_order: 0
 		};
 		enFields = { video_name: '', description: '' };
@@ -103,6 +106,7 @@
 			video_type: (item.video_type as 'main' | 'side' | 'filler') ?? 'main',
 			episode_number: (item.episode_number as number) ?? null,
 			is_featured: !!item.is_featured,
+			is_active: !!item.is_active,
 			display_order: (item.display_order as number) ?? 0
 		};
 		const ex = extractCmsLocaleFields(item, ['video_name', 'description']);
@@ -258,13 +262,18 @@
 
 		<div class="form-row-2">
 			<label class="checkbox-label">
+				<input type="checkbox" bind:checked={form.is_active} />
+				<span>✅ Xuất bản công khai (Bỏ chọn để giữ ở trạng thái Nháp/Ẩn)</span>
+			</label>
+			<label class="checkbox-label">
 				<input type="checkbox" bind:checked={form.is_featured} />
 				<span>⭐ Nổi bật (hiển thị trang chủ)</span>
 			</label>
-			<div class="form-group">
-				<label class="form-label" for="display_order_input">Thứ tự hiển thị</label>
-				<input id="display_order_input" bind:value={form.display_order} type="number" />
-			</div>
+		</div>
+
+		<div class="form-group">
+			<label class="form-label" for="display_order_input">Thứ tự hiển thị</label>
+			<input id="display_order_input" bind:value={form.display_order} type="number" />
 		</div>
 
 		{#if form.is_featured}

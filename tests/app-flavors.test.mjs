@@ -33,9 +33,18 @@ test("desktop updater is gated by the desktop-admin flavor", async () => {
   );
 });
 
-test("user flavors exclude every admin route at build time", () => {
+test("user flavors exclude every admin, support-workspace, and __* test route at build time", () => {
   for (const flavor of ["web-user", "desktop-user", "android-user"]) {
     assert.equal(includesRoute(flavor, "(app)/admin/+page.svelte"), false);
+    assert.equal(
+      includesRoute(flavor, "(app)/support-workspace/+page.svelte"),
+      false
+    );
+    assert.equal(
+      includesRoute(flavor, "(app)/__world_test/+page.svelte"),
+      false
+    );
+    assert.equal(includesRoute(flavor, "__world_test/+page.svelte"), false);
     assert.equal(includesRoute(flavor, "(app)/stories/+page.svelte"), true);
   }
 });

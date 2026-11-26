@@ -1,10 +1,10 @@
 <script lang="ts">
+	import { api } from "$lib/api";
 	import {
 		isAuthenticated,
 		getUser,
-		getToken,
+		logout,
 	} from "$lib/stores/auth.svelte";
-	import { PUBLIC_API_BASE } from "$env/static/public";
 	import {
 		setup2FA,
 		verify2FA,
@@ -70,22 +70,6 @@
 	let deleteConfirmText = $state("");
 	let deleteTotpCode = $state("");
 
-	async function apiFetch(endpoint: string, options: RequestInit = {}) {
-		const headers: Record<string, string> = {
-			"Content-Type": "application/json",
-			Accept: "application/json",
-			...((options.headers as Record<string, string>) || {}),
-		};
-		const token = getToken();
-		if (token) headers["Authorization"] = `Bearer ${token}`;
-		const res = await fetch(`${PUBLIC_API_BASE}${endpoint}`, {
-			...options,
-			headers,
-			credentials: "include",
-		});
-		return res.json();
-	}
-
 	async function changePassword() {
 		if (newPass !== confirmPass) {
 			message = m.settings_err_pass_mismatch();
@@ -94,12 +78,12 @@
 		saving = true;
 		message = "";
 		try {
-			const r = await apiFetch("/auth/change-password", {
+			const r = await api<any>("/auth/change-password", {
 				method: "PUT",
-				body: JSON.stringify({
+				body: {
 					current_password: currentPass,
 					new_password: newPass,
-				}),
+				},
 			});
 			message = r.success
 				? m.settings_success_pass()
@@ -109,8 +93,8 @@
 				newPass = "";
 				confirmPass = "";
 			}
-		} catch {
-			message = m.settings_err_sys();
+		} catch (err: any) {
+			message = err?.message || m.settings_err_sys();
 		} finally {
 			saving = false;
 		}
@@ -118,25 +102,25 @@
 
 	async function sendEmailCode() {
 		try {
-			await apiFetch("/auth/email/send-code", { method: "POST" });
+			await api("/auth/email/send-code", { method: "POST" });
 			emailCodeSent = true;
 			message = m.settings_success_code();
-		} catch {
-			message = m.settings_err_default();
+		} catch (err: any) {
+			message = err?.message || m.settings_err_default();
 		}
 	}
 
 	async function verifyEmail() {
 		try {
-			const r = await apiFetch("/auth/email/verify", {
+			const r = await api<any>("/auth/email/verify", {
 				method: "POST",
-				body: JSON.stringify({ code: emailCode }),
+				body: { code: emailCode },
 			});
 			message = r.success
 				? m.settings_success_verify()
 				: m.settings_err_code();
-		} catch {
-			message = m.settings_err_default();
+		} catch (err: any) {
+			message = err?.message || m.settings_err_code();
 		}
 	}
 
@@ -145,9 +129,9 @@
 
 	async function fetchDevices() {
 		try {
-			const r = await apiFetch("/auth/devices");
+			const r = await api<any[]>("/auth/devices");
 			if (r.success) {
-				devices = r.data;
+				devices = r.data || [];
 			} else {
 				devicesUnavailable = true;
 			}
@@ -158,18 +142,18 @@
 
 	async function revokeDevice(id: number) {
 		try {
-			await apiFetch(`/auth/devices/${id}`, { method: "DELETE" });
+			await api(`/auth/devices/${id}`, { method: "DELETE" });
 			devices = devices.filter((d) => d.id !== id);
 			message = m.settings_success_revoke();
-		} catch {
-			message = m.settings_err_default();
+		} catch (err: any) {
+			message = err?.message || m.settings_err_default();
 		}
 	}
 
 	async function exportData() {
 		exporting = true;
 		try {
-			const r = await apiFetch("/account/export", { method: "POST" });
+			const r = await api<any>("/account/export", { method: "POST" });
 			if (r.success) {
 				const blob = new Blob([JSON.stringify(r.data, null, 2)], {
 					type: "application/json",
@@ -182,8 +166,8 @@
 				URL.revokeObjectURL(url);
 				message = m.settings_success_export();
 			}
-		} catch {
-			message = m.settings_err_default();
+		} catch (err: any) {
+			message = err?.message || m.settings_err_default();
 		} finally {
 			exporting = false;
 		}
@@ -192,20 +176,21 @@
 	async function deleteAccount() {
 		if (deleteConfirmText !== "DELETE") return;
 		try {
-			const r = await apiFetch("/account", {
+			const r = await api<any>("/account", {
 				method: "DELETE",
-				body: JSON.stringify({
+				body: {
 					password: deletePassword,
 					confirmation: deleteConfirmText,
 					code: deleteTotpCode,
-				}),
+				},
 			});
 			if (r.success) {
 				message = m.settings_success_delete();
+				await logout();
 				goto("/");
 			}
-		} catch {
-			message = m.settings_err_delete();
+		} catch (err: any) {
+			message = err?.message || m.settings_err_delete();
 		}
 	}
 

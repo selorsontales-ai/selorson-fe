@@ -82,7 +82,18 @@ async function authFetch<T>(endpoint: string, options: RequestInit = {}): Promis
 		credentials: 'include',
 	});
 
-	const json = await res.json();
+	const rawText = await res.text();
+	let json: any;
+	try {
+		json = rawText ? JSON.parse(rawText) : {};
+	} catch {
+		json = {
+			success: false,
+			message: rawText
+				? `Máy chủ từ chối yêu cầu (HTTP ${res.status}): ${rawText.slice(0, 180)}`
+				: `Lỗi máy chủ (HTTP ${res.status})`
+		};
+	}
 	if (!res.ok || !json.success) {
 		throw { status: res.status, ...json };
 	}
@@ -172,6 +183,15 @@ export async function resendVerification(email: string) {
 	return res;
 }
 
+function clearRealtimeUserStores() {
+	void import('./chat.svelte')
+		.then(({ resetChatStore }) => resetChatStore())
+		.catch(() => {});
+	void import('./support.svelte')
+		.then(({ resetSupportStore }) => resetSupportStore())
+		.catch(() => {});
+}
+
 export async function logout() {
 	try {
 		await authFetch('/auth/logout', { method: 'POST' });
@@ -181,6 +201,7 @@ export async function logout() {
 	state.user = null;
 	state.token = null;
 	clearToken();
+	clearRealtimeUserStores();
 }
 
 /** Only the server refusing the token is grounds for dropping it. */
@@ -225,6 +246,7 @@ async function loadMe() {
 				state.user = null;
 				state.token = null;
 				clearToken();
+				clearRealtimeUserStores();
 				return;
 			}
 			if (attempt >= backoffMs.length) return;

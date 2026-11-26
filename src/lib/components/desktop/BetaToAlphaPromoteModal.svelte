@@ -18,11 +18,13 @@
 
 	let selectedChapters = $state<number[]>([]);
 	let chapterPublishMode = $state<'keep_beta' | 'force_published' | 'force_draft'>('keep_beta');
+	let translationPublishMode = $state<'keep_beta' | 'force_published' | 'force_draft'>('keep_beta');
 	let mangaPublishMode = $state<'keep_beta' | 'force_published' | 'force_draft'>('keep_beta');
-	let entityMode = $state<'linked_and_active' | 'all' | 'active_only' | 'selected' | 'none'>('all');
+	let entityMode = $state<'linked_and_active' | 'all' | 'active_only' | 'selected' | 'none'>('linked_and_active');
 	let selectedEntityIds = $state<number[]>([]);
 	let entitySearch = $state('');
 	let syncShowcase = $state(false);
+	let syncMusic = $state(false);
 
 	async function loadPreview() {
 		loading = true;
@@ -79,9 +81,10 @@
 		if (
 			selectedChapters.length === 0 &&
 			entityMode === 'none' &&
-			!syncShowcase
+			!syncShowcase &&
+			!syncMusic
 		) {
-			toast_error('Hãy chọn ít nhất 1 Chương hoặc nhóm Thực thể để đẩy lên Alpha.');
+			toast_error('Hãy chọn ít nhất 1 Chương, Thực thể, Trang chủ hoặc Nhạc OST để đẩy lên Alpha.');
 			return;
 		}
 		promoting = true;
@@ -91,10 +94,12 @@
 			const res = await adminPost<any>('/admin/promote/execute', {
 				chapter_numbers: selectedChapters,
 				chapter_publish_mode: chapterPublishMode,
+				translation_publish_mode: translationPublishMode,
 				manga_publish_mode: mangaPublishMode,
 				entity_mode: entityMode,
 				entity_ids: selectedEntityIds,
-				sync_showcase: syncShowcase
+				sync_showcase: syncShowcase,
+				sync_music: syncMusic
 			});
 			if (res.success && res.data) {
 				lastResult = res.data;
@@ -244,9 +249,17 @@
 
 					<div class="mode-row">
 						<label>
-							<span>Trạng thái Chương chữ khi lên Alpha:</span>
+							<span>Trạng thái Chương chữ (VI) khi lên Alpha:</span>
 							<select bind:value={chapterPublishMode}>
 								<option value="keep_beta">Giữ nguyên như trên Beta</option>
+								<option value="force_published">Xuất bản ngay (Published)</option>
+								<option value="force_draft">Đặt làm Nháp (Draft)</option>
+							</select>
+						</label>
+						<label>
+							<span>Trạng thái Bản dịch EN khi lên Alpha:</span>
+							<select bind:value={translationPublishMode}>
+								<option value="keep_beta">Giữ nguyên như trên Beta (An toàn)</option>
 								<option value="force_published">Xuất bản ngay (Published)</option>
 								<option value="force_draft">Đặt làm Nháp (Draft)</option>
 							</select>
@@ -274,18 +287,18 @@
 					</div>
 
 					<div class="entity-mode-options">
-						<label class="radio-card" class:active={entityMode === 'all'}>
-							<input type="radio" name="entityMode" value="all" bind:group={entityMode} />
-							<div>
-								<strong>Đẩy toàn bộ {preview.entities_summary?.total_beta || 0} Thực thể (Khuyên dùng)</strong>
-								<span>Đảm bảo mọi Tags chương đều gắn đủ; thực thể nào đang ẩn (Nháp) trên Beta vẫn tiếp tục ẩn trên Alpha.</span>
-							</div>
-						</label>
 						<label class="radio-card" class:active={entityMode === 'linked_and_active'}>
 							<input type="radio" name="entityMode" value="linked_and_active" bind:group={entityMode} />
 							<div>
-								<strong>Chỉ đẩy Thực thể gắn với Chương đã chọn + Thực thể đang bật Hiển thị</strong>
-								<span>Gọn nhẹ, chỉ đồng bộ các nhân vật/địa danh có xuất hiện trong các chương được tích chọn ở trên.</span>
+								<strong>Chỉ đẩy Thực thể gắn với Chương đã chọn & đang bật Hiển thị (Khuyên dùng)</strong>
+								<span>An toàn chuẩn Draft-First: chỉ đồng bộ thực thể đã duyệt (`is_active = true`) thuộc các chương được tích chọn ở trên.</span>
+							</div>
+						</label>
+						<label class="radio-card" class:active={entityMode === 'all'}>
+							<input type="radio" name="entityMode" value="all" bind:group={entityMode} />
+							<div>
+								<strong>Đẩy toàn bộ {preview.entities_summary?.total_beta || 0} Thực thể</strong>
+								<span>Đảm bảo mọi Tags chương đều gắn đủ; thực thể nào đang ẩn (Nháp) trên Beta vẫn tiếp tục ẩn trên Alpha.</span>
 							</div>
 						</label>
 						<label class="radio-card" class:active={entityMode === 'active_only'}>
@@ -342,13 +355,20 @@
 					{/if}
 				</div>
 
-				<!-- 3. TRANG CHỦ & CỘT MỐC -->
+				<!-- 3. TRANG CHỦ, PHIM & NHẠC OST -->
 				<div class="section-card compact">
 					<label class="showcase-toggle">
 						<input type="checkbox" bind:checked={syncShowcase} />
 						<div>
-							<strong>3. Đồng bộ thêm Trang chủ & Phim (Slides: {preview.showcase_summary?.beta_hero_slides || 0} · Cột mốc: {preview.showcase_summary?.beta_milestones || 0} · Dự án: {preview.showcase_summary?.beta_future_projects || 0} · Video/Intro: {preview.showcase_summary?.beta_videos || 0})</strong>
-							<span>Mặc định tắt để giữ nguyên giao diện trang chủ Alpha trừ khi anh vừa thiết kế Slide/Milestone mới trên Beta.</span>
+							<strong>3. Đồng bộ Trang chủ & Phim đã duyệt (Slides: {preview.showcase_summary?.beta_hero_slides || 0} · Cột mốc: {preview.showcase_summary?.beta_milestones || 0} · Dự án: {preview.showcase_summary?.beta_future_projects || 0} · Video/Intro: {preview.showcase_summary?.beta_videos || 0})</strong>
+							<span>Chỉ đẩy các Slide, Cột mốc và Video đang bật Hiển thị (`is_active = true`), tự động đẩy tệp video local lên Cloudflare R2 Alpha.</span>
+						</div>
+					</label>
+					<label class="showcase-toggle" style="margin-top: 0.65rem;">
+						<input type="checkbox" bind:checked={syncMusic} />
+						<div>
+							<strong>4. Đồng bộ Nhạc nền OST đã duyệt (Albums: {preview.showcase_summary?.beta_music_albums || 0} · Tracks: {preview.showcase_summary?.beta_music_tracks || 0})</strong>
+							<span>Chỉ đẩy các Album & Bản nhạc đang bật Hiển thị (`is_active = true`), tự động nâng cấp tệp âm thanh lên Cloudflare R2 Alpha.</span>
 						</div>
 					</label>
 				</div>

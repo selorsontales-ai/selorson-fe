@@ -125,8 +125,10 @@ jobs:
         working-directory: frontend-v3
 
       - name: Test the desktop crate
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --manifest-path src-tauri/Cargo.toml --features admin-backend
         working-directory: frontend-v3
+        env:
+          SELORSON_APP_FLAVOR: desktop-admin
 
       - name: Prepare signed updater configuration
         id: release
@@ -187,29 +189,29 @@ jobs:
 
       - name: Build local gate installer
         if: github.event_name == 'workflow_dispatch'
-        run: npm run tauri -- build
+        run: npm run tauri -- build -- --features admin-backend
         working-directory: frontend-v3
         env:
           VITE_DESKTOP_UPDATER_ENABLED: "false"
           VITE_APP_FLAVOR: desktop-admin
           SELORSON_APP_FLAVOR: desktop-admin
-          PUBLIC_API_BASE: http://localhost:8001/api/v1
+          PUBLIC_API_BASE: http://127.0.0.1:8001/api/v1
           PUBLIC_APP_NAME: Selorson
           PUBLIC_APP_VERSION: 3.0.0
-          PUBLIC_WS_URL: ws://localhost:8001/ws
+          PUBLIC_WS_URL: ws://127.0.0.1:8001/ws
 
       - name: Build signed release installer
         if: startsWith(github.ref, 'refs/tags/desktop-admin-v')
-        run: npm run tauri -- build --config src-tauri/updater.release.conf.json
+        run: npm run tauri -- build --config src-tauri/updater.release.conf.json -- --features admin-backend
         working-directory: frontend-v3
         env:
           VITE_DESKTOP_UPDATER_ENABLED: "true"
           VITE_APP_FLAVOR: desktop-admin
           SELORSON_APP_FLAVOR: desktop-admin
-          PUBLIC_API_BASE: http://localhost:8001/api/v1
+          PUBLIC_API_BASE: http://127.0.0.1:8001/api/v1
           PUBLIC_APP_NAME: Selorson
           PUBLIC_APP_VERSION: 3.0.0
-          PUBLIC_WS_URL: ws://localhost:8001/ws
+          PUBLIC_WS_URL: ws://127.0.0.1:8001/ws
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 

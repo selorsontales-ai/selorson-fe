@@ -17,6 +17,7 @@
 		resolveNodePlanet
 	} from '$lib/world/cosmos';
 	import type { RegionDetail, WorldNode } from '$lib/world/types';
+	import ClockworkPackViewer from '$lib/world/ui/ClockworkPackViewer.svelte';
 	import RegionHud from '$lib/world/ui/RegionHud.svelte';
 	import { findNodeByFocusParam, isUnlockedState } from '$lib/world/world-utils';
 	import { onMount, untrack } from 'svelte';
@@ -28,7 +29,7 @@
 	let notFound = $state(false);
 
 	let selected = $state<WorldNode | null>(null);
-	let activeMediaTab = $state<'gallery' | 'video'>('gallery');
+	let activeMediaTab = $state<'gallery' | 'video' | 'clockwork'>('gallery');
 	let activeGalleryIdx = $state(0);
 	let loadedSlug = $state<string | null>(null);
 	let loadedLocale = $state<string>('');
@@ -183,22 +184,26 @@
 									</button>
 								{/if}
 								{#if packUrl && isDesktop}
-									<a
-										href={packUrl}
-										target="_blank"
-										rel="noopener noreferrer"
+									<button
+										type="button"
 										class="media-tab pack-cta"
+										class:active={activeMediaTab === 'clockwork'}
+										onclick={() => (activeMediaTab = 'clockwork')}
 									>
 										⚙️ Mở Sa Bàn Cơ Khí 3D
 										{#if region.clockwork_pack_version || region.desktop_pack_version}
 											<small>v{region.clockwork_pack_version || region.desktop_pack_version}</small>
 										{/if}
-									</a>
+									</button>
 								{/if}
 							</div>
 						{/if}
 
-						{#if activeMediaTab === 'video' && region.intro_video_url}
+						{#if activeMediaTab === 'clockwork' && packUrl && isDesktop}
+							<div class="clockwork-frame-wrap">
+								<ClockworkPackViewer url={packUrl} title={region.name ?? ''} />
+							</div>
+						{:else if activeMediaTab === 'video' && region.intro_video_url}
 							<div class="video-frame-wrap">
 								{#if ytEmbed}
 									<iframe
@@ -404,12 +409,16 @@
 		color: #6ee7b7;
 	}
 	.video-frame-wrap,
-	.gallery-frame-wrap {
+	.gallery-frame-wrap,
+	.clockwork-frame-wrap {
 		width: 100%;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		gap: 0.65rem;
+	}
+	.clockwork-frame-wrap {
+		height: min(62vh, 520px);
 	}
 	.showcase-video {
 		width: 100%;

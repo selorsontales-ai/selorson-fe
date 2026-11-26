@@ -10,6 +10,7 @@
 	 * Backward-compatible with `JourneyScene.svelte` when invoked with `{quality}`.
 	 */
 	import { T, useTask, useThrelte } from '@threlte/core';
+	import { onDestroy } from 'svelte';
 	import {
 		BufferAttribute,
 		BufferGeometry,
@@ -124,11 +125,39 @@
 	let nightTex = $state<Texture | null>(null);
 	let cloudsTex = $state<Texture | null>(null);
 
+	function purgeUnusedCachedTextures(keepUrls: Set<string>) {
+		for (const [cacheKey, pending] of texCache.entries()) {
+			const url = cacheKey.split('|')[0];
+			if (!keepUrls.has(url)) {
+				texCache.delete(cacheKey);
+				void pending.then((t) => t?.dispose());
+			}
+		}
+	}
+
+	let loadedPlanetKey: GeoPlanetKey | null = null;
+
 	$effect(() => {
 		let cancelled = false;
 		const key = planetKey;
+		const useClouds = quality.clouds;
 		const spec = PROCEDURAL_WORLD_DATA[key];
 		const maxAniso = renderer ? Math.min(8, renderer.capabilities.getMaxAnisotropy()) : 4;
+
+		if (loadedPlanetKey !== null && loadedPlanetKey !== key) {
+			albedoTex = null;
+			nightTex = null;
+			cloudsTex = null;
+			loadedGeo = null;
+		}
+		if (!useClouds) {
+			cloudsTex = null;
+		}
+		loadedPlanetKey = key;
+
+		const keepUrls = new Set<string>([spec.albedo, spec.night]);
+		if (useClouds) keepUrls.add(spec.clouds);
+		purgeUnusedCachedTextures(keepUrls);
 
 		loadPlanetGeo(key).then((bundle) => {
 			if (!cancelled) {
@@ -154,7 +183,7 @@
 			}
 		});
 
-		if (quality.clouds) {
+		if (useClouds) {
 			loadWrappedTexture(spec.clouds, false).then((tex) => {
 				if (!cancelled) {
 					applyAnisotropy(tex, maxAniso);
@@ -162,13 +191,19 @@
 					invalidate();
 				}
 			});
-		} else {
-			cloudsTex = null;
 		}
 
 		return () => {
 			cancelled = true;
 		};
+	});
+
+	onDestroy(() => {
+		albedoTex = null;
+		nightTex = null;
+		cloudsTex = null;
+		loadedGeo = null;
+		purgeUnusedCachedTextures(new Set());
 	});
 
 	const CLOUD_DRIFT = 0.0019;

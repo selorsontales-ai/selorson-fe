@@ -43,7 +43,7 @@
 		description: "",
 		cover_image: "",
 		display_order: 0,
-		is_active: true,
+		is_active: false,
 	});
 	let trackForm = $state({
 		title: "",
@@ -52,7 +52,7 @@
 		file_path: "",
 		track_number: 1,
 		duration: 0,
-		is_active: true,
+		is_active: false,
 	});
 	let albumEnFields = $state<Record<string, string>>({ title: "", description: "" });
 	let hadAlbumEn = $state(false);
@@ -75,6 +75,7 @@
 		{ key: "artist", label: "Nghệ sĩ" },
 		{ key: "album_id", label: "Album ID" },
 		{ key: "duration", label: "Giây" },
+		{ key: "is_active", label: "Active", type: "boolean" as const },
 	];
 
 	// ── Fetch ──
@@ -117,7 +118,7 @@
 			description: "",
 			cover_image: "",
 			display_order: 0,
-			is_active: true,
+			is_active: false,
 		};
 		albumEnFields = { title: "", description: "" };
 		hadAlbumEn = false;
@@ -130,7 +131,7 @@
 			description: (item.description as string) ?? "",
 			cover_image: (item.cover_image as string) ?? "",
 			display_order: (item.display_order as number) ?? 0,
-			is_active: (item.is_active as boolean) ?? true,
+			is_active: (item.is_active as boolean) ?? false,
 		};
 		const ex = extractCmsLocaleFields(item, ["title", "description"]);
 		albumEnFields = ex.values;
@@ -183,7 +184,7 @@
 			file_path: "",
 			track_number: nextTrackNumberForAlbum(defaultAlbumId),
 			duration: 0,
-			is_active: true,
+			is_active: false,
 		};
 		trackEnFields = { title: "", artist: "" };
 		hadTrackEn = false;
@@ -198,7 +199,7 @@
 			file_path: (item.file_path as string) ?? "",
 			track_number: (item.track_number as number) ?? 1,
 			duration: (item.duration as number) ?? 0,
-			is_active: (item.is_active as boolean) ?? true,
+			is_active: (item.is_active as boolean) ?? false,
 		};
 		const ex = extractCmsLocaleFields(item, ["title", "artist"]);
 		trackEnFields = ex.values;

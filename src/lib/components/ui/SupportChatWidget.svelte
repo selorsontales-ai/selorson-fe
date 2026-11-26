@@ -1,13 +1,14 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/state';
+	import { acquireRefreshedToken } from '$lib/api';
 	import { isAuthenticated, getUser, getToken } from '$lib/stores/auth.svelte';
 	import { PUBLIC_API_BASE } from '$env/static/public';
 	import {
 		fetchActiveConversation, sendSupportMessage, fetchUnreadCount,
 		rateTicket, markSupportRead, getSupportMessages, getActiveConversation,
 		getSupportUnread, isSupportSending, createTicket, closeTicket,
-		isChatWidgetHidden, setChatWidgetHidden, isStaffOnline
+		isChatWidgetHidden, setChatWidgetHidden, isStaffOnline, onSupportReset
 	} from '$lib/stores/support.svelte';
 	import * as m from '$lib/paraglide/messages';
 	import { dateLocale } from '$lib/i18n-labels';
@@ -124,14 +125,31 @@
 	function formatTime(d: string) { return new Date(d).toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' }); }
 
 	let sse: EventSource | null = null;
+	let sseTimer: ReturnType<typeof setTimeout> | null = null;
 	let sseRetryCount = 0;
 	const MAX_SSE_RETRIES = 15;
 
+	function closeSupportSSE() {
+		if (sseTimer) {
+			clearTimeout(sseTimer);
+			sseTimer = null;
+		}
+		if (sse) {
+			sse.close();
+			sse = null;
+		}
+		sseRetryCount = 0;
+	}
+
 	function initSupportSSE() {
-		if (sse) return;
+		if (sse || !isAuthenticated()) return;
+		if (sseTimer) {
+			clearTimeout(sseTimer);
+			sseTimer = null;
+		}
 		const token = getToken();
 		if (!token) return;
-		const sseUrl = `${PUBLIC_API_BASE}/support/stream?token=${token}`;
+		const sseUrl = `${PUBLIC_API_BASE}/support/stream?token=${encodeURIComponent(token)}`;
 		sse = new EventSource(sseUrl);
 		sse.onopen = () => { sseRetryCount = 0; };
 		sse.onmessage = (event) => {
@@ -149,23 +167,38 @@
 		sse.onerror = () => {
 			sse?.close();
 			sse = null;
+			if (!isAuthenticated()) return;
 			if (sseRetryCount < MAX_SSE_RETRIES) {
 				sseRetryCount++;
 				const delay = Math.min(1000 * Math.pow(2, sseRetryCount), 30000);
-				setTimeout(() => initSupportSSE(), delay);
+				if (sseTimer) clearTimeout(sseTimer);
+				sseTimer = setTimeout(async () => {
+					sseTimer = null;
+					if (!isAuthenticated()) return;
+					await acquireRefreshedToken(undefined, false).catch(() => {});
+					initSupportSSE();
+				}, delay);
 			}
 		};
 	}
+
+	const unsubscribeSupportReset = onSupportReset(() => {
+		isOpen = false;
+		closeSupportSSE();
+	});
 
 	$effect(() => { 
 		if (isAuthenticated()) {
 			fetchUnreadCount(); 
 			initSupportSSE();
+		} else {
+			closeSupportSSE();
 		}
 	});
 
 	onDestroy(() => {
-		if (sse) sse.close();
+		unsubscribeSupportReset();
+		closeSupportSSE();
 	});
 </script>
 
