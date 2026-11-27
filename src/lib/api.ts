@@ -14,6 +14,39 @@ interface ApiOptions {
 	_isRetry?: boolean;
 }
 
+const IS_LOOPBACK_API = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/i.test(PUBLIC_API_BASE);
+let embeddedBackendReady = false;
+
+/**
+ * When `Selorson Admin` opens or switches Beta ↔ Alpha, the window appears immediately
+ * while the embedded Rust backend finishes waking portable PostgreSQL or Neon TLS on a
+ * background thread. Retrying initial loopback `ERR_CONNECTION_REFUSED` prevents empty
+ * first renders or dropped sessions without blocking window startup.
+ */
+async function fetchEmbeddedAware(url: string, init: RequestInit): Promise<Response> {
+	if (typeof window === 'undefined' || !IS_LOOPBACK_API || embeddedBackendReady) {
+		const res = await fetch(url, init);
+		if (IS_LOOPBACK_API) embeddedBackendReady = true;
+		return res;
+	}
+
+	const deadline = Date.now() + 30_000;
+	let delayMs = 150;
+	for (;;) {
+		try {
+			const res = await fetch(url, init);
+			embeddedBackendReady = true;
+			return res;
+		} catch (err) {
+			if (embeddedBackendReady || Date.now() >= deadline) {
+				throw err;
+			}
+			await new Promise((resolve) => setTimeout(resolve, delayMs));
+			delayMs = Math.min(delayMs + 50, 350);
+		}
+	}
+}
+
 function resolveRequestLocale(explicit?: string): string {
 	if (explicit && explicit.trim()) return explicit.trim();
 	try {
@@ -70,7 +103,7 @@ async function performTokenRefresh(staleToken?: string): Promise<string> {
 
 	let res: Response;
 	try {
-		res = await fetch(`${PUBLIC_API_BASE}/auth/refresh`, {
+		res = await fetchEmbeddedAware(`${PUBLIC_API_BASE}/auth/refresh`, {
 			method: 'POST',
 			credentials: 'include',
 			headers: { Accept: 'application/json' }
@@ -203,7 +236,7 @@ export async function api<T = unknown>(
 		}
 	}
 
-	const res = await fetch(url, {
+	const res = await fetchEmbeddedAware(url, {
 		method,
 		headers: reqHeaders,
 		body: body ? JSON.stringify(body) : undefined,
@@ -267,7 +300,7 @@ export async function apiUpload<T = unknown>(
 		if (stored) reqHeaders['Authorization'] = `Bearer ${stored}`;
 	}
 
-	const res = await fetch(url, {
+	const res = await fetchEmbeddedAware(url, {
 		method: 'POST',
 		headers: reqHeaders,
 		body: formData,

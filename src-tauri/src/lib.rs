@@ -15,6 +15,11 @@ use tauri::Manager;
 #[cfg(not(selorson_desktop_user))]
 static PG_STARTED_BY_APP: AtomicBool = AtomicBool::new(false);
 
+/// Set right before `app.restart()` into `DataMode::Local` so `RunEvent::Exit` keeps
+/// portable PostgreSQL warm across a Local restart instead of stopping and restarting it.
+#[cfg(not(selorson_desktop_user))]
+static SUPPRESS_EXIT_PG_STOP: AtomicBool = AtomicBool::new(false);
+
 #[cfg(not(selorson_desktop_user))]
 const SCRUBBED_BACKEND_ENV_KEYS: &[&str] = &[
     "DATABASE_URL",
@@ -162,9 +167,92 @@ fn load_desktop_environment(app_data_dir: &Path) -> DataModeStatus {
     );
 
     isolate_local_mode(status.mode);
-    sync_portable_postgres(status.mode);
 
     status
+}
+
+#[cfg(all(not(selorson_desktop_user), target_os = "windows"))]
+fn stop_owned_portable_postgres(wait_for_exit: bool) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    if !PG_STARTED_BY_APP.swap(false, Ordering::SeqCst) {
+        return;
+    }
+    let pg_root = std::env::var("SELORSON_PORTABLE_PG_DIR")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"E:\PostgreSQL\pgsql"));
+    let pg_ctl = pg_root.join(r"bin\pg_ctl.exe");
+    let pg_data = pg_root.join("data");
+    if !pg_ctl.is_file() || !pg_data.is_dir() {
+        return;
+    }
+    let mut cmd = std::process::Command::new(&pg_ctl);
+    cmd.args(["stop", "-D"])
+        .arg(&pg_data)
+        .args(["-m", "fast"])
+        .creation_flags(CREATE_NO_WINDOW);
+    if wait_for_exit {
+        let _ = cmd.status();
+    } else {
+        let _ = cmd.spawn();
+    }
+}
+
+#[cfg(all(not(selorson_desktop_user), not(target_os = "windows")))]
+fn stop_owned_portable_postgres(_wait_for_exit: bool) {}
+
+#[cfg(all(not(selorson_desktop_user), target_os = "windows"))]
+fn allow_process_foreground(pid: u32) {
+    #[link(name = "user32")]
+    extern "system" {
+        fn AllowSetForegroundWindow(dwProcessId: u32) -> i32;
+    }
+    // SAFETY: Standard Win32 user32 FFI call granting foreground activation rights to the restarted process.
+    unsafe {
+        let _ = AllowSetForegroundWindow(pid);
+    }
+}
+
+#[cfg(all(not(selorson_desktop_user), not(target_os = "windows")))]
+fn allow_process_foreground(_pid: u32) {}
+
+#[cfg(not(selorson_desktop_user))]
+fn present_window_foreground(win: &tauri::WebviewWindow) {
+    let _ = win.unminimize();
+    let _ = win.show();
+    let _ = win.set_always_on_top(true);
+    let _ = win.set_focus();
+    let _ = win.set_always_on_top(false);
+}
+
+#[cfg(not(selorson_desktop_user))]
+fn ensure_main_window_presented(app: &tauri::AppHandle, force_after_switch: bool) {
+    if let Some(win) = app
+        .get_webview_window("main")
+        .or_else(|| app.webview_windows().values().next().cloned())
+    {
+        present_window_foreground(&win);
+    }
+
+    if force_after_switch {
+        let handle = app.clone();
+        std::thread::spawn(move || {
+            for delay_ms in [120_u64, 280] {
+                std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+                let h2 = handle.clone();
+                let _ = handle.run_on_main_thread(move || {
+                    if let Some(win) = h2
+                        .get_webview_window("main")
+                        .or_else(|| h2.webview_windows().values().next().cloned())
+                    {
+                        present_window_foreground(&win);
+                    }
+                });
+            }
+        });
+    }
 }
 
 #[cfg(all(not(selorson_desktop_user), target_os = "windows"))]
@@ -183,15 +271,14 @@ fn sync_portable_postgres(mode: DataMode) {
         return;
     }
 
-    let is_running = std::process::Command::new(&pg_ctl)
-        .args(["status", "-D"])
-        .arg(&pg_data)
-        .creation_flags(CREATE_NO_WINDOW)
-        .status()
-        .is_ok_and(|s| s.success());
-
     match mode {
         DataMode::Local => {
+            let is_running = std::process::Command::new(&pg_ctl)
+                .args(["status", "-D"])
+                .arg(&pg_data)
+                .creation_flags(CREATE_NO_WINDOW)
+                .status()
+                .is_ok_and(|s| s.success());
             if !is_running {
                 let started = std::process::Command::new(&pg_ctl)
                     .args(["start", "-D"])
@@ -210,14 +297,7 @@ fn sync_portable_postgres(mode: DataMode) {
         DataMode::Production => {
             // B3-03: Only stop portable PostgreSQL if THIS app instance started it;
             // never shut down a shared PostgreSQL cluster used by the host machine.
-            if is_running && PG_STARTED_BY_APP.swap(false, Ordering::SeqCst) {
-                let _ = std::process::Command::new(&pg_ctl)
-                    .args(["stop", "-D"])
-                    .arg(&pg_data)
-                    .args(["-m", "fast"])
-                    .creation_flags(CREATE_NO_WINDOW)
-                    .status();
-            }
+            stop_owned_portable_postgres(true);
         }
     }
 }
@@ -247,14 +327,19 @@ fn isolate_local_mode(mode: DataMode) {
 
 #[cfg(not(selorson_desktop_user))]
 fn spawn_embedded_backend(
+    mode: DataMode,
     config: selorson_backend::Config,
     background_workers: bool,
-    mailer: std::sync::Arc<dyn selorson_backend::mail::MailSender>,
 ) {
     std::thread::spawn(move || {
+        // Start/stop portable PostgreSQL on the background worker thread rather than blocking
+        // the Win32 UI thread inside `tauri::Builder::setup()`, so the window opens immediately
+        // even if PostgreSQL needs WAL recovery after an ungraceful PC power-off.
+        sync_portable_postgres(mode);
+
         let rt = tokio::runtime::Runtime::new().expect("failed to build embedded tokio runtime");
         rt.block_on(async move {
-            selorson_backend::start_server_with_options(config, background_workers, mailer).await;
+            selorson_backend::start_embedded_server(config, background_workers).await;
         });
     });
 }
@@ -276,6 +361,9 @@ fn desktop_data_mode(status: tauri::State<'_, DataModeStatus>) -> DataModeStatus
 #[cfg(not(selorson_desktop_user))]
 #[tauri::command]
 fn desktop_set_data_mode(app: tauri::AppHandle, mode: DataMode) -> Result<(), String> {
+    // Grant foreground activation permission immediately while this window owns focus.
+    allow_process_foreground(u32::MAX);
+
     let app_data_dir = app
         .path()
         .app_data_dir()
@@ -294,14 +382,29 @@ fn desktop_set_data_mode(app: tauri::AppHandle, mode: DataMode) -> Result<(), St
     data_mode::write_requested(&app_data_dir, mode)
         .map_err(|error| format!("Không ghi được lựa chọn chế độ: {error}"))?;
 
-    sync_portable_postgres(mode);
+    SUPPRESS_EXIT_PG_STOP.store(true, Ordering::SeqCst);
+    if mode == DataMode::Production {
+        // Trigger fast PostgreSQL shutdown asynchronously so we do not delay the restart
+        // or lose Windows foreground activation lock.
+        stop_owned_portable_postgres(false);
+    }
+
+    // Spawn the new process directly so we can pass its exact PID to `AllowSetForegroundWindow`
+    // before exiting, ensuring the restarted window pops up unminimized in the foreground.
+    if let Ok(exe) = std::env::current_exe() {
+        let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+        if let Ok(child) = std::process::Command::new(exe).args(args).spawn() {
+            allow_process_foreground(child.id());
+            std::process::exit(0);
+        }
+    }
 
     app.restart();
 }
 
 #[cfg(not(selorson_desktop_user))]
 fn run_admin() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
@@ -315,23 +418,33 @@ fn run_admin() {
                     selorson_backend::runtime::RuntimeTarget::Desktop,
                 );
                 let bg_workers = status.mode == DataMode::Local;
-                let mailer = selorson_backend::mail::create_mailer();
-                spawn_embedded_backend(backend_cfg, bg_workers, mailer);
+                spawn_embedded_backend(status.mode, backend_cfg, bg_workers);
             } else {
+                sync_portable_postgres(DataMode::Production);
                 eprintln!(
                     "Embedded backend skipped because configuration is invalid: {:?}",
                     status.config_problem
                 );
             }
+            let force_after_switch = status.switched;
             app.manage(status);
+            ensure_main_window_presented(app.handle(), force_after_switch);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             desktop_data_mode,
             desktop_set_data_mode
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Tauri admin application");
+        .build(tauri::generate_context!())
+        .expect("error while building Tauri admin application");
+
+    app.run(|_app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            if !SUPPRESS_EXIT_PG_STOP.load(Ordering::SeqCst) {
+                sync_portable_postgres(DataMode::Production);
+            }
+        }
+    });
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

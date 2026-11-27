@@ -7,6 +7,8 @@ export interface DataModeStatus {
 	mode: DataMode;
 	/** The mode the stored choice asked for. */
 	requested: DataMode;
+	/** True when this process was launched by an explicit Beta ↔ Alpha switch restart. */
+	switched?: boolean;
 	/** True when production was asked for and its configuration is missing. */
 	fell_back: boolean;
 	production_configured: boolean;

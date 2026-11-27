@@ -144,7 +144,7 @@
 		font-size: 1.3rem;
 		font-weight: 700;
 		margin: 0;
-		color: var(--color-text-primary);
+		color: #f8fafc;
 		text-wrap: balance;
 	}
 
@@ -152,12 +152,12 @@
 		margin: 0;
 		font-size: 0.92rem;
 		line-height: 1.6;
-		color: var(--color-text-secondary);
+		color: rgba(241, 245, 249, 0.84);
 	}
 
 	p.muted {
 		font-size: 0.85rem;
-		color: var(--color-text-muted);
+		color: rgba(203, 213, 225, 0.68);
 	}
 
 	p.error {
@@ -229,6 +229,24 @@
 
 	.go.danger:hover:not(:disabled) {
 		box-shadow: 0 0 24px rgba(196, 62, 42, 0.45);
+	}
+
+	.btn-ghost {
+		padding: 0.6rem 1.15rem;
+		border-radius: var(--radius-md);
+		border: 1px solid rgba(255, 255, 255, 0.18);
+		background: rgba(255, 255, 255, 0.05);
+		color: rgba(241, 245, 249, 0.88);
+		font-weight: 500;
+		font-size: 0.9rem;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.btn-ghost:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.12);
+		border-color: rgba(255, 255, 255, 0.3);
+		color: #fff;
 	}
 
 	.go:disabled,

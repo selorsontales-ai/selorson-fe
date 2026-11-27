@@ -59,6 +59,8 @@ pub struct DataModeStatus {
     pub mode: DataMode,
     /// The mode the stored choice asked for.
     pub requested: DataMode,
+    /// True when this process was launched by an explicit Beta ↔ Alpha switch restart.
+    pub switched: bool,
     /// True when production was requested but its configuration is absent, so
     /// the app fell back to local instead of starting against nothing.
     pub fell_back: bool,
@@ -146,6 +148,7 @@ pub fn resolve(app_data_dir: &Path) -> DataModeStatus {
     DataModeStatus {
         mode,
         requested,
+        switched,
         fell_back,
         production_configured,
         config_path: env_path(app_data_dir, mode).display().to_string(),

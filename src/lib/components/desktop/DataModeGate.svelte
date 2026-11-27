@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import * as m from '$lib/paraglide/messages';
 	import {
 		acknowledgeProductionData,
@@ -9,8 +10,13 @@
 	let leaving = $state(false);
 	let switching = $state(false);
 	let error = $state<string | null>(null);
+	let enterBtn = $state<HTMLButtonElement | null>(null);
 
 	const status = $derived(getDataMode());
+
+	onMount(() => {
+		enterBtn?.focus();
+	});
 
 	function enter() {
 		leaving = true;
@@ -62,7 +68,7 @@
 		{/if}
 
 		<div class="actions" style="--i: 4">
-			<button class="enter" onclick={enter} disabled={switching}>
+			<button class="enter" bind:this={enterBtn} onclick={enter} disabled={switching}>
 				{m.ui_i_understand_continue()}
 			</button>
 			<button class="btn-ghost" onclick={goLocal} disabled={switching}>
@@ -175,13 +181,13 @@
 		font-weight: 700;
 		line-height: 1.2;
 		margin: 0;
-		color: var(--color-text-primary);
+		color: #f8fafc;
 		text-wrap: balance;
 	}
 
 	.lede {
 		margin: 0;
-		color: var(--color-text-secondary);
+		color: rgba(241, 245, 249, 0.84);
 		line-height: 1.65;
 	}
 
@@ -191,8 +197,8 @@
 		gap: 0.6rem;
 		padding: 0.9rem 1rem;
 		border-radius: var(--radius-md);
-		background: rgba(0, 0, 0, 0.22);
-		border: 1px solid rgba(255, 255, 255, 0.05);
+		background: rgba(0, 0, 0, 0.28);
+		border: 1px solid rgba(255, 255, 255, 0.08);
 	}
 
 	.facts > div {
@@ -205,7 +211,7 @@
 		font-size: 0.72rem;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: var(--color-text-muted);
+		color: rgba(203, 213, 225, 0.68);
 		min-width: 7.5rem;
 		flex-shrink: 0;
 	}
@@ -213,7 +219,7 @@
 	.facts dd {
 		margin: 0;
 		font-size: 0.9rem;
-		color: var(--color-text-primary);
+		color: #f1f5f9;
 	}
 
 	.error {
@@ -254,6 +260,27 @@
 		transform: translateY(-1px);
 	}
 
+	.btn-ghost {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.7rem 1.25rem;
+		border-radius: var(--radius-md);
+		border: 1px solid rgba(255, 255, 255, 0.18);
+		background: rgba(255, 255, 255, 0.05);
+		color: rgba(241, 245, 249, 0.88);
+		font-weight: 500;
+		font-size: 0.9rem;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.btn-ghost:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.12);
+		border-color: rgba(255, 255, 255, 0.3);
+		color: #fff;
+	}
+
 	.enter:disabled,
 	.btn-ghost:disabled {
 		opacity: 0.55;
@@ -264,7 +291,7 @@
 		margin: 0;
 		font-family: var(--font-mono);
 		font-size: 0.68rem;
-		color: var(--color-text-muted);
+		color: rgba(203, 213, 225, 0.62);
 		word-break: break-all;
 	}
 
