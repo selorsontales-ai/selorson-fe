@@ -13,6 +13,7 @@
 	import { currentLocale } from '$lib/i18n-labels';
 	import * as m from '$lib/paraglide/messages';
 	import { isDesktop } from '$lib/platform';
+	import { isAdmin } from '$lib/stores/auth.svelte';
 	import { fetchWorld, isPlaced } from '$lib/world/api';
 	import {
 		CELESTIAL_BODIES,
@@ -69,7 +70,7 @@
 	let locale = $derived(currentLocale());
 
 	let effectiveReadUpTo = $derived.by(() => {
-		if (IS_ADMIN_FLAVOR) return 999;
+		if (IS_ADMIN_FLAVOR && isAdmin()) return 999;
 		const apiRead = world?.progress.read_up_to ?? 0;
 		const localRead = getLocalHighestReadChapter();
 		const maxRead = Math.max(apiRead, localRead);
@@ -150,6 +151,21 @@
 	);
 
 	let webglAvailable = $derived(Boolean(CanvasComponent && quality && quality.tier !== 'none'));
+	let loadedAsAdmin = false;
+	let worldFetchSeq = 0;
+
+	function applyLoadedWorld(loadedWorld: WorldMap) {
+		const loc = currentLocale();
+		world = {
+			...loadedWorld,
+			regions: loadedWorld.regions.map((n) => alignNodeWithCanonCoordinates(n, loc)),
+			locations: loadedWorld.locations.map((n) => alignNodeWithCanonCoordinates(n, loc)),
+			characters:
+				loadedWorld.characters.length > 0
+					? loadedWorld.characters
+					: buildCanonCharacters(loc)
+		};
+	}
 
 	onMount(async () => {
 		const params = new URLSearchParams(location.search);
@@ -213,21 +229,16 @@
 			}
 		};
 
+		const seq = ++worldFetchSeq;
+		loadedAsAdmin = IS_ADMIN_FLAVOR && isAdmin();
 		try {
 			const [loadedWorld, canvas] = await Promise.all([
 				fetchWorld().catch(() => offlineFallback),
 				canvasPromise
 			]);
-			const loc = currentLocale();
-			world = {
-				...loadedWorld,
-				regions: loadedWorld.regions.map((n) => alignNodeWithCanonCoordinates(n, loc)),
-				locations: loadedWorld.locations.map((n) => alignNodeWithCanonCoordinates(n, loc)),
-				characters:
-					loadedWorld.characters.length > 0
-						? loadedWorld.characters
-						: buildCanonCharacters(loc)
-			};
+			if (seq === worldFetchSeq) {
+				applyLoadedWorld(loadedWorld);
+			}
 			CanvasComponent = canvas;
 			if (!canvas) {
 				viewMode = '2d';
@@ -237,6 +248,22 @@
 		} finally {
 			loading = false;
 		}
+	});
+
+	// REM-30: When refreshing `/world` directly in Selorson Admin, `onMount` may fire before
+	// `initDataMode()` + `initAuth()` finish resolving `state.user`. Re-fetch once `isAdmin()` becomes true.
+	$effect(() => {
+		const adminNow = IS_ADMIN_FLAVOR && isAdmin();
+		if (!adminNow || loadedAsAdmin) return;
+		loadedAsAdmin = true;
+		const seq = ++worldFetchSeq;
+		void fetchWorld()
+			.then((loadedWorld) => {
+				if (seq === worldFetchSeq) {
+					applyLoadedWorld(loadedWorld);
+				}
+			})
+			.catch(() => {});
 	});
 
 	// Reactively honor `?focus=` / `?id=` / `?select=` deep-links from Stories, Library, Profile, Search

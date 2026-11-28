@@ -7,6 +7,8 @@
 	import CommentsSection from '$lib/components/ui/CommentsSection.svelte';
 	import { currentLocale } from '$lib/i18n-labels';
 	import * as m from '$lib/paraglide/messages';
+	import { isDesktop } from '$lib/platform';
+	import { isClockworkGlb } from '../engine/clockwork-pack';
 	import { resolveNodePlanet } from '../cosmos';
 	import type { ScenePart, PlaceChapterRef, WorldNode } from '../types';
 	import { resolveWorldNodeTargetUrl } from '../world-utils';
@@ -34,7 +36,7 @@
 		hasClockwork?: boolean;
 		hasGallery?: boolean;
 		onselectpart: (id: string | null) => void;
-		onmediatab?: (tab: 'gallery' | 'video' | 'clockwork') => void;
+		onmediatab?: (tab: 'gallery' | 'video' | 'clockwork', variant?: 'clockwork' | 'real') => void;
 	}
 
 	let {
@@ -165,7 +167,7 @@
 				class="chip"
 				class:on={activeMediaTab === 'clockwork'}
 				data-testid="clockwork-tab"
-				onclick={() => onmediatab?.('clockwork')}
+				onclick={() => onmediatab?.('clockwork', 'clockwork')}
 			>
 				⚙ {currentLocale() === 'en' ? 'Clockwork Tabletop' : 'Sa bàn cơ khí'}
 			</button>
@@ -333,6 +335,15 @@
 			{/if}
 		</span>
 		<div class="explode-actions">
+			{#if isDesktop && isClockworkGlb(place.desktop_pack_url)}
+				<button
+					type="button"
+					class="chip gateway-cta"
+					onclick={() => onmediatab?.('clockwork', 'real')}
+				>
+					🏛️ {currentLocale() === 'en' ? 'View 3D Real Scale' : 'Xem 3D Bản thật'}
+				</button>
+			{/if}
 			{#if place.desktop_pack_url}
 				<a
 					class="chip gateway-cta"

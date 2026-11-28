@@ -1714,8 +1714,9 @@ test('Nhịp 1B-2B & 1B-2C + Open Sync Gateway: all 8/8 Earth Singularities (13/
 
 	const worldPageSrc = fs.readFileSync(path.resolve('src/routes/(app)/world/+page.svelte'), 'utf8');
 	assert.ok(
-		worldPageSrc.includes('IS_ADMIN_FLAVOR') && worldPageSrc.includes('if (IS_ADMIN_FLAVOR) return 999;'),
-		'world/+page.svelte must unlock all singularities for Selorson Admin via IS_ADMIN_FLAVOR while keeping user Fog-of-War'
+		worldPageSrc.includes('IS_ADMIN_FLAVOR') &&
+			worldPageSrc.includes('if (IS_ADMIN_FLAVOR && isAdmin()) return 999;'),
+		'world/+page.svelte must unlock all singularities for authenticated Selorson Admin via IS_ADMIN_FLAVOR && isAdmin() while keeping user Fog-of-War'
 	);
 	const locHudSrc = fs.readFileSync(path.resolve('src/lib/world/ui/LocationHud.svelte'), 'utf8');
 	assert.ok(

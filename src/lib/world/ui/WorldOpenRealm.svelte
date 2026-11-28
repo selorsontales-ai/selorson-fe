@@ -14,7 +14,9 @@
 	import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 	import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 	import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+	import { IS_ADMIN_FLAVOR } from '$lib/app-flavor';
 	import { currentLocale } from '$lib/i18n-labels';
+	import { isAdmin } from '$lib/stores/auth.svelte';
 	import { fetchWorldChunks } from '$lib/world/api';
 	import type { WorldChunkNode, WorldChunkVnTrigger } from '$lib/world/types';
 	import { isUnlockedState } from '$lib/world/world-utils';
@@ -80,22 +82,39 @@
 		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 	}
 
+	let loadedAsAdmin = false;
+	let chunksFetchSeq = 0;
+
 	async function loadChunks() {
+		const seq = ++chunksFetchSeq;
+		loadedAsAdmin = IS_ADMIN_FLAVOR && isAdmin();
 		loading = true;
 		try {
 			const res = await fetchWorldChunks();
+			if (seq !== chunksFetchSeq) return;
 			chunks = res.chunks ?? [];
 			const first = chunks.find((c) => (c.planet || 'akunalia') === activePlanet) ?? null;
 			selectedChunk = first;
 		} catch {
-			chunks = [];
+			if (seq === chunksFetchSeq) {
+				chunks = [];
+			}
 		} finally {
-			loading = false;
+			if (seq === chunksFetchSeq) {
+				loading = false;
+			}
 		}
 	}
 
 	onMount(() => {
 		void loadChunks();
+	});
+
+	$effect(() => {
+		const adminNow = IS_ADMIN_FLAVOR && isAdmin();
+		if (adminNow && !loadedAsAdmin) {
+			void loadChunks();
+		}
 	});
 
 	function switchPlanet(next: 'akunalia' | 'earth') {

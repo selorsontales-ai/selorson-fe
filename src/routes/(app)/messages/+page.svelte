@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { api } from '$lib/api';
+	import { api, acquireStreamTicket } from '$lib/api';
 	import { onDestroy } from 'svelte';
 	import { page } from '$app/state';
 	import { PUBLIC_API_BASE } from '$env/static/public';
-	import { getToken, getUser, isAuthenticated, isLoading } from '$lib/stores/auth.svelte';
+	import { getUser, isAuthenticated, isLoading } from '$lib/stores/auth.svelte';
 	import {
 		getConversations, getConversationsError, fetchConversations,
 		markConversationAsRead, setActivePageConversation, sortConversations,
@@ -168,11 +168,11 @@
 			msgsEl.scrollTop = msgsEl.scrollHeight;
 		}, 80);
 
-		const token = getToken();
-		if (!token) return;
+		const ticket = await acquireStreamTicket();
+		if (!ticket || activeConv?.id !== conv.id) return;
 		const wsProtocol = PUBLIC_API_BASE.startsWith('https') ? 'wss://' : 'ws://';
 		const wsBase = PUBLIC_API_BASE.replace(/\/api\/v1\/?$/, '').replace(/^https?:\/\//, wsProtocol);
-		const wsUrl = `${wsBase}/ws/chat?token=${token}&conversation_id=${conv.id}`;
+		const wsUrl = `${wsBase}/ws/chat?ticket=${encodeURIComponent(ticket)}&conversation_id=${conv.id}`;
 		ws = new WebSocket(wsUrl);
 
 		ws.onmessage = (e) => {

@@ -7,7 +7,9 @@
 	 * Desktop Clockwork Tabletop Packs pushed from the Ecosystem Studio App.
 	 */
 	import { page } from '$app/state';
+	import { IS_ADMIN_FLAVOR } from '$lib/app-flavor';
 	import { isDesktop } from '$lib/platform';
+	import { isAdmin } from '$lib/stores/auth.svelte';
 	import { currentLocale } from '$lib/i18n-labels';
 	import * as m from '$lib/paraglide/messages';
 	import { fetchRegion, markVisited } from '$lib/world/api';
@@ -33,6 +35,8 @@
 	let activeGalleryIdx = $state(0);
 	let loadedSlug = $state<string | null>(null);
 	let loadedLocale = $state<string>('');
+	let loadedAsAdmin = false;
+	let regionFetchSeq = 0;
 
 	let galleryImages = $derived.by(() => {
 		const r = detail?.region;
@@ -71,6 +75,8 @@
 
 	async function loadRegionData(targetSlug: string) {
 		if (!targetSlug) return;
+		const seq = ++regionFetchSeq;
+		loadedAsAdmin = IS_ADMIN_FLAVOR && isAdmin();
 		loading = true;
 		notFound = false;
 		selected = null;
@@ -79,6 +85,7 @@
 
 		try {
 			const loadedDetail = await fetchRegion(targetSlug);
+			if (seq !== regionFetchSeq) return;
 			const merged = mergeRegionDetailWithCanon(loadedDetail, targetSlug, lang);
 			detail = merged;
 			syncDefaultMediaTab(merged.region);
@@ -94,6 +101,7 @@
 				}
 			}
 		} catch {
+			if (seq !== regionFetchSeq) return;
 			const canonFallback = resolveCanonRegionDetail(targetSlug, lang);
 			if (canonFallback) {
 				detail = canonFallback;
@@ -104,7 +112,9 @@
 				notFound = true;
 			}
 		} finally {
-			loading = false;
+			if (seq === regionFetchSeq) {
+				loading = false;
+			}
 		}
 	}
 
@@ -115,6 +125,14 @@
 	$effect(() => {
 		const currentSlug = slug;
 		if (loadedSlug !== null && currentSlug && currentSlug !== loadedSlug) {
+			void loadRegionData(currentSlug);
+		}
+	});
+
+	$effect(() => {
+		const adminNow = IS_ADMIN_FLAVOR && isAdmin();
+		const currentSlug = slug;
+		if (adminNow && !loadedAsAdmin && currentSlug && loadedSlug === currentSlug) {
 			void loadRegionData(currentSlug);
 		}
 	});

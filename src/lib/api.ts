@@ -342,3 +342,18 @@ export async function apiUpload<T = unknown>(
 
 	return json as ApiResponse<T>;
 }
+
+/**
+ * Mint a short-lived single-use stream ticket (TTL 30s) for EventSource / WebSocket
+ * authentication so long-lived JWTs are never exposed in URL query strings (`REM-28`).
+ */
+export async function acquireStreamTicket(): Promise<string | null> {
+	try {
+		const res = await api<{ ticket: string; expires_in: number }>('/stream-ticket', {
+			method: 'POST',
+		});
+		return res.data?.ticket ?? null;
+	} catch {
+		return null;
+	}
+}

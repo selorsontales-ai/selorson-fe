@@ -1,5 +1,5 @@
-import { api, acquireRefreshedToken } from '$lib/api';
-import { getToken, isAuthenticated } from '$lib/stores/auth.svelte';
+import { api, acquireRefreshedToken, acquireStreamTicket } from '$lib/api';
+import { isAuthenticated } from '$lib/stores/auth.svelte';
 import { PUBLIC_API_BASE } from '$env/static/public';
 import { countUnread, markConversationRead, normalizeConversations } from '$lib/chat-model.js';
 import * as m from '$lib/paraglide/messages';
@@ -87,9 +87,13 @@ export async function fetchConversations() {
 
 let sseRetryCount = 0;
 let sseReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let sseGeneration = 0;
+let sseConnecting = false;
 const MAX_SSE_RETRIES = 15;
 
 export function resetChatStore() {
+	sseGeneration++;
+	sseConnecting = false;
 	if (sseReconnectTimer) {
 		clearTimeout(sseReconnectTimer);
 		sseReconnectTimer = null;
@@ -108,15 +112,32 @@ export function resetChatStore() {
 	conversationsError = '';
 }
 
-function initChatSSE() {
-	if (chatSSE || !isAuthenticated()) return;
+async function initChatSSE() {
+	if (chatSSE || sseConnecting || !isAuthenticated()) return;
 	if (sseReconnectTimer) {
 		clearTimeout(sseReconnectTimer);
 		sseReconnectTimer = null;
 	}
-	const token = getToken();
-	if (!token) return;
-	chatSSE = new EventSource(`${PUBLIC_API_BASE}/chat/stream?token=${encodeURIComponent(token)}`);
+	const gen = sseGeneration;
+	sseConnecting = true;
+	let ticket: string | null = null;
+	try {
+		ticket = await acquireStreamTicket();
+	} finally {
+		sseConnecting = false;
+	}
+	if (!ticket || gen !== sseGeneration || chatSSE || !isAuthenticated()) {
+		if (!ticket && gen === sseGeneration && isAuthenticated() && sseRetryCount < MAX_SSE_RETRIES) {
+			sseRetryCount++;
+			const delay = Math.min(1000 * Math.pow(2, sseRetryCount), 30000);
+			sseReconnectTimer = setTimeout(() => {
+				sseReconnectTimer = null;
+				void initChatSSE();
+			}, delay);
+		}
+		return;
+	}
+	chatSSE = new EventSource(`${PUBLIC_API_BASE}/chat/stream?ticket=${encodeURIComponent(ticket)}`);
 	chatSSE.onopen = () => {
 		sseRetryCount = 0; // Reset retry count on successful connection
 	};
@@ -157,7 +178,7 @@ function initChatSSE() {
 				sseReconnectTimer = null;
 				if (!isAuthenticated()) return;
 				await acquireRefreshedToken(undefined, false).catch(() => {});
-				initChatSSE();
+				void initChatSSE();
 			}, delay);
 		}
 	};

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { api } from '$lib/api';
-	import { isAuthenticated, getUser, getToken } from '$lib/stores/auth.svelte';
+	import { api, acquireStreamTicket } from '$lib/api';
+	import { isAuthenticated, getUser } from '$lib/stores/auth.svelte';
 	import { PUBLIC_API_BASE } from '$env/static/public';
 	import { goto } from '$app/navigation';
 	import * as m from '$lib/paraglide/messages';
@@ -205,9 +205,13 @@
 	let sse: EventSource | null = null;
 	let sseTimer: ReturnType<typeof setTimeout> | null = null;
 	let sseRetryCount = 0;
+	let sseGeneration = 0;
+	let sseConnecting = false;
 	const MAX_SSE_RETRIES = 15;
 
 	function closeWorkspaceSSE() {
+		sseGeneration++;
+		sseConnecting = false;
 		if (sseTimer) {
 			clearTimeout(sseTimer);
 			sseTimer = null;
@@ -218,15 +222,32 @@
 		}
 	}
 
-	function initWorkspaceSSE() {
-		if (sse || !isAuthenticated()) return;
+	async function initWorkspaceSSE() {
+		if (sse || sseConnecting || !isAuthenticated()) return;
 		if (sseTimer) {
 			clearTimeout(sseTimer);
 			sseTimer = null;
 		}
-		const token = getToken();
-		if (!token) return;
-		const sseUrl = `${PUBLIC_API_BASE}/support/stream?token=${encodeURIComponent(token)}`;
+		const gen = sseGeneration;
+		sseConnecting = true;
+		let ticket: string | null = null;
+		try {
+			ticket = await acquireStreamTicket();
+		} finally {
+			sseConnecting = false;
+		}
+		if (!ticket || gen !== sseGeneration || sse || !isAuthenticated()) {
+			if (!ticket && gen === sseGeneration && isAuthenticated() && sseRetryCount < MAX_SSE_RETRIES) {
+				sseRetryCount++;
+				const delay = Math.min(1000 * Math.pow(2, sseRetryCount), 30000);
+				sseTimer = setTimeout(() => {
+					sseTimer = null;
+					void initWorkspaceSSE();
+				}, delay);
+			}
+			return;
+		}
+		const sseUrl = `${PUBLIC_API_BASE}/support/stream?ticket=${encodeURIComponent(ticket)}`;
 		sse = new EventSource(sseUrl);
 		sse.onopen = () => { sseRetryCount = 0; };
 		sse.onmessage = async (event) => {
@@ -253,7 +274,7 @@
 					if (!isAuthenticated()) return;
 					const { acquireRefreshedToken } = await import('$lib/api');
 					await acquireRefreshedToken(undefined, false).catch(() => {});
-					initWorkspaceSSE();
+					void initWorkspaceSSE();
 				}, delay);
 			}
 		};

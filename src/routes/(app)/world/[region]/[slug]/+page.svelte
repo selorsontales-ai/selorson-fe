@@ -8,8 +8,10 @@
 	 * architectural strata lore (`parts`), and Desktop 3D Pack / VN Episode links.
 	 */
 	import { page } from '$app/state';
+	import { IS_ADMIN_FLAVOR } from '$lib/app-flavor';
 	import { currentLocale } from '$lib/i18n-labels';
 	import * as m from '$lib/paraglide/messages';
+	import { isAdmin } from '$lib/stores/auth.svelte';
 	import { fetchLocation, markVisited } from '$lib/world/api';
 	import {
 		alignNodeWithCanonCoordinates,
@@ -31,10 +33,13 @@
 
 	let selectedPart = $state<string | null>(null);
 	let activeMediaTab = $state<'gallery' | 'video' | 'clockwork'>('gallery');
+	let clockworkVariant = $state<'clockwork' | 'real'>('clockwork');
 	let activeGalleryIdx = $state(0);
 	let loadedSlug = $state<string | null>(null);
 	let loadedSearch = $state<string>('');
 	let loadedLocale = $state<string>('vi');
+	let loadedAsAdmin = false;
+	let locationFetchSeq = 0;
 
 	let parts = $derived<ScenePart[]>(
 		(detail?.place.parts ?? []).map((p) => ({
@@ -87,6 +92,8 @@
 
 	async function loadLocationData(targetSlug: string) {
 		if (!targetSlug) return;
+		const seq = ++locationFetchSeq;
+		loadedAsAdmin = IS_ADMIN_FLAVOR && isAdmin();
 		loading = true;
 		notFound = false;
 
@@ -96,6 +103,7 @@
 
 		try {
 			const loadedDetail = await fetchLocation(targetSlug);
+			if (seq !== locationFetchSeq) return;
 			const alignedPlace = alignNodeWithCanonCoordinates(loadedDetail.place, lang);
 			detail = {
 				...loadedDetail,
@@ -107,6 +115,7 @@
 			loadedLocale = lang;
 			void markVisited(loadedDetail.place.id);
 		} catch {
+			if (seq !== locationFetchSeq) return;
 			const canonFallback = resolveCanonLocationDetail(targetSlug, lang);
 			if (canonFallback) {
 				detail = canonFallback;
@@ -118,7 +127,9 @@
 				notFound = true;
 			}
 		} finally {
-			loading = false;
+			if (seq === locationFetchSeq) {
+				loading = false;
+			}
 		}
 	}
 
@@ -129,6 +140,14 @@
 	$effect(() => {
 		const currentSlug = slug;
 		if (loadedSlug !== null && currentSlug && currentSlug !== loadedSlug) {
+			void loadLocationData(currentSlug);
+		}
+	});
+
+	$effect(() => {
+		const adminNow = IS_ADMIN_FLAVOR && isAdmin();
+		const currentSlug = slug;
+		if (adminNow && !loadedAsAdmin && currentSlug && loadedSlug === currentSlug) {
 			void loadLocationData(currentSlug);
 		}
 	});
@@ -201,9 +220,21 @@
 				</div>
 
 				<div class="showcase-center" class:no-left-panel={!hasLeftSidebar}>
-					{#if activeMediaTab === 'clockwork' && isDesktop && isClockworkGlb(place.clockwork_pack_url)}
+					{#if activeMediaTab === 'clockwork' && isDesktop && (isClockworkGlb(place.clockwork_pack_url) || isClockworkGlb(place.desktop_pack_url))}
+						{@const primaryGlb = isClockworkGlb(place.clockwork_pack_url)
+							? (place.clockwork_pack_url ?? '')
+							: (place.desktop_pack_url ?? '')}
+						{@const realGlb =
+							isClockworkGlb(place.clockwork_pack_url) && isClockworkGlb(place.desktop_pack_url)
+								? place.desktop_pack_url
+								: null}
 						<div class="media-frame">
-							<ClockworkPackViewer url={place.clockwork_pack_url ?? ''} title={place.name ?? ''} />
+							<ClockworkPackViewer
+								url={primaryGlb}
+								realScaleUrl={realGlb}
+								requestedVariant={clockworkVariant}
+								title={place.name ?? ''}
+							/>
 						</div>
 					{:else if activeMediaTab === 'video' && place.intro_video_url}
 						<div class="media-frame video-frame">
@@ -285,9 +316,12 @@
 					{selectedPart}
 					{activeMediaTab}
 					hasGallery={galleryImages.length > 0}
-					hasClockwork={isDesktop && isClockworkGlb(place.clockwork_pack_url)}
+					hasClockwork={isDesktop && (isClockworkGlb(place.clockwork_pack_url) || isClockworkGlb(place.desktop_pack_url))}
 					onselectpart={(id) => (selectedPart = id)}
-					onmediatab={(tab) => (activeMediaTab = tab)}
+					onmediatab={(tab, variant = 'clockwork') => {
+						activeMediaTab = tab;
+						clockworkVariant = variant;
+					}}
 				/>
 			</div>
 		{/key}

@@ -4,26 +4,39 @@
 	 * phát clip `assemble` 1 lần rồi lặp `idle`. Renderer riêng của component; khi đổi `url` hoặc rời trang dọn sâu VRAM.
 	 */
 	import { currentLocale } from '$lib/i18n-labels';
-	import { pickClockworkClips } from '../engine/clockwork-pack';
+	import { pickClockworkClips, resolveClockworkVariant, type ClockworkVariant } from '../engine/clockwork-pack';
 	import { disposeObject3DDeep } from '../engine/webgl-dispose';
 	import { releaseOrbitControlsDocumentListeners } from '../engine/orbit-controls-release';
 
 	interface Props {
 		url: string;
+		realScaleUrl?: string | null;
 		title?: string;
+		/** Biến thể mở đầu (nút "Xem 3D Bản thật" truyền `real`). */
+		requestedVariant?: ClockworkVariant;
 	}
 
-	let { url, title = '' }: Props = $props();
+	let { url, realScaleUrl = null, title = '', requestedVariant = 'clockwork' }: Props = $props();
 
 	let host = $state<HTMLDivElement | null>(null);
 	let status = $state<'loading' | 'ready' | 'error'>('loading');
 	let errorMsg = $state('');
 	let playing = $state(true);
+	let modelVariant = $state<'clockwork' | 'real'>('clockwork');
 	let replay: (() => void) | null = null;
 	let isEn = $derived(currentLocale() === 'en');
+	let hasBothVariants = $derived(Boolean(url?.trim() && realScaleUrl?.trim() && url.trim() !== realScaleUrl.trim()));
+	let activeUrl = $derived.by(() => {
+		if (modelVariant === 'real' && realScaleUrl?.trim()) return realScaleUrl.trim();
+		return url?.trim() || realScaleUrl?.trim() || '';
+	});
 
 	$effect(() => {
-		const targetUrl = url;
+		modelVariant = resolveClockworkVariant(requestedVariant, url, realScaleUrl);
+	});
+
+	$effect(() => {
+		const targetUrl = activeUrl;
 		const mountEl = host;
 		if (!targetUrl || !mountEl) return;
 
@@ -206,15 +219,39 @@
 	{:else if status === 'error'}
 		<div class="overlay error">{isEn ? 'Cannot load the clockwork model' : 'Không nạp được mô hình sa bàn'}: {errorMsg}</div>
 	{/if}
-	{#if status === 'ready'}
+	{#if status === 'ready' || hasBothVariants}
 		<div class="controls">
-			<span class="label">⚙ {title}</span>
-			<button type="button" class="chip" onclick={() => (playing = !playing)}>
-				{playing ? (isEn ? 'Pause' : 'Tạm dừng') : isEn ? 'Play' : 'Chạy tiếp'}
-			</button>
-			<button type="button" class="chip" onclick={() => replay?.()}>
-				↻ {isEn ? 'Reassemble' : 'Lắp ráp lại'}
-			</button>
+			<span class="label">{modelVariant === 'real' ? '🏛️' : '⚙'} {title}</span>
+			{#if hasBothVariants}
+				<div class="variant-switch" role="group" aria-label={isEn ? '3D model mode' : 'Chế độ mô hình 3D'}>
+					<button
+						type="button"
+						class="chip"
+						class:active={modelVariant === 'clockwork'}
+						data-testid="variant-clockwork"
+						onclick={() => (modelVariant = 'clockwork')}
+					>
+						⚙ {isEn ? 'Clockwork' : 'Sa bàn cơ khí'}
+					</button>
+					<button
+						type="button"
+						class="chip"
+						class:active={modelVariant === 'real'}
+						data-testid="variant-real"
+						onclick={() => (modelVariant = 'real')}
+					>
+						🏛️ {isEn ? 'Real Scale' : 'Bản thật'}
+					</button>
+				</div>
+			{/if}
+			{#if status === 'ready'}
+				<button type="button" class="chip" onclick={() => (playing = !playing)}>
+					{playing ? (isEn ? 'Pause' : 'Tạm dừng') : isEn ? 'Play' : 'Chạy tiếp'}
+				</button>
+				<button type="button" class="chip" onclick={() => replay?.()}>
+					↻ {isEn ? 'Reassemble' : 'Lắp ráp lại'}
+				</button>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -253,8 +290,22 @@
 		left: 12px;
 		bottom: 12px;
 		display: flex;
+		flex-wrap: wrap;
 		gap: 8px;
 		align-items: center;
+	}
+	.variant-switch {
+		display: inline-flex;
+		gap: 4px;
+		padding: 2px;
+		border-radius: 999px;
+		background: rgba(10, 14, 24, 0.72);
+		border: 1px solid rgba(231, 210, 158, 0.25);
+	}
+	.chip.active {
+		background: rgba(231, 210, 158, 0.25);
+		border-color: rgba(231, 210, 158, 0.75);
+		color: #fff3d1;
 	}
 	.label {
 		color: #e7d29e;

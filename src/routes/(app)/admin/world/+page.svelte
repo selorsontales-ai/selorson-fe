@@ -18,6 +18,7 @@
 	import { supportsDataModes } from '$lib/app-flavor';
 	import BetaToAlphaPromoteModal from '$lib/components/desktop/BetaToAlphaPromoteModal.svelte';
 	import { resolveNodePlanet } from '$lib/world/cosmos';
+	import { summarizeStudioSyncIssues, type StudioSyncReport } from '$lib/world/studio-sync-report';
 
 	interface EnTranslation {
 		name: string;
@@ -60,6 +61,7 @@
 
 	let loading = $state(true);
 	let syncingJson = $state(false);
+	let syncReport = $state<StudioSyncReport | null>(null);
 	let batchPublishing = $state(false);
 	let savingEdit = $state(false);
 	let showPromoteModal = $state(false);
@@ -183,16 +185,23 @@
 		try {
 			const rawText = await file.text();
 			const parsed = JSON.parse(rawText);
+			syncReport = null;
 			const res = await adminPost<any>('/admin/sync/world-studio', parsed);
+			// Lỗi toàn phần (success:false) vẫn mang data.errors; thành công một phần mang cả errors + warnings.
+			const report = summarizeStudioSyncIssues(res.data);
+			syncReport = report.errors.length || report.warnings.length ? report : null;
 			if (res.success) {
 				const d = res.data || {};
 				const chunkMsg =
 					(d.created_chunks ?? 0) + (d.updated_chunks ?? 0) > 0
 						? `, ${d.created_chunks ?? 0} ô mới / ${d.updated_chunks ?? 0} ô cập nhật`
 						: '';
-				toast_success(
-					`Đã nhận gói Studio: +${d.created_locations ?? 0} mới, cập nhật ${d.updated_locations ?? 0} địa danh${chunkMsg}, ${d.synced_videos ?? 0} video (Trạng thái Nháp)!`
-				);
+				const summaryMsg = `Đã nhận gói Studio: +${d.created_locations ?? 0} mới, cập nhật ${d.updated_locations ?? 0} địa danh${chunkMsg}, ${d.synced_videos ?? 0} video (Trạng thái Nháp)!`;
+				if (report.errors.length > 0) {
+					toast_error(`${summaryMsg} Nhưng ${report.errors.length} mục lỗi bị bỏ qua, xem bảng bên dưới.`);
+				} else {
+					toast_success(summaryMsg);
+				}
 				await loadOverview();
 			} else {
 				toast_error(res.message || 'Gói JSON không hợp lệ');
@@ -407,6 +416,28 @@
 			{/if}
 		</div>
 	</header>
+
+	{#if syncReport}
+		<section class="sync-report" aria-live="polite">
+			{#if syncReport.errors.length > 0}
+				<div class="sync-report-block err">
+					<strong>❌ {syncReport.errors.length} mục lỗi (đã bỏ qua)</strong>
+					<ul>
+						{#each syncReport.errors as line}<li>{line}</li>{/each}
+					</ul>
+				</div>
+			{/if}
+			{#if syncReport.warnings.length > 0}
+				<div class="sync-report-block warn">
+					<strong>⚠️ {syncReport.warnings.length} cảnh báo</strong>
+					<ul>
+						{#each syncReport.warnings as line}<li>{line}</li>{/each}
+					</ul>
+				</div>
+			{/if}
+			<button type="button" class="btn btn-ghost" onclick={() => (syncReport = null)}>Đóng</button>
+		</section>
+	{/if}
 
 	<section class="stats-grid">
 		<div class="stat-card">
@@ -850,6 +881,36 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
+	}
+	.sync-report {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		align-items: flex-start;
+	}
+	.sync-report-block {
+		width: 100%;
+		padding: 0.75rem 1rem;
+		border-radius: 10px;
+		background: rgba(15, 23, 42, 0.65);
+		font-size: 0.85rem;
+		color: #e2e8f0;
+	}
+	.sync-report-block ul {
+		margin: 0.4rem 0 0;
+		padding-left: 1.2rem;
+	}
+	.sync-report-block.err {
+		border: 1px solid rgba(239, 68, 68, 0.45);
+	}
+	.sync-report-block.err strong {
+		color: #f87171;
+	}
+	.sync-report-block.warn {
+		border: 1px solid rgba(245, 158, 11, 0.45);
+	}
+	.sync-report-block.warn strong {
+		color: #fbbf24;
 	}
 	.stat-card.warn {
 		border-color: rgba(245, 158, 11, 0.35);
